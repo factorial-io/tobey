@@ -10,10 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/queue"
 	"github.com/gorilla/mux"
+	"github.com/streadway/amqp"
 )
 
 type Site struct {
@@ -63,7 +66,33 @@ func newCollectorQueue(domain string) (*colly.Collector, *queue.Queue) {
 	return c, q
 }
 
+var (
+	RabbitMQConnection *amqp.Connection
+)
+
 func main() {
+	mqdsn, ok := os.LookupEnv("TOBEY_RABBITMQ_DSN")
+
+	if ok {
+		log.Printf("Using RabbitMQ work queue with DSN (%s)...", mqdsn)
+
+		conn, err := backoff.RetryNotifyWithData(func() (*amqp.Connection, error) {
+			return amqp.Dial(mqdsn)
+		}, backoff.NewExponentialBackOff(), func(err error, t time.Duration) {
+			log.Print(err)
+		})
+
+		if err != nil {
+			panic(err)
+		}
+		log.Printf("Successfully connected to RabbitMQ work queue with DSN (%s)", mqdsn)
+
+		RabbitMQConnection = conn // assign to global
+		defer RabbitMQConnection.Close()
+	} else {
+		log.Print("Using in-memory work queue...")
+	}
+
 	router := mux.NewRouter()
 
 	// Maps a site, currently identified by a hostname to a collector

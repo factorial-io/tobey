@@ -3,8 +3,10 @@ module source.factorial.io/thewsd/tobey
 go 1.21
 
 require (
+	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/gocolly/colly v1.2.0
 	github.com/gorilla/mux v1.8.0
+	github.com/streadway/amqp v1.1.0
 )
 
 require github.com/davecgh/go-spew v1.1.1 // indirect
