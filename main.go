@@ -6,130 +6,90 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
+	"sync"
 
-	"github.com/gocolly/colly"
-	"github.com/gocolly/colly/queue"
 	"github.com/gorilla/mux"
 )
 
 var (
-	// The directory that holds response cache, i.e. /tmp/cache. When missing the directory
-	// will be automatically created. Defaults to ./cache.
-	CacheDir string = "./cache"
+	NumWorkers       int = 5
+	workersWaitGroup sync.WaitGroup
 
+	// Services we connect to...
 	workQueue WorkQueue
-
-	FanoutConnection   <-chan *Result // TODO: Implement
-	ProgressConnection <-chan bool    // TODO: Implement
+	progress  Progress
+	out       Out
 )
 
-type Site struct {
-	ID        string
-	Domain    string
-	Queue     *queue.Queue
-	Collector *colly.Collector
-}
-
-type Result struct {
-	SiteID   string
-	Request  *colly.Request
-	Response *colly.Response
-	Callback interface{}
-}
-
 func main() {
-	FanoutConnection = make(chan *Result) // assing to global
-	ProgressConnection = make(chan bool)  // assign to global
-
-	// Simulate FannoutService
-	go func() {
-		for {
-			select {
-			case r := <-FanoutConnection:
-				log.Print("Fanout Service got incoming:", r)
-			}
-		}
-	}()
-
-	// Simulate ProgressService
-	go func() {
-		for {
-			select {
-			case r := <-FanoutConnection:
-				log.Print("Fanout Service got incoming:", r)
-			}
-		}
-	}()
-
-	var wq WorkQueue
-	var wqerr error
-	mqdsn, ok := os.LookupEnv("TOBEY_RABBITMQ_DSN")
-	if ok {
-		log.Printf("Using RabbitMQ work queue with DSN (%s)...", mqdsn)
-		wq, wqerr = NewRabbitMQWorkQueue(mqdsn)
-	} else {
-		log.Print("Using in-memory work queue...")
-		wq, wqerr = NewMemoryWorkQueue()
+	workQueue = MustStartWorkQueueFromEnv()
+	if err := workQueue.Open(); err != nil {
+		panic(err)
 	}
-	if wqerr != nil {
-		panic(wqerr)
-	}
-	log.Printf("Work queue ready")
-	workQueue = wq
 	defer workQueue.Close()
+
+	out = MustStartOutFromEnv()
+	defer out.Close()
+
+	progress = MustStartProgressFromEnv()
+	defer progress.Close()
+
+	log.Printf("Starting %d workers...", NumWorkers)
+	for i := 0; i < NumWorkers; i++ {
+		workersWaitGroup.Add(1)
+
+		go func(id int) {
+			for {
+				msg, err := workQueue.Consume()
+				if err != nil {
+					log.Print(err)
+					continue
+				}
+				c := NewCollectorForSite(workQueue, out, msg.Site) // FIXME: Probably cache Collector.
+
+				if err := c.Visit(msg.URL); err != nil {
+					// log.Printf("Error visiting URL (%s): %s", msg.URL, err)
+					continue
+				}
+				log.Printf("Worker (%d) scraped URL (%s)", id, msg.URL)
+			}
+			workersWaitGroup.Done()
+			log.Print("Worker exited!")
+		}(i)
+	}
 
 	router := mux.NewRouter()
 
-	// Maps a site, currently identified by a hostname to a collector
-	var sites map[string]*Site
-	sites = make(map[string]*Site, 0)
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		r.Body.Close()
 
-	router.HandleFunc("/sites", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "Hello from Tobey.")
+
+	}).Methods("GET")
+
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := ioutil.ReadAll(r.Body)
 		r.Body.Close()
 
 		w.Header().Set("Content-Type", "application/json")
 
-		var req SiteRequest
+		var req APIRequest
 		json.Unmarshal(body, &req)
 
-		siteID, _ := generateSiteIDFromURL(req.URL)
+		site, err := DeriveSiteFromAPIRequest(&req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 
-		var site *Site
-
-		if val, ok := sites[siteID]; ok {
-			site = val
-		} else {
-			url, err := url.Parse(req.URL)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			domain := strings.TrimPrefix(url.Hostname(), "www.")
-
-			c, q := newCollectorQueue(domain)
-
-			site = &Site{
-				ID:        siteID,
-				Domain:    domain,
-				Collector: c,
-				Queue:     q,
-			}
-			sites[site.ID] = site // Put in the map for later use.
 		}
 
 		log.Printf("Got request for site (%s)", req.URL)
-		site.Queue.AddURL(req.URL)
+		workQueue.PublishURL(site, req.URL)
 
-		site.Queue.Run(site.Collector) // TODO: Move this elsewhere.
-
-		result := &SiteResponse{
-			ID:  site.ID,
-			URL: req.URL,
+		result := &APIResponse{
+			Site: site,
+			URL:  req.URL,
 		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(result)
@@ -137,42 +97,5 @@ func main() {
 
 	log.Printf("Starting HTTP server, listening on %s...", ":8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
-}
-
-func newCollectorQueue(domain string) (*colly.Collector, *queue.Queue) {
-	c := colly.NewCollector(
-		colly.Async(true),
-		colly.CacheDir(filepath.Join(CacheDir, domain)),
-		//	colly.Debugger(&debug.LogDebugger{}),
-		colly.AllowedDomains(domain, fmt.Sprintf("www.%s", domain)), // Constrain to requested domain
-	)
-
-	q, _ := queue.New(
-		2, // Number of consumer threads
-		&queue.InMemoryQueueStorage{MaxSize: 10000}, // Use default queue storage, TODO: use rabbitMQ
-		// https://github.com/gocolly/colly/issues/281
-	)
-	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2})
-
-	// Find and visit all links
-	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
-		link := e.Attr("href")
-		// log.Printf("Link found: %q -> %s\n", e.Text, link)
-
-		log.Printf("Found URL (%s)", e.Request.AbsoluteURL(link))
-		q.AddURL(e.Request.AbsoluteURL(link))
-	})
-
-	c.OnRequest(func(r *colly.Request) {
-		log.Printf("Visiting URL (%s)...", r.URL)
-		r.Ctx.Put("url", r.URL.String())
-	})
-	c.OnResponse(func(r *colly.Response) {
-		log.Printf("Visited URL (%s)", r.Ctx.Get("url"))
-	})
-	c.OnScraped(func(r *colly.Response) {
-		log.Printf("Scraped URL (%s)", r.Ctx.Get("url"))
-	})
-
-	return c, q
+	// TODO: workersWaitGroup.Wait()
 }
