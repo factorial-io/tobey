@@ -10,13 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/queue"
 	"github.com/gorilla/mux"
-	"github.com/streadway/amqp"
 )
 
 var (
@@ -24,7 +21,8 @@ var (
 	// will be automatically created. Defaults to ./cache.
 	CacheDir string = "./cache"
 
-	RabbitMQConnection *amqp.Connection
+	workQueue WorkQueue
+
 	FanoutConnection   <-chan *Result // TODO: Implement
 	ProgressConnection <-chan bool    // TODO: Implement
 )
@@ -67,27 +65,22 @@ func main() {
 		}
 	}()
 
+	var wq WorkQueue
+	var wqerr error
 	mqdsn, ok := os.LookupEnv("TOBEY_RABBITMQ_DSN")
-
-	if ok { // TODO: RabbitMQ isn't used yet.
+	if ok {
 		log.Printf("Using RabbitMQ work queue with DSN (%s)...", mqdsn)
-
-		conn, err := backoff.RetryNotifyWithData(func() (*amqp.Connection, error) {
-			return amqp.Dial(mqdsn)
-		}, backoff.NewExponentialBackOff(), func(err error, t time.Duration) {
-			log.Print(err)
-		})
-
-		if err != nil {
-			panic(err)
-		}
-		log.Printf("Successfully connected to RabbitMQ work queue with DSN (%s)", mqdsn)
-
-		RabbitMQConnection = conn // assign to global
-		defer RabbitMQConnection.Close()
+		wq, wqerr = NewRabbitMQWorkQueue(mqdsn)
 	} else {
 		log.Print("Using in-memory work queue...")
+		wq, wqerr = NewMemoryWorkQueue()
 	}
+	if wqerr != nil {
+		panic(wqerr)
+	}
+	log.Printf("Work queue ready")
+	workQueue = wq
+	defer workQueue.Close()
 
 	router := mux.NewRouter()
 
