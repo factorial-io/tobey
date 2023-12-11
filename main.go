@@ -19,6 +19,16 @@ import (
 	"github.com/streadway/amqp"
 )
 
+var (
+	// The directory that holds response cache, i.e. /tmp/cache. When missing the directory
+	// will be automatically created. Defaults to ./cache.
+	CacheDir string = "./cache"
+
+	RabbitMQConnection *amqp.Connection
+	FanoutConnection   <-chan *Result // TODO: Implement
+	ProgressConnection <-chan bool    // TODO: Implement
+)
+
 type Site struct {
 	ID        string
 	Domain    string
@@ -26,54 +36,40 @@ type Site struct {
 	Collector *colly.Collector
 }
 
-func newCollectorQueue(domain string) (*colly.Collector, *queue.Queue) {
-	basePath, _ := os.Getwd()
-
-	c := colly.NewCollector(
-		colly.Async(true),
-		colly.CacheDir(filepath.Join(basePath, "cache", domain)),
-		//	colly.Debugger(&debug.LogDebugger{}),
-		colly.AllowedDomains(domain, fmt.Sprintf("www.%s", domain)), // Constrain to requested domain
-	)
-
-	q, _ := queue.New(
-		2, // Number of consumer threads
-		&queue.InMemoryQueueStorage{MaxSize: 10000}, // Use default queue storage, TODO: use rabbitMQ
-		// https://github.com/gocolly/colly/issues/281
-	)
-	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2})
-
-	// Find and visit all links
-	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
-		link := e.Attr("href")
-		// log.Printf("Link found: %q -> %s\n", e.Text, link)
-
-		log.Printf("Found URL (%s)", e.Request.AbsoluteURL(link))
-		q.AddURL(e.Request.AbsoluteURL(link))
-	})
-
-	c.OnRequest(func(r *colly.Request) {
-		log.Printf("Visiting URL (%s)...", r.URL)
-		r.Ctx.Put("url", r.URL.String())
-	})
-	c.OnResponse(func(r *colly.Response) {
-		log.Printf("Visited URL (%s)", r.Ctx.Get("url"))
-	})
-	c.OnScraped(func(r *colly.Response) {
-		log.Printf("Scraped URL (%s)", r.Ctx.Get("url"))
-	})
-
-	return c, q
+type Result struct {
+	SiteID   string
+	Request  *colly.Request
+	Response *colly.Response
+	Callback interface{}
 }
 
-var (
-	RabbitMQConnection *amqp.Connection
-)
-
 func main() {
+	FanoutConnection = make(chan *Result) // assing to global
+	ProgressConnection = make(chan bool)  // assign to global
+
+	// Simulate FannoutService
+	go func() {
+		for {
+			select {
+			case r := <-FanoutConnection:
+				log.Print("Fanout Service got incoming:", r)
+			}
+		}
+	}()
+
+	// Simulate ProgressService
+	go func() {
+		for {
+			select {
+			case r := <-FanoutConnection:
+				log.Print("Fanout Service got incoming:", r)
+			}
+		}
+	}()
+
 	mqdsn, ok := os.LookupEnv("TOBEY_RABBITMQ_DSN")
 
-	if ok {
+	if ok { // TODO: RabbitMQ isn't used yet.
 		log.Printf("Using RabbitMQ work queue with DSN (%s)...", mqdsn)
 
 		conn, err := backoff.RetryNotifyWithData(func() (*amqp.Connection, error) {
@@ -148,4 +144,42 @@ func main() {
 
 	log.Printf("Starting HTTP server, listening on %s...", ":8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
+}
+
+func newCollectorQueue(domain string) (*colly.Collector, *queue.Queue) {
+	c := colly.NewCollector(
+		colly.Async(true),
+		colly.CacheDir(filepath.Join(CacheDir, domain)),
+		//	colly.Debugger(&debug.LogDebugger{}),
+		colly.AllowedDomains(domain, fmt.Sprintf("www.%s", domain)), // Constrain to requested domain
+	)
+
+	q, _ := queue.New(
+		2, // Number of consumer threads
+		&queue.InMemoryQueueStorage{MaxSize: 10000}, // Use default queue storage, TODO: use rabbitMQ
+		// https://github.com/gocolly/colly/issues/281
+	)
+	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2})
+
+	// Find and visit all links
+	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
+		link := e.Attr("href")
+		// log.Printf("Link found: %q -> %s\n", e.Text, link)
+
+		log.Printf("Found URL (%s)", e.Request.AbsoluteURL(link))
+		q.AddURL(e.Request.AbsoluteURL(link))
+	})
+
+	c.OnRequest(func(r *colly.Request) {
+		log.Printf("Visiting URL (%s)...", r.URL)
+		r.Ctx.Put("url", r.URL.String())
+	})
+	c.OnResponse(func(r *colly.Response) {
+		log.Printf("Visited URL (%s)", r.Ctx.Get("url"))
+	})
+	c.OnScraped(func(r *colly.Response) {
+		log.Printf("Scraped URL (%s)", r.Ctx.Get("url"))
+	})
+
+	return c, q
 }
