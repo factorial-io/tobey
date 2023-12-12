@@ -13,6 +13,8 @@ var CacheDir string = "./cache"
 
 func NewCollectorForSite(q WorkQueue, o Out, s *Site) *colly.Collector {
 	c := colly.NewCollector(
+		// TODO: Get better bot strings here: https://developers.google.com/search/docs/crawling-indexing/overview-google-crawlers
+		//		colly.UserAgent(fmt.Sprintf("Website Standards Bot/2.0"))),
 		colly.Async(true),
 		colly.CacheDir(filepath.Join(CacheDir, s.Domain)),
 		//	colly.Debugger(&debug.LogDebugger{}),
@@ -29,17 +31,14 @@ func NewCollectorForSite(q WorkQueue, o Out, s *Site) *colly.Collector {
 		q.PublishURL(s, e.Request.AbsoluteURL(link))
 	})
 
-	c.OnRequest(func(r *colly.Request) {
-		//		log.Printf("Visiting URL (%s)...", r.URL)
-		r.Ctx.Put("url", r.URL.String())
-	})
-	c.OnResponse(func(r *colly.Response) {
-		//		log.Printf("Visited URL (%s)", r.Ctx.Get("url"))
-	})
 	c.OnScraped(func(res *colly.Response) {
 		// log.Printf("Scraped URL (%s)", res.Ctx.Get("url"))
 		o.Send(s, res)
 	})
+
+	// c.OnXML("//urlset/url/loc", func(e *colly.XMLElement) {
+	// 	q.PublishURL(s, e.Text)
+	// })
 
 	return c
 }

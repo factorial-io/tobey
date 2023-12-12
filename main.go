@@ -41,6 +41,7 @@ func main() {
 		go func(id int) {
 			for {
 				msg, err := workQueue.Consume()
+
 				if err != nil {
 					log.Print(err)
 					continue
@@ -65,7 +66,6 @@ func main() {
 		r.Body.Close()
 
 		fmt.Fprint(w, "Hello from Tobey.")
-
 	}).Methods("GET")
 
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +85,7 @@ func main() {
 		}
 
 		log.Printf("Got request for site (%s)", req.URL)
+		// TODO: Discover and crawl sitemaps
 		workQueue.PublishURL(site, req.URL)
 
 		result := &APIResponse{
