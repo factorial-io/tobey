@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/gocolly/colly"
-	"github.com/gocolly/colly/debug"
 	"github.com/gocolly/redisstorage"
 )
 
@@ -19,7 +18,7 @@ func CreateCollectorForSite(redis *redis.Client, q WorkQueue, o Out, s *Site) *c
 		// TODO: Get better bot strings here: https://developers.google.com/search/docs/crawling-indexing/overview-google-crawlers
 		colly.UserAgent(fmt.Sprintf("Website Standards Bot/2.0")),
 		colly.CacheDir(filepath.Join(CacheDir, s.Domain)),
-		colly.Debugger(&debug.LogDebugger{}),
+		// colly.Debugger(&debug.LogDebugger{}),
 		colly.AllowedDomains(s.Domain, fmt.Sprintf("www.%s", s.Domain)), // Constrain to requested domain
 	)
 	c.CheckHead = true
@@ -51,9 +50,16 @@ func CreateCollectorForSite(redis *redis.Client, q WorkQueue, o Out, s *Site) *c
 		o.Send(s, res)
 	})
 
-	// c.OnXML("//urlset/url/loc", func(e *colly.XMLElement) {
-	// 	q.PublishURL(s, e.Text)
-	// })
+	// Resolve linked sitemaps.
+	c.OnXML("//sitemap/loc", func(e *colly.XMLElement) {
+		// log.Printf("Resolving sitemap (%s)...", e.Text)
+		q.PublishURL(s, e.Text)
+	})
+
+	c.OnXML("//urlset/url/loc", func(e *colly.XMLElement) {
+		// log.Printf("Found URL (%s) in sitemap...", e.Text)
+		q.PublishURL(s, e.Text)
+	})
 
 	return c
 }

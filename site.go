@@ -10,6 +10,7 @@ import (
 type Site struct {
 	ID     string `json:"id"`
 	Domain string `json:"domain"`
+	Root   string `json:"root"`
 }
 
 func DeriveSiteFromAPIRequest(req *APIRequest) (*Site, error) {
@@ -24,6 +25,7 @@ func DeriveSiteFromAPIRequest(req *APIRequest) (*Site, error) {
 	return &Site{
 		ID:     GenerateSiteIDFromURL(url),
 		Domain: domain,
+		Root:   strings.TrimRight(req.URL, "/"),
 	}, nil
 }
 

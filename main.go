@@ -57,6 +57,8 @@ func main() {
 			if rabbitmq != nil {
 				rabbitmq.Close()
 			}
+
+			workersWaitGroup.Wait()
 			os.Exit(1)
 		}
 	}()
@@ -134,7 +136,7 @@ func main() {
 
 		log.Printf("Got request for site (%s)", req.URL)
 
-		// TODO: Discover and crawl sitemaps
+		workQueue.PublishURL(site, fmt.Sprintf("%s/sitemap.xml", site.Root))
 		workQueue.PublishURL(site, req.URL)
 
 		result := &APIResponse{
@@ -147,5 +149,4 @@ func main() {
 
 	log.Printf("Starting HTTP server, listening on %s...", ":8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
-	// TODO: workersWaitGroup.Wait()
 }
