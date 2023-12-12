@@ -15,18 +15,38 @@ type Site struct {
 
 func DeriveSiteFromAPIRequest(req *APIRequest) (*Site, error) {
 	var s *Site
+	var url *url.URL
+	var err error
 
-	url, err := url.Parse(req.URL)
-	if err != nil {
-		return s, err
+	if req.Site != nil {
+		s = req.Site
+	} else {
+		s = &Site{}
 	}
-	domain := strings.TrimPrefix(url.Hostname(), "www.")
 
-	return &Site{
-		ID:     GenerateSiteIDFromURL(url),
-		Domain: domain,
-		Root:   strings.TrimRight(req.URL, "/"),
-	}, nil
+	if req.SiteRoot != "" {
+		url, err = url.Parse(req.SiteRoot)
+		if err != nil {
+			return s, err
+		}
+		if s.ID == "" {
+			s.ID = GenerateSiteIDFromURL(url)
+		}
+		if s.Root == "" {
+			s.Root = strings.TrimRight(req.SiteRoot, "/")
+		}
+	} else if s.Root != "" {
+		url, err = url.Parse(s.Root)
+		if err != nil {
+			return s, err
+		}
+	} else {
+		return s, fmt.Errorf("Missing root URL of site, and not enough information to guess.")
+	}
+	if s.Domain == "" {
+		s.Domain = strings.TrimPrefix(url.Hostname(), "www.")
+	}
+	return s, nil
 }
 
 func GenerateSiteIDFromURL(u *url.URL) string {

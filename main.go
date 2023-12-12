@@ -130,18 +130,21 @@ func main() {
 		site, err := DeriveSiteFromAPIRequest(&req)
 		if err != nil {
 			log.Print(err)
+
+			result := &APIError{
+				Message: fmt.Sprintf("s", err),
+			}
 			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(result)
 			return
 		}
-
-		log.Printf("Got request for site (%s)", req.URL)
+		log.Printf("Got request for site (%s)", site.Root)
 
 		workQueue.PublishURL(site, fmt.Sprintf("%s/sitemap.xml", site.Root))
-		workQueue.PublishURL(site, req.URL)
+		workQueue.PublishURL(site, site.Root)
 
 		result := &APIResponse{
 			Site: site,
-			URL:  req.URL,
 		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(result)
