@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/gocolly/colly"
 	"github.com/gorilla/mux"
 )
 
@@ -21,8 +22,16 @@ var (
 	out       Out
 )
 
+var cachedCollectors map[string]*colly.Collector
+var cachedCollectorsLock sync.RWMutex
+
 func main() {
-	workQueue = MustStartWorkQueueFromEnv()
+	cachedCollectors = make(map[string]*colly.Collector)
+
+	redis := maybeRedis()
+	rabbitmq := maybeRabbitMQ()
+
+	workQueue = CreateWorkQueue(rabbitmq)
 	if err := workQueue.Open(); err != nil {
 		panic(err)
 	}
@@ -46,7 +55,16 @@ func main() {
 					log.Print(err)
 					continue
 				}
-				c := NewCollectorForSite(workQueue, out, msg.Site) // FIXME: Probably cache Collector.
+
+				cachedCollectorsLock.Lock()
+				var c *colly.Collector
+				if v, ok := cachedCollectors[msg.Site.ID]; ok {
+					c = v
+				} else {
+					c = CreateCollectorForSite(redis, workQueue, out, msg.Site)
+					cachedCollectors[msg.Site.ID] = c
+				}
+				cachedCollectorsLock.Unlock()
 
 				if err := c.Visit(msg.URL); err != nil {
 					// log.Printf("Error visiting URL (%s): %s", msg.URL, err)
@@ -79,12 +97,13 @@ func main() {
 
 		site, err := DeriveSiteFromAPIRequest(&req)
 		if err != nil {
+			log.Print(err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
-
 		}
 
 		log.Printf("Got request for site (%s)", req.URL)
+
 		// TODO: Discover and crawl sitemaps
 		workQueue.PublishURL(site, req.URL)
 

@@ -2,15 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"log"
-	"os"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// TODO: Control consumer threads?
 type WorkQueue interface {
 	Open() error
 	PublishURL(s *Site, url string) error
@@ -23,30 +18,12 @@ type WorkQueueMessage struct {
 	URL  string `json:"url"`
 }
 
-func MustStartWorkQueueFromEnv() WorkQueue {
-	dsn, ok := os.LookupEnv("TOBEY_RABBITMQ_DSN")
-
-	var wq WorkQueue
-	var wqerr error
-
-	if ok {
-		log.Printf("Using RabbitMQ work queue with DSN (%s)...", dsn)
-
-		wq, wqerr = backoff.RetryNotifyWithData(func() (*RabbitMQWorkQueue, error) {
-			conn, err := amqp.Dial(dsn)
-			return &RabbitMQWorkQueue{conn: conn}, err
-		}, backoff.NewExponentialBackOff(), func(err error, t time.Duration) {
-			log.Print(err)
-		})
+func CreateWorkQueue(rabbitmq *amqp.Connection) WorkQueue {
+	if rabbitmq != nil {
+		return &RabbitMQWorkQueue{conn: rabbitmq}
 	} else {
-		log.Print("Using in-memory work queue...")
-		wq = &MemoryWorkQueue{}
+		return &MemoryWorkQueue{}
 	}
-	if wqerr != nil {
-		panic(wqerr)
-	}
-	log.Printf("Work queue ready")
-	return wq
 }
 
 type RabbitMQWorkQueue struct {
@@ -95,8 +72,10 @@ func (wq *RabbitMQWorkQueue) Open() error {
 
 func (wq *RabbitMQWorkQueue) PublishURL(s *Site, url string) error {
 	msg := &WorkQueueMessage{
-		URL: url,
+		Site: s,
+		URL:  url,
 	}
+
 	b, err := json.Marshal(msg)
 	if err != nil {
 		return err

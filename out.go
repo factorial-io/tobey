@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-
 	"github.com/gocolly/colly"
 )
 
@@ -26,7 +24,7 @@ func MustStartOutFromEnv() Out {
 type NoopOut struct{}
 
 func (p *NoopOut) Send(s *Site, res *colly.Response) error {
-	log.Printf("Got result: for %v with %d", s, res.StatusCode)
+	// log.Printf("Got result: for %v with %d", s, res.StatusCode)
 	return nil
 }
 
