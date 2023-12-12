@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
 
 	"github.com/gocolly/colly"
@@ -30,6 +33,33 @@ func main() {
 
 	redis := maybeRedis()
 	rabbitmq := maybeRabbitMQ()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	go func() {
+		select {
+		case <-ctx.Done():
+			log.Print("Exiting...")
+
+			stop() // Exit everything that took the context.
+
+			if workQueue != nil {
+				workQueue.Close()
+			}
+			if progress != nil {
+				progress.Close()
+			}
+			if out != nil {
+				out.Close()
+			}
+			if redis != nil {
+				redis.Close()
+			}
+			if rabbitmq != nil {
+				rabbitmq.Close()
+			}
+			os.Exit(1)
+		}
+	}()
 
 	workQueue = CreateWorkQueue(rabbitmq)
 	if err := workQueue.Open(); err != nil {
