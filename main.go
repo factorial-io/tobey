@@ -116,17 +116,27 @@ func main() {
 		r.Body.Close()
 
 		w.Header().Set("Content-Type", "application/json")
+		reqID := uuid.New().ID()
+		log.Printf("Handling incoming crawl request (%d)", reqID)
 
 		var req APIRequest
-		json.Unmarshal(body, &req)
+		err := json.Unmarshal(body, &req)
+		if err != nil {
+			log.Printf("Failed to parse incoming JSON: %s", err)
 
-		reqID := uuid.New().ID()
+			result := &APIError{
+				Message: fmt.Sprintf("%s", err),
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(result)
+			return
+		}
 
 		cconf, err := DeriveCollectorConfigFromAPIRequest(&req)
 		whconf := req.WebhookConfig
 
 		if err != nil {
-			log.Print(err)
+			log.Printf("Failed to derivce collector config: %s", err)
 
 			result := &APIError{
 				Message: fmt.Sprintf("%s", err),

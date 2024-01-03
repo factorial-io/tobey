@@ -35,9 +35,10 @@ func maybeRedis() *redis.Client {
 		_, err := client.Ping(ctx).Result()
 		return client, err
 	}, backoff.NewExponentialBackOff(), func(err error, t time.Duration) {
-		log.Print(err)
+		log.Printf("Retrying connection: %s", err)
 	})
 	if err != nil {
+		log.Printf("Ultimately failed retrying: %s", err)
 		panic(err)
 	}
 	log.Print("Connection to Redis established :)")
@@ -54,9 +55,10 @@ func maybeRabbitMQ() *amqp.Connection {
 	client, err := backoff.RetryNotifyWithData(func() (*amqp.Connection, error) {
 		return amqp.Dial(dsn)
 	}, backoff.NewExponentialBackOff(), func(err error, t time.Duration) {
-		log.Print(err)
+		log.Printf("Retrying connection: %s", err)
 	})
 	if err != nil {
+		log.Printf("Ultimately failed retrying: %s", err)
 		panic(err)
 	}
 	log.Print("Connection to RabbitMQ established :)")

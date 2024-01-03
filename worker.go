@@ -13,8 +13,8 @@ func Worker(ctx context.Context, id int) error {
 		// There is a single queue for all crawl requests.
 		msg, err := workQueue.Consume()
 		if err != nil {
-			log.Print(err)
-			continue
+			log.Printf("Failed to consume from work queue: %s", err)
+			return err
 		}
 
 		// We're creating a Collector lazily once it is needed.

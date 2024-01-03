@@ -95,6 +95,8 @@ func (wq *RabbitMQWorkQueue) Open() error {
 // Delay republishes a message with given delay.
 // Relies on: https://blog.rabbitmq.com/posts/2015/04/scheduling-messages-with-rabbitmq/
 func (wq *RabbitMQWorkQueue) Delay(delay time.Duration, msg *WorkQueueMessage) error {
+	log.Printf("Delaying message (%d) by %.2f s", msg.ID, delay.Seconds())
+
 	b, err := json.Marshal(msg)
 	if err != nil {
 		return err
