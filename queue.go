@@ -65,12 +65,12 @@ func (wq *RabbitMQWorkQueue) Open() error {
 	wq.queue = q
 
 	// This utilizes the delayed_message plugin.
-	ch.ExchangeDeclare("exchange", "x-delayed-message", true, false, false, false, amqp.Table{
+	ch.ExchangeDeclare("tobey.default", "x-delayed-message", true, false, false, false, amqp.Table{
 		"x-delayed-type": "direct",
 	})
 
 	// Bind queue to delayed exchange.
-	err = ch.QueueBind(wq.queue.Name, wq.queue.Name, "exchange", false, nil)
+	err = ch.QueueBind(wq.queue.Name, wq.queue.Name, "tobey.default", false, nil)
 	if err != nil {
 		return err
 	}
