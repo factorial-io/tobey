@@ -10,29 +10,38 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
-	"github.com/gocolly/colly"
+	"github.com/gocolly/colly/v2"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 )
 
 var (
+	// TODO: Once we have rate limiting in place
 	NumWorkers       int = 5
 	workersWaitGroup sync.WaitGroup
-
-	// Services we connect to...
-	workQueue WorkQueue
-	progress  Progress
-	out       Out
 )
 
-var cachedCollectors map[string]*colly.Collector
-var cachedCollectorsLock sync.RWMutex
+var (
+	redisconn *redis.Client
+	rabbitmq  *amqp.Connection
+
+	workQueue         WorkQueue
+	limiter           LimiterAllowFn
+	webhookDispatcher *WebhookDispatcher
+	progress          Progress
+)
+
+var (
+	cachedCollectors     map[uint32]*colly.Collector // TODO: Ensure this doesn't grow unbounded.
+	cachedCollectorsLock sync.RWMutex
+)
 
 func main() {
-	cachedCollectors = make(map[string]*colly.Collector)
-
-	redis := maybeRedis()
-	rabbitmq := maybeRabbitMQ()
+	log.Print("Tobey starting...")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	go func() {
@@ -48,11 +57,11 @@ func main() {
 			if progress != nil {
 				progress.Close()
 			}
-			if out != nil {
-				out.Close()
+			if webhookDispatcher != nil {
+				webhookDispatcher.Close()
 			}
-			if redis != nil {
-				redis.Close()
+			if redisconn != nil {
+				redisconn.Close()
 			}
 			if rabbitmq != nil {
 				rabbitmq.Close()
@@ -63,49 +72,33 @@ func main() {
 		}
 	}()
 
+	redisconn = maybeRedis()
+	rabbitmq = maybeRabbitMQ()
+
 	workQueue = CreateWorkQueue(rabbitmq)
 	if err := workQueue.Open(); err != nil {
 		panic(err)
 	}
-	defer workQueue.Close()
 
-	out = MustStartOutFromEnv()
-	defer out.Close()
+	limiter = CreateLimiter(ctx, redisconn, 1*time.Second)
+
+	webhookDispatcher = NewWebhookDispatcher()
 
 	progress = MustStartProgressFromEnv()
-	defer progress.Close()
+
+	cachedCollectors = make(map[uint32]*colly.Collector)
 
 	log.Printf("Starting %d workers...", NumWorkers)
 	for i := 0; i < NumWorkers; i++ {
 		workersWaitGroup.Add(1)
 
 		go func(id int) {
-			for {
-				msg, err := workQueue.Consume()
-
-				if err != nil {
-					log.Print(err)
-					continue
-				}
-
-				cachedCollectorsLock.Lock()
-				var c *colly.Collector
-				if v, ok := cachedCollectors[msg.Site.ID]; ok {
-					c = v
-				} else {
-					c = CreateCollectorForSite(redis, workQueue, out, msg.Site)
-					cachedCollectors[msg.Site.ID] = c
-				}
-				cachedCollectorsLock.Unlock()
-
-				if err := c.Visit(msg.URL); err != nil {
-					// log.Printf("Error visiting URL (%s): %s", msg.URL, err)
-					continue
-				}
-				log.Printf("Worker (%d) scraped URL (%s)", id, msg.URL)
+			if err := Worker(ctx, id); err != nil {
+				log.Printf("Worker (%d) exited with error: %s", id, err)
+			} else {
+				log.Printf("Worker (%d) exited cleanly.", id)
 			}
 			workersWaitGroup.Done()
-			log.Print("Worker exited!")
 		}(i)
 	}
 
@@ -127,24 +120,29 @@ func main() {
 		var req APIRequest
 		json.Unmarshal(body, &req)
 
-		site, err := DeriveSiteFromAPIRequest(&req)
+		reqID := uuid.New().ID()
+
+		cconf, err := DeriveCollectorConfigFromAPIRequest(&req)
+		whconf := req.WebhookConfig
+
 		if err != nil {
 			log.Print(err)
 
 			result := &APIError{
-				Message: fmt.Sprintf("s", err),
+				Message: fmt.Sprintf("%s", err),
 			}
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(result)
 			return
 		}
-		log.Printf("Got request for site (%s)", site.Root)
 
-		workQueue.PublishURL(site, fmt.Sprintf("%s/sitemap.xml", site.Root))
-		workQueue.PublishURL(site, site.Root)
+		log.Printf("Processing request (%x) for (%s)", reqID, req.URL)
+
+		workQueue.PublishURL(reqID, fmt.Sprintf("%s/sitemap.xml", cconf.Root), cconf, whconf)
+		workQueue.PublishURL(reqID, req.URL, cconf, whconf)
 
 		result := &APIResponse{
-			Site: site,
+			CrawlRequestID: reqID,
 		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(result)

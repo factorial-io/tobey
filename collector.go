@@ -1,35 +1,60 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"path/filepath"
+	"net/url"
+	"strings"
 
-	"github.com/go-redis/redis"
-	"github.com/gocolly/colly"
-	"github.com/gocolly/redisstorage"
+	"github.com/gocolly/colly/v2"
+	"github.com/redis/go-redis/v9"
 )
 
-// The directory that holds response cache, i.e. /tmp/cache. When missing the directory
-// will be automatically created. Defaults to ./cache.
-var CacheDir string = "./cache"
+type EnqueueFn func(string) error
+type CollectFn func(*colly.Response)
 
-func CreateCollectorForSite(redis *redis.Client, q WorkQueue, o Out, s *Site) *colly.Collector {
+type CollectorConfig struct {
+	Root           string
+	AllowedDomains []string
+}
+
+func DeriveCollectorConfigFromAPIRequest(req *APIRequest) (*CollectorConfig, error) {
+	conf := &CollectorConfig{}
+
+	url, err := url.Parse(req.URL)
+	if err != nil {
+		return conf, err
+	}
+	nakedDomain := strings.TrimPrefix(url.Hostname(), "www.")
+
+	conf.Root = strings.TrimRight(req.URL, "/")
+
+	conf.AllowedDomains = append(conf.AllowedDomains, nakedDomain, fmt.Sprintf("www.%s", nakedDomain))
+	conf.AllowedDomains = append(conf.AllowedDomains, req.Domains...)
+
+	return conf, nil
+}
+
+func CreateCollector(ctx context.Context, reqID uint32, redis *redis.Client, domains []string) *colly.Collector {
 	c := colly.NewCollector(
-		// TODO: Get better bot strings here: https://developers.google.com/search/docs/crawling-indexing/overview-google-crawlers
 		colly.UserAgent(fmt.Sprintf("Website Standards Bot/2.0")),
-		colly.CacheDir(filepath.Join(CacheDir, s.Domain)),
+		colly.CacheDir("./cache"),
+		colly.AllowedDomains(domains...),
+		colly.ID(reqID),
 		// colly.Debugger(&debug.LogDebugger{}),
-		colly.AllowedDomains(s.Domain, fmt.Sprintf("www.%s", s.Domain)), // Constrain to requested domain
 	)
 	c.CheckHead = true
 
-	//	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2}) // TODO: Hook into control over overall parallelism.
+	// TODO: Replace standard client with a retryable client.
+	// c.WithTransport(NewThrottledTransport(reqID, redis))
 
+	// SetStorage must come after SetClient as the storage's cookie jar
+	// will be mounted on the client by SetStorage.
 	if redis != nil {
-		s := &redisstorage.Storage{
-			Client: redis,
-			Prefix: "collector",
-		}
+		// Collectors of all nodes will persist and share visits /
+		// caching data via the Redis backend.
+		s := NewRedisStorage(ctx, redis, "collector")
+
 		if err := c.SetStorage(s); err != nil {
 			panic(err)
 		}
@@ -37,29 +62,38 @@ func CreateCollectorForSite(redis *redis.Client, q WorkQueue, o Out, s *Site) *c
 		// Use built-in memory backend
 	}
 
-	// Find and visit all links
+	return c
+}
+
+func CollectorAttachCallbacks(c *colly.Collector, enqueue EnqueueFn, collect CollectFn) {
 	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
-		link := e.Attr("href")
-		// log.Printf("Link found: %q -> %s\n", e.Text, link)
-		//		log.Printf("Found URL (%s)", e.Request.AbsoluteURL(link))
-		q.PublishURL(s, e.Request.AbsoluteURL(link))
+		enqueue(e.Request.AbsoluteURL(e.Attr("href")))
 	})
 
 	c.OnScraped(func(res *colly.Response) {
-		// log.Printf("Scraped URL (%s)", res.Ctx.Get("url"))
-		o.Send(s, res)
+		collect(res)
 	})
 
 	// Resolve linked sitemaps.
 	c.OnXML("//sitemap/loc", func(e *colly.XMLElement) {
-		// log.Printf("Resolving sitemap (%s)...", e.Text)
-		q.PublishURL(s, e.Text)
+		enqueue(e.Text)
 	})
 
 	c.OnXML("//urlset/url/loc", func(e *colly.XMLElement) {
-		// log.Printf("Found URL (%s) in sitemap...", e.Text)
-		q.PublishURL(s, e.Text)
+		enqueue(e.Text)
 	})
+}
 
-	return c
+// IsDomainAllowed has been extracted from colly.Collector, so that we can check
+// early if following actions, i.e. rate limiting should be performed at all.
+func IsDomainAllowed(domain string, allowed []string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	for _, d := range allowed {
+		if d == domain {
+			return true
+		}
+	}
+	return false
 }

@@ -1,17 +1,13 @@
 package main
 
 type APIRequest struct {
-	Site     *Site  `json:"site"`
-	SiteRoot string `json:"url"` // May be used instead of Site. The root URL of the site to crawl.
-
-	Webhook struct {
-		URL  string      `json:"url"`
-		Data interface{} `json:"data"` // Accept arbitrary data here.
-	} `json:"webhook"`
+	URL           string         `json:"url"`
+	Domains       []string       `json:"domains"`
+	WebhookConfig *WebhookConfig `json:"webhook"`
 }
 
 type APIResponse struct {
-	Site *Site `json:"site"`
+	CrawlRequestID uint32 `json:"crawl_request_id"`
 }
 
 type APIError struct {

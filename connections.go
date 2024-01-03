@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -8,12 +9,14 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/go-redis/redis"
 	"github.com/kos-v/dsnparser"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 )
 
 func maybeRedis() *redis.Client {
+	ctx := context.TODO()
+
 	rawdsn, ok := os.LookupEnv("TOBEY_REDIS_DSN")
 	if !ok {
 		return nil
@@ -29,7 +32,7 @@ func maybeRedis() *redis.Client {
 			Password: dsn.GetPassword(),
 			DB:       database,
 		})
-		_, err := client.Ping().Result()
+		_, err := client.Ping(ctx).Result()
 		return client, err
 	}, backoff.NewExponentialBackOff(), func(err error, t time.Duration) {
 		log.Print(err)

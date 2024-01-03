@@ -4,13 +4,14 @@ go 1.21
 
 require (
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/go-redis/redis v6.15.9+incompatible
-	github.com/gocolly/colly v1.2.0
-	github.com/gocolly/redisstorage v0.0.0-20190812112800-1745c5e6d0ba
+	github.com/go-redis/redis_rate/v10 v10.0.1
+	github.com/gocolly/colly/v2 v2.1.0
+	github.com/google/uuid v1.5.0
 	github.com/gorilla/mux v1.8.0
 	github.com/kos-v/dsnparser v1.1.0
 	github.com/rabbitmq/amqp091-go v1.9.0
-	github.com/streadway/amqp v1.1.0
+	github.com/redis/go-redis/v9 v9.3.1
+	golang.org/x/time v0.5.0
 )
 
 require (
@@ -19,13 +20,13 @@ require (
 	github.com/antchfx/htmlquery v1.2.3 // indirect
 	github.com/antchfx/xmlquery v1.3.4 // indirect
 	github.com/antchfx/xpath v1.1.10 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/kennygrant/sanitize v1.2.4 // indirect
-	github.com/onsi/ginkgo v1.16.5 // indirect
-	github.com/onsi/gomega v1.30.0 // indirect
 	github.com/saintfish/chardet v0.0.0-20120816061221-3af4cd4741ca // indirect
 	github.com/temoto/robotstxt v1.1.1 // indirect
 	golang.org/x/net v0.17.0 // indirect
