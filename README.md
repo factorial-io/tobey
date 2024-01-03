@@ -78,10 +78,9 @@ allow the naked domain (and all its subdomains).
 }
 ```
 
-### Prioritites
+### Prioritites (not implemented)
 
-
-### Oneshot Mode
+### Oneshot Mode (not implemented)
 
 By default the URLs submitted are considered entrypoints, you can change this
 behavior by providing the query parameter `oneshot`. This will only download the
