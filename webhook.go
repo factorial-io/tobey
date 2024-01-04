@@ -40,6 +40,8 @@ func NewWebhookDispatcher() *WebhookDispatcher {
 }
 
 func (wd *WebhookDispatcher) Send(webhook *WebhookConfig, res *colly.Response) error {
+	// log.Printf("Sending webhook got for crawl response (%s)... %s", res.Request.URL, webhook.Endpoint)
+
 	payload := &WebhookPayload{
 		Action: "collector.response",
 
@@ -64,8 +66,8 @@ func (wd *WebhookDispatcher) Send(webhook *WebhookConfig, res *colly.Response) e
 		err := backoff.RetryNotify(func() error {
 			_, err := wd.client.Do(req)
 			return err
-		}, backoff.NewExponentialBackOff(), func(err error, t time.Duration) {
-			log.Print(err)
+		}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 0), func(err error, t time.Duration) {
+			log.Printf("Retrying to send webhook in %s: %s", t, err)
 		})
 		if err != nil {
 			log.Printf("Sending webhook ultimately failed: %s", err)

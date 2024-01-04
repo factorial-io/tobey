@@ -80,6 +80,8 @@ allow the naked domain (and all its subdomains).
 
 ### Prioritites (not implemented)
 
+tbd
+
 ### Oneshot Mode (not implemented)
 
 By default the URLs submitted are considered entrypoints, you can change this
@@ -97,7 +99,7 @@ curl -X POST http://127.0.0.1:8080?oneshot # ...
 }
 ```
 
-### Multiple URLs
+### Multiple URLs (not implemented)
 
 Multiple URLs either as entrypoints or for oneshot downloading work a well,
 using the `urls` key:
@@ -147,4 +149,3 @@ This is how the payload will look like, and how it is received by the target:
   // ... 
 }
 ```
-
