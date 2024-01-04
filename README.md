@@ -104,7 +104,7 @@ curl -X POST http://127.0.0.1:8080?oneshot # ...
 Multiple URLs either as entrypoints or for oneshot downloading work a well,
 using the `urls` key:
 
-``jsonc
+```jsonc
 {
   "urls": [
     "https://factorial.io/blog", 
