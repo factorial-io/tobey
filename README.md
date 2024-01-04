@@ -70,7 +70,7 @@ allow the naked domain (and all its subdomains).
 
 ```jsonc
 {
-  "url": "https://example.org"
+  "url": "https://example.org",
   "domains": [
     "example.org",
     "example.com", // Entirely different domain, but same content.
@@ -142,7 +142,7 @@ This is how the payload will look like, and how it is received by the target:
   "action": "tobey.result",
   "data": { // Passed-through data.
     "test_run": 12
-  }
+  },
   "crawl": 123,            // ID of the crawl that triggered the download of this resource.
   "request": {/* ... */},  // Raw request submitted to download the resource.
   "response": {/* ... */}, // Raw response received when downloading the resource.
