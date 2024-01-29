@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/gocolly/colly/v2"
 )
@@ -66,7 +67,7 @@ func Worker(ctx context.Context, id int) error {
 				// crawl request, i.e. the WebhookConfig, that we have
 				// received via the queued message.
 				func(res *colly.Response) {
-					log.Printf("Worker (%d, %d) scraped URL (%s) and got response", id, c.ID, res.Request.URL)
+					// log.Printf("Worker (%d, %d) scraped URL (%s) and got response", id, c.ID, res.Request.URL)
 
 					if msg.WebhookConfig != nil && msg.WebhookConfig.Endpoint != "" {
 						webhookDispatcher.Send(msg.WebhookConfig, res)
@@ -105,6 +106,6 @@ func Worker(ctx context.Context, id int) error {
 			log.Printf("Error visiting URL (%s): %s", msg.URL, err)
 			continue
 		}
-		// log.Printf("Worker (%d) scraped URL (%s), took %d ms", id, msg.URL, time.Since(msg.Created).Milliseconds())
+		log.Printf("Worker (%d) scraped URL (%s), took %d ms", id, msg.URL, time.Since(msg.Created).Milliseconds())
 	}
 }
