@@ -82,6 +82,19 @@ allow the naked domain (and all its subdomains).
 
 tbd
 
+### Sample Size (not implemented)
+
+When a sample size is given, and its threshold of crawled pages has been reached
+the crawl request will stop fetching more pages. Please note that slightly more pages
+than the sample size might be returned.
+
+```jsonc
+{
+  "url": "https://example.org",
+  "sample_size": 10
+}
+```
+
 ### Oneshot Mode (not implemented)
 
 By default the URLs submitted are considered entrypoints, you can change this
