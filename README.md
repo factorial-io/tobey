@@ -33,7 +33,7 @@ To quickly try out the service, ensure you have Go installed. And run the follow
 
 ```sh
 # In the first terminal start the service.
-go run .
+make dev
 
 # In another terminal, submit a crawl request.
 curl -X POST http://127.0.0.1:8080 \
