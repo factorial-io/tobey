@@ -10,16 +10,17 @@ import (
 
 func Worker(ctx context.Context, id int) error {
 	for {
+		var msg *WorkQueueMessage
+		msgs, errs := workQueue.Consume()
+
 		select {
-			case ctx.Done():
-				return nil
-		 case msg, err := workQueue.Consume()
-				case 
-		}
-		// There is a single queue for all crawl requests. Blocking.
-		if err != nil {
+		case <-ctx.Done():
+			return nil
+		case err := <-errs:
 			log.Printf("Failed to consume from work queue: %s", err)
 			return err
+		case m := <-msgs:
+			msg = m
 		}
 
 		// We're creating a Collector lazily once it is needed.

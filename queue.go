@@ -12,7 +12,7 @@ import (
 type WorkQueue interface {
 	Open() error
 	PublishURL(reqID uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
-	Consume() (*WorkQueueMessage, error)
+	Consume() (<-chan *WorkQueueMessage, <-chan error)
 	Delay(delay time.Duration, msg *WorkQueueMessage) error
 	Close() error
 }
@@ -145,15 +145,22 @@ func (wq *RabbitMQWorkQueue) PublishURL(reqID uint32, url string, cconf *Collect
 	)
 }
 
-func (wq *RabbitMQWorkQueue) Consume() (*WorkQueueMessage, error) {
-	var msg *WorkQueueMessage
+func (wq *RabbitMQWorkQueue) Consume() (<-chan *WorkQueueMessage, <-chan error) {
+	reschan := make(chan *WorkQueueMessage)
+	errchan := make(chan error)
 
-	rawmsg := <-wq.receive // Blocks until we have at least one message.
+	go func() {
+		var msg *WorkQueueMessage
+		rawmsg := <-wq.receive // Blocks until we have at least one message.
 
-	if err := json.Unmarshal(rawmsg.Body, &msg); err != nil {
-		return msg, err
-	}
-	return msg, nil
+		if err := json.Unmarshal(rawmsg.Body, &msg); err != nil {
+			errchan <- err
+		} else {
+			reschan <- msg
+		}
+	}()
+
+	return reschan, errchan
 }
 
 func (wq *RabbitMQWorkQueue) Close() error {
@@ -201,8 +208,8 @@ func (wq *MemoryWorkQueue) Delay(delay time.Duration, msg *WorkQueueMessage) err
 	return nil
 }
 
-func (wq *MemoryWorkQueue) Consume() (*WorkQueueMessage, error) {
-	return <-wq.msgs, nil
+func (wq *MemoryWorkQueue) Consume() (<-chan *WorkQueueMessage, <-chan error) {
+	return wq.msgs, nil
 }
 
 func (wq *MemoryWorkQueue) Close() error {
