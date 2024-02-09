@@ -15,6 +15,7 @@ func Worker(ctx context.Context, id int) error {
 
 		select {
 		case <-ctx.Done():
+			log.Print("Worker context cancelled, stopping worker...")
 			return nil
 		case err := <-errs:
 			log.Printf("Failed to consume from work queue: %s", err)
