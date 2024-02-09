@@ -46,8 +46,8 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 
-	redisconn = maybeRedis()
-	rabbitmq = maybeRabbitMQ()
+	redisconn = maybeRedis(ctx)
+	rabbitmq = maybeRabbitMQ(ctx)
 
 	workQueue = CreateWorkQueue(rabbitmq)
 	if err := workQueue.Open(); err != nil {
