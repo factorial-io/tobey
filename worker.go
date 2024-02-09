@@ -10,8 +10,13 @@ import (
 
 func Worker(ctx context.Context, id int) error {
 	for {
-		// There is a single queue for all crawl requests.
-		msg, err := workQueue.Consume()
+		select {
+			case ctx.Done():
+				return nil
+		 case msg, err := workQueue.Consume()
+				case 
+		}
+		// There is a single queue for all crawl requests. Blocking.
 		if err != nil {
 			log.Printf("Failed to consume from work queue: %s", err)
 			return err

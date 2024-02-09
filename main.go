@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -44,33 +45,6 @@ func main() {
 	log.Print("Tobey starting...")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	go func() {
-		select {
-		case <-ctx.Done():
-			log.Print("Exiting...")
-
-			stop() // Exit everything that took the context.
-
-			if workQueue != nil {
-				workQueue.Close()
-			}
-			if progress != nil {
-				progress.Close()
-			}
-			if webhookDispatcher != nil {
-				webhookDispatcher.Close()
-			}
-			if redisconn != nil {
-				redisconn.Close()
-			}
-			if rabbitmq != nil {
-				rabbitmq.Close()
-			}
-
-			workersWaitGroup.Wait()
-			os.Exit(1)
-		}
-	}()
 
 	redisconn = maybeRedis()
 	rabbitmq = maybeRabbitMQ()
@@ -81,9 +55,7 @@ func main() {
 	}
 
 	limiter = CreateLimiter(ctx, redisconn, 1*time.Second)
-
 	webhookDispatcher = NewWebhookDispatcher()
-
 	progress = MustStartProgressFromEnv()
 
 	cachedCollectors = make(map[uint32]*colly.Collector)
@@ -159,5 +131,41 @@ func main() {
 	}).Methods("POST")
 
 	log.Printf("Starting HTTP server, listening on %s...", ":8080")
-	log.Fatal(http.ListenAndServe(":8080", router))
+
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+	}
+	go func() {
+		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("HTTP server error: %v", err)
+		}
+		log.Println("Stopped serving new HTTP connections.")
+	}()
+
+	<-ctx.Done()
+	log.Print("Exiting...")
+	stop() // Exit everything that took the context.
+
+	log.Print("Cleaning up...")
+	workersWaitGroup.Wait()
+
+	server.Shutdown(context.Background())
+
+	if workQueue != nil {
+		workQueue.Close()
+	}
+	if progress != nil {
+		progress.Close()
+	}
+	if webhookDispatcher != nil {
+		webhookDispatcher.Close()
+	}
+	if redisconn != nil {
+		redisconn.Close()
+	}
+	if rabbitmq != nil {
+		rabbitmq.Close()
+	}
+
 }
