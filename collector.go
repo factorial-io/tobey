@@ -38,7 +38,9 @@ func DeriveCollectorConfigFromAPIRequest(req *APIRequest) (*CollectorConfig, err
 func CreateCollector(ctx context.Context, reqID uint32, redis *redis.Client, domains []string) *colly.Collector {
 	c := colly.NewCollector(
 		colly.UserAgent(fmt.Sprintf("Website Standards Bot/2.0")),
-		colly.CacheDir("./cache"),
+		// Disabled cache and enabled revists, as we otherwise don't get results on subsequent submitted requests.
+		// colly.CacheDir("./cache"),
+		colly.AllowURLRevisit(),
 		colly.AllowedDomains(domains...),
 		colly.ID(reqID),
 		// colly.Debugger(&debug.LogDebugger{}),
