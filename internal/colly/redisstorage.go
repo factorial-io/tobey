@@ -2,7 +2,7 @@
 // Copied and modified to use more recent dependencies from:
 // https://github.com/gocolly/redisstorage
 
-package main
+package colly
 
 import (
 	"context"

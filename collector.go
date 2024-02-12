@@ -56,7 +56,7 @@ func CreateCollector(ctx context.Context, reqID uint32, redis *redis.Client, dom
 	if redis != nil {
 		// Collectors of all nodes will persist and share visits /
 		// caching data via the Redis backend.
-		s := NewRedisStorage(ctx, redis, "collector")
+		s := colly.NewRedisStorage(ctx, redis, "collector")
 
 		if err := c.SetStorage(s); err != nil {
 			panic(err)
