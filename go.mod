@@ -10,7 +10,7 @@ require (
 	github.com/go-redis/redis_rate/v10 v10.0.1
 	github.com/gobwas/glob v0.2.3
 	github.com/google/uuid v1.5.0
-	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/kos-v/dsnparser v1.1.0
