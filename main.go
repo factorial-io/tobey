@@ -61,15 +61,15 @@ func main() {
 
 	cachedCollectors = make(map[uint32]*colly.Collector)
 
-	log.Printf("Starting %d workers...", NumWorkers)
-	for i := 0; i < NumWorkers; i++ {
+	log.Printf("Starting %d visit workers...", NumVisitWorkers)
+	for i := 0; i < NumVisitWorkers; i++ {
 		workersWaitGroup.Add(1)
 
 		go func(id int) {
-			if err := Worker(ctx, id); err != nil {
-				log.Printf("Worker (%d) exited with error: %s", id, err)
+			if err := VisitWorker(ctx, id); err != nil {
+				log.Printf("Visit worker (%d) exited with error: %s", id, err)
 			} else {
-				log.Printf("Worker (%d) exited cleanly.", id)
+				log.Printf("Visit worker (%d) exited cleanly.", id)
 			}
 			workersWaitGroup.Done()
 		}(i)

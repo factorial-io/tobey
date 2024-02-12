@@ -8,7 +8,8 @@ import (
 	"tobey/internal/colly"
 )
 
-func Worker(ctx context.Context, id int) error {
+// VisitWorker fetches a resource from a given URL, consumed from the work queue.
+func VisitWorker(ctx context.Context, id int) error {
 	for {
 		var msg *WorkQueueMessage
 		msgs, errs := workQueue.Consume()
