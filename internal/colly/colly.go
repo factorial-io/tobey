@@ -37,15 +37,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"tobey/internal/colly/debug"
+	"tobey/internal/colly/storage"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/antchfx/htmlquery"
 	"github.com/antchfx/xmlquery"
-	"tobey/internal/colly/debug"
-	"tobey/internal/colly/storage"
 	"github.com/kennygrant/sanitize"
 	whatwgUrl "github.com/nlnwa/whatwg-url/url"
 	"github.com/temoto/robotstxt"
-	"google.golang.org/appengine/urlfetch"
 )
 
 // A CollectorOption sets an option on a Collector.
@@ -483,27 +483,6 @@ func (c *Collector) Init() {
 	c.ID = atomic.AddUint32(&collectorCounter, 1)
 	c.TraceHTTP = false
 	c.Context = context.Background()
-}
-
-// Appengine will replace the Collector's backend http.Client
-// With an Http.Client that is provided by appengine/urlfetch
-// This function should be used when the scraper is run on
-// Google App Engine. Example:
-//
-//	func startScraper(w http.ResponseWriter, r *http.Request) {
-//	  ctx := appengine.NewContext(r)
-//	  c := colly.NewCollector()
-//	  c.Appengine(ctx)
-//	   ...
-//	  c.Visit("https://google.ca")
-//	}
-func (c *Collector) Appengine(ctx context.Context) {
-	client := urlfetch.Client(ctx)
-	client.Jar = c.backend.Client.Jar
-	client.CheckRedirect = c.backend.Client.CheckRedirect
-	client.Timeout = c.backend.Client.Timeout
-
-	c.backend.Client = client
 }
 
 // Visit starts Collector's collecting job by creating a
