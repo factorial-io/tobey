@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"tobey/internal/colly"
+
 	"github.com/cenkalti/backoff/v4"
-	"github.com/gocolly/colly/v2"
 )
 
 type WebhookConfig struct {

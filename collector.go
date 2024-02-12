@@ -6,7 +6,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/gocolly/colly/v2"
+	"tobey/internal/colly"
+
 	"github.com/redis/go-redis/v9"
 )
 

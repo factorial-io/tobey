@@ -13,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gocolly/colly/v2"
+	"tobey/internal/colly"
+
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	amqp "github.com/rabbitmq/amqp091-go"

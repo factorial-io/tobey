@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/gocolly/colly/v2"
+	"tobey/internal/colly"
 )
 
 func Worker(ctx context.Context, id int) error {
