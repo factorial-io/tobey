@@ -22,8 +22,7 @@ import (
 )
 
 var (
-	// TODO: Once we have rate limiting in place
-	NumWorkers       int = 5
+	NumVisitWorkers  int = 10
 	workersWaitGroup sync.WaitGroup
 )
 
