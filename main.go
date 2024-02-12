@@ -10,10 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"time"
-
-	"tobey/internal/colly"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -22,23 +19,18 @@ import (
 )
 
 var (
-	NumVisitWorkers  int = 10
-	workersWaitGroup sync.WaitGroup
+	// NumVisitWorkers hard codes the number of workers we start at startup.
+	NumVisitWorkers int = 10
 )
 
 var (
-	redisconn *redis.Client
-	rabbitmq  *amqp.Connection
+	redisconn    *redis.Client
+	rabbitmqconn *amqp.Connection
 
 	workQueue         WorkQueue
 	limiter           LimiterAllowFn
 	webhookDispatcher *WebhookDispatcher
 	progress          Progress
-)
-
-var (
-	cachedCollectors     map[uint32]*colly.Collector // TODO: Ensure this doesn't grow unbounded.
-	cachedCollectorsLock sync.RWMutex
 )
 
 func main() {
@@ -47,9 +39,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 
 	redisconn = maybeRedis(ctx)
-	rabbitmq = maybeRabbitMQ(ctx)
+	rabbitmqconn = maybeRabbitMQ(ctx)
 
-	workQueue = CreateWorkQueue(rabbitmq)
+	workQueue = CreateWorkQueue(rabbitmqconn)
 	if err := workQueue.Open(); err != nil {
 		panic(err)
 	}
@@ -58,21 +50,7 @@ func main() {
 	webhookDispatcher = NewWebhookDispatcher()
 	progress = MustStartProgressFromEnv()
 
-	cachedCollectors = make(map[uint32]*colly.Collector)
-
-	log.Printf("Starting %d visit workers...", NumVisitWorkers)
-	for i := 0; i < NumVisitWorkers; i++ {
-		workersWaitGroup.Add(1)
-
-		go func(id int) {
-			if err := VisitWorker(ctx, id); err != nil {
-				log.Printf("Visit worker (%d) exited with error: %s", id, err)
-			} else {
-				log.Printf("Visit worker (%d) exited cleanly.", id)
-			}
-			workersWaitGroup.Done()
-		}(i)
-	}
+	workers := CreateVisitWorkersPool(ctx, NumVisitWorkers)
 
 	router := mux.NewRouter()
 
@@ -148,7 +126,7 @@ func main() {
 	stop() // Exit everything that took the context.
 
 	log.Print("Cleaning up...")
-	workersWaitGroup.Wait()
+	workers.Wait()
 
 	server.Shutdown(context.Background())
 
@@ -164,8 +142,8 @@ func main() {
 	if redisconn != nil {
 		redisconn.Close()
 	}
-	if rabbitmq != nil {
-		rabbitmq.Close()
+	if rabbitmqconn != nil {
+		rabbitmqconn.Close()
 	}
 
 }

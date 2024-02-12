@@ -3,10 +3,42 @@ package main
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"tobey/internal/colly"
+
+	lru "github.com/hashicorp/golang-lru/v2"
 )
+
+var (
+	collectors *lru.Cache[uint32, *colly.Collector] // Cannot grow unbound.
+)
+
+// CreateVisitWorkersPool initizalizes a worker pool and fills it with a number
+// of VisitWorker.
+func CreateVisitWorkersPool(ctx context.Context, num int) sync.WaitGroup {
+	l, _ := lru.New[uint32, *colly.Collector](128)
+	collectors = l
+
+	var wg sync.WaitGroup
+
+	log.Printf("Starting %d visit workers...", num)
+	for i := 0; i < num; i++ {
+		wg.Add(1)
+
+		go func(id int) {
+			if err := VisitWorker(ctx, id); err != nil {
+				log.Printf("Visit worker (%d) exited with error: %s", id, err)
+			} else {
+				log.Printf("Visit worker (%d) exited cleanly.", id)
+			}
+			wg.Done()
+		}(i)
+	}
+
+	return wg
+}
 
 // VisitWorker fetches a resource from a given URL, consumed from the work queue.
 func VisitWorker(ctx context.Context, id int) error {
@@ -15,6 +47,7 @@ func VisitWorker(ctx context.Context, id int) error {
 		msgs, errs := workQueue.ConsumeVisit()
 
 		select {
+		// This allows to stop a worker gracefully.
 		case <-ctx.Done():
 			log.Print("Worker context cancelled, stopping worker...")
 			return nil
@@ -33,10 +66,9 @@ func VisitWorker(ctx context.Context, id int) error {
 		//
 		// Each Collector only does handle a single crawl request. This
 		// allows us to pass along request specific WebhookConfig.
-		cachedCollectorsLock.Lock()
 
 		var c *colly.Collector
-		if v, ok := cachedCollectors[msg.CrawlRequestID]; ok {
+		if v, ok := collectors.Get(msg.CrawlRequestID); ok {
 			c = v
 		} else {
 			c = CreateCollector(
@@ -82,9 +114,8 @@ func VisitWorker(ctx context.Context, id int) error {
 					}
 				},
 			)
-			cachedCollectors[msg.CrawlRequestID] = c
+			collectors.Add(msg.CrawlRequestID, c)
 		}
-		cachedCollectorsLock.Unlock()
 
 		ok := IsDomainAllowed(GetHostFromURL(msg.URL), msg.CollectorConfig.AllowedDomains)
 		if !ok {
