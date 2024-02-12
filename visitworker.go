@@ -11,8 +11,8 @@ import (
 // VisitWorker fetches a resource from a given URL, consumed from the work queue.
 func VisitWorker(ctx context.Context, id int) error {
 	for {
-		var msg *WorkQueueMessage
-		msgs, errs := workQueue.Consume()
+		var msg *VisitMessage
+		msgs, errs := workQueue.ConsumeVisit()
 
 		select {
 		case <-ctx.Done():
@@ -101,7 +101,7 @@ func VisitWorker(ctx context.Context, id int) error {
 			return err
 			// TODO: Rollback, Nack and requeue msg, so it isn't lost.
 		} else if !ok { // Hit rate limit, retryAfter is now > 0
-			if err := workQueue.Delay(retryAfter, msg); err != nil {
+			if err := workQueue.DelayVisit(retryAfter, msg); err != nil {
 				log.Printf("Failed to schedule delayed message: %d", msg.CrawlRequestID)
 				// TODO: Nack and requeue msg, so it isn't lost.
 				return err
