@@ -40,6 +40,7 @@ func NewWebhookDispatcher() *WebhookDispatcher {
 	return &WebhookDispatcher{client: &http.Client{}}
 }
 
+// Send tries to send a message to the configured webhook endpoint. The send
 func (wd *WebhookDispatcher) Send(webhook *WebhookConfig, res *colly.Response) error {
 
 	payload := &WebhookPayload{
