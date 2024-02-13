@@ -18,9 +18,8 @@ page or a XML sitemap, will fetch and return it's contents.
 The spider is implemented on to of the colly, a crawling framework for Go. We've
 chose this framework, as it allows us to outgrow it gradually. In the current
 version of tobey, we use our own implementation for queuing, that doesn't
-require modififactions to the original framework code. However should this be
-necessary at some point, we will fork the framework under `internal` and make
-our modififactions.
+require modifications to the original framework code. However as we have to provide
+our own cache storage implementation we forked the framework to `internal`.
 
 A future version will support JavaScript-rendered fetch alongside plain fetch.
 
