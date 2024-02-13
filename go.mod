@@ -16,7 +16,7 @@ require (
 	github.com/kos-v/dsnparser v1.1.0
 	github.com/nlnwa/whatwg-url v0.4.0
 	github.com/rabbitmq/amqp091-go v1.9.0
-	github.com/redis/go-redis/v9 v9.3.1
+	github.com/redis/go-redis/v9 v9.4.0
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d
 	github.com/temoto/robotstxt v1.1.2
 	golang.org/x/net v0.21.0
