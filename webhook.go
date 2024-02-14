@@ -50,7 +50,7 @@ func (wd *WebhookDispatcher) Send(webhook *WebhookConfig, res *colly.Response) e
 		Data: webhook,
 
 		RequestURL:   res.Request.URL.String(),
-		ResponseBody: res.Body[:100],
+		ResponseBody: res.Body[:],
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
