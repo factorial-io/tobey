@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 
 	"tobey/internal/colly"
+	logger "tobey/logger"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type EnqueueFn func(string) error
@@ -36,32 +40,37 @@ func DeriveCollectorConfigFromAPIRequest(req *APIRequest) (*CollectorConfig, err
 	return conf, nil
 }
 
-func CreateCollector(ctx context.Context, reqID uint32, redis *redis.Client, domains []string) *colly.Collector {
+func CreateCollector(ctx context.Context, reqID string, redis *redis.Client, domains []string) *colly.Collector {
+	log := logger.GetBaseLogger()
+
+	uuid, _ := uuid.Parse(reqID)
 	c := colly.NewCollector(
 		colly.UserAgent(fmt.Sprintf("Website Standards Bot/2.0")),
 		// Disabled cache and enabled revists, as we otherwise don't get results on subsequent submitted requests.
 		// colly.CacheDir("./cache"),
-		colly.AllowURLRevisit(),
+		//colly.AllowURLRevisit(false), Disable this because otherwise no caching of the request
 		colly.AllowedDomains(domains...),
-		colly.ID(reqID),
+		colly.ID(uuid.ID()),
+		colly.StdlibContext(ctx),
 		// colly.Debugger(&debug.LogDebugger{}),
 	)
 	c.CheckHead = true
 
 	// TODO: Replace standard client with a retryable client.
-	// c.WithTransport(NewThrottledTransport(reqID, redis))
+	c.WithTransport(otelhttp.NewTransport(http.DefaultTransport))
 
 	// SetStorage must come after SetClient as the storage's cookie jar
 	// will be mounted on the client by SetStorage.
 	if redis != nil {
+		log.Info("Add Redis cache for for Colly")
 		// Collectors of all nodes will persist and share visits /
 		// caching data via the Redis backend.
 		s := colly.NewRedisStorage(ctx, redis, "collector")
-
 		if err := c.SetStorage(s); err != nil {
 			panic(err)
 		}
 	} else {
+		log.Info("Add Memory cache for for Colly")
 		// Use built-in memory backend
 	}
 

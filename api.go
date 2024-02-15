@@ -7,7 +7,7 @@ type APIRequest struct {
 }
 
 type APIResponse struct {
-	CrawlRequestID uint32 `json:"crawl_request_id"`
+	CrawlRequestID string `json:"crawl_request_id"`
 }
 
 type APIError struct {

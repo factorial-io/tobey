@@ -161,3 +161,17 @@ This is how the payload will look like, and how it is received by the target:
   // ... 
 }
 ```
+
+| Environment Variabel        |  Default Value           |
+| ------------- |:-------------:|
+| RABBIT_USER     | rabbitmq |
+| RABBIT_PW      | rabbitmq     |
+| RABBIT_HOST | localhost     |
+| RABBIT_PORT | 5672     |
+|SERVICE_DISCOVERY | localhost|
+|OWN_ADDRESS| ""|
+|GRPC_PORT|6543|
+|OWN_PORT| 8000|
+|SERVICE_DISCOVERY_NAMESPACE| workers|
+|SERVICE_DISCOVERY_TAGS| drupal_workers|
+|PHP_FILE_PATH| ./src/Command/Worker.php"|
