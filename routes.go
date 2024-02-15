@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
+	logger "tobey/logger"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -14,7 +14,7 @@ import (
 )
 
 func addRoutes(router *mux.Router) {
-
+	log := logger.GetBaseLogger()
 	// TODO check if necessary
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")

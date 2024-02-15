@@ -123,6 +123,7 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data interface
 	// Marshal the data into JSON
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
+		log.Error("json marshal failed")
 		span.SetStatus(codes.Error, "json marshal failed")
 		span.SetAttributes(attribute.String("data", "TODO"))
 		span.RecordError(err)
