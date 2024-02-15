@@ -1,28 +1,36 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
 )
 
 type WorkQueue interface {
 	Open() error
 
-	PublishURL(reqID uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
-	ConsumeVisit() (<-chan *VisitMessage, <-chan error)
-	DelayVisit(delay time.Duration, msg *VisitMessage) error
+	PublishURL(ctx context.Context, reqID string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
+	ConsumeVisit() (<-chan *VisitMessagePackage, <-chan error)
+	DelayVisit(delay time.Duration, msg *VisitMessagePackage) error
 
 	Close() error
+}
+
+type VisitMessagePackage struct {
+	context *context.Context
+	payload *VisitMessage
 }
 
 type VisitMessage struct {
 	ID              uint32
 	Created         time.Time
-	CrawlRequestID  uint32
+	CrawlRequestID  string
 	URL             string
 	CollectorConfig *CollectorConfig
 	WebhookConfig   *WebhookConfig
@@ -96,13 +104,18 @@ func (wq *RabbitMQWorkQueue) Open() error {
 
 // DelayVisit republishes a message with given delay.
 // Relies on: https://blog.rabbitmq.com/posts/2015/04/scheduling-messages-with-rabbitmq/
-func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) error {
-	log.Printf("Delaying message (%d) by %.2f s", msg.ID, delay.Seconds())
+func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessagePackage) error {
+	log.Printf("Delaying message (%d) by %.2f s", msg.payload.ID, delay.Seconds())
 
 	b, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
+
+	table := make(amqp.Table)
+	otel.GetTextMapPropagator().Inject(context.TODO(), MapCarrierRabbitmq(table))
+	table["x-delay"] = delay.Milliseconds()
+
 	return wq.channel.Publish(
 		"tobey.default", // exchange
 		wq.queue.Name,   // routing key
@@ -112,14 +125,12 @@ func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) 
 			DeliveryMode: amqp.Persistent, // TODO: check meaning
 			ContentType:  "application/json",
 			Body:         b,
-			Headers: amqp.Table{
-				"x-delay": delay.Milliseconds(),
-			},
+			Headers:      table,
 		},
 	)
 }
 
-func (wq *RabbitMQWorkQueue) PublishURL(reqID uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, reqID string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
 	msg := &VisitMessage{
 		ID:              uuid.New().ID(),
 		Created:         time.Now(),
@@ -134,12 +145,16 @@ func (wq *RabbitMQWorkQueue) PublishURL(reqID uint32, url string, cconf *Collect
 		return err
 	}
 
+	table := make(amqp.Table)
+	otel.GetTextMapPropagator().Inject(ctx, MapCarrierRabbitmq(table))
+
 	return wq.channel.Publish(
 		"tobey.default", // exchange
 		wq.queue.Name,   // routing key
 		false,           // mandatory TODO: check meaning
 		false,           // immediate TODO: check meaning
 		amqp.Publishing{
+			Headers:      table,
 			DeliveryMode: amqp.Persistent, // TODO: check meaning
 			ContentType:  "application/json",
 			Body:         b,
@@ -147,18 +162,22 @@ func (wq *RabbitMQWorkQueue) PublishURL(reqID uint32, url string, cconf *Collect
 	)
 }
 
-func (wq *RabbitMQWorkQueue) ConsumeVisit() (<-chan *VisitMessage, <-chan error) {
-	reschan := make(chan *VisitMessage)
+func (wq *RabbitMQWorkQueue) ConsumeVisit() (<-chan *VisitMessagePackage, <-chan error) {
+	reschan := make(chan *VisitMessagePackage)
 	errchan := make(chan error)
 
 	go func() {
 		var msg *VisitMessage
 		rawmsg := <-wq.receive // Blocks until we have at least one message.
-
+		ctx := otel.GetTextMapPropagator().Extract(context.TODO(), MapCarrierRabbitmq(rawmsg.Headers))
 		if err := json.Unmarshal(rawmsg.Body, &msg); err != nil {
 			errchan <- err
 		} else {
-			reschan <- msg
+			package_visit := &VisitMessagePackage{
+				context: &ctx,
+				payload: msg,
+			}
+			reschan <- package_visit
 		}
 	}()
 
@@ -179,42 +198,68 @@ func (wq *RabbitMQWorkQueue) Close() error {
 
 type MemoryWorkQueue struct {
 	// TODO: MaxSize
-	msgs chan *VisitMessage
+	msgs chan *VisitMessagePackage
 }
 
 func (wq *MemoryWorkQueue) Open() error {
-	wq.msgs = make(chan *VisitMessage, 10000) // make sends non-blocking
+	wq.msgs = make(chan *VisitMessagePackage, 10000) // make sends non-blocking
 	return nil
 }
 
-func (wq *MemoryWorkQueue) PublishURL(reqID uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, reqID string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
 	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
-	wq.msgs <- &VisitMessage{
-		ID:              uuid.New().ID(),
-		Created:         time.Now(),
-		CrawlRequestID:  reqID,
-		URL:             url,
-		CollectorConfig: cconf,
-		WebhookConfig:   whconf,
-	}
+	wq.msgs <- &VisitMessagePackage{
+		context: &ctx,
+		payload: &VisitMessage{
+			ID:              uuid.New().ID(),
+			Created:         time.Now(),
+			CrawlRequestID:  reqID,
+			URL:             url,
+			CollectorConfig: cconf,
+			WebhookConfig:   whconf,
+		}}
 	return nil
 }
 
 // DelayVisit republishes a message with given delay.
-func (wq *MemoryWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) error {
+func (wq *MemoryWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessagePackage) error {
 	go func() {
-		log.Printf("Delaying message (%d) by %.2f s", msg.ID, delay.Seconds())
+		log.Printf("Delaying message (%d) by %.2f s", msg.payload.ID, delay.Seconds())
 		time.Sleep(delay)
 		wq.msgs <- msg
 	}()
 	return nil
 }
 
-func (wq *MemoryWorkQueue) ConsumeVisit() (<-chan *VisitMessage, <-chan error) {
+func (wq *MemoryWorkQueue) ConsumeVisit() (<-chan *VisitMessagePackage, <-chan error) {
 	return wq.msgs, nil
 }
 
 func (wq *MemoryWorkQueue) Close() error {
 	close(wq.msgs)
 	return nil
+}
+
+// Transformer for Opentelemetry
+
+// medium for propagated key-value pairs.
+type MapCarrierRabbitmq map[string]interface{}
+
+// Get returns the value associated with the passed key.
+func (c MapCarrierRabbitmq) Get(key string) string {
+	return fmt.Sprintf("%v", c[key])
+}
+
+// Set stores the key-value pair.
+func (c MapCarrierRabbitmq) Set(key, value string) {
+	c[key] = value
+}
+
+// Keys lists the keys stored in this carrier.
+func (c MapCarrierRabbitmq) Keys() []string {
+	keys := make([]string, 0, len(c))
+	for k := range c {
+		keys = append(keys, k)
+	}
+	return keys
 }

@@ -9,9 +9,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func addRoutes(router *mux.Router) {
+
+	// TODO check if necessary
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		r.Body.Close()
@@ -24,8 +28,10 @@ func addRoutes(router *mux.Router) {
 		r.Body.Close()
 
 		w.Header().Set("Content-Type", "application/json")
-		reqID := uuid.New().ID()
+		reqID := uuid.New().String()
 		log.Printf("Handling incoming crawl request (%d)", reqID)
+		ctx, span := tracer.Start(r.Context(), "handleItem", trace.WithAttributes(attribute.String("Crawl Request", reqID)))
+		defer span.End()
 
 		var req APIRequest
 		err := json.Unmarshal(body, &req)
@@ -56,8 +62,9 @@ func addRoutes(router *mux.Router) {
 
 		log.Printf("Processing request (%x) for (%s)", reqID, req.URL)
 
-		workQueue.PublishURL(reqID, fmt.Sprintf("%s/sitemap.xml", cconf.Root), cconf, whconf)
-		workQueue.PublishURL(reqID, req.URL, cconf, whconf)
+		// TODO sitemap should be ask from differente server
+		//workQueue.PublishURL(ctx, reqID, fmt.Sprintf("%s/sitemap.xml", cconf.Root), cconf, whconf)
+		workQueue.PublishURL(ctx, reqID, req.URL, cconf, whconf)
 
 		result := &APIResponse{
 			CrawlRequestID: reqID,

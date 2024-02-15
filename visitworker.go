@@ -2,23 +2,26 @@ package main
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
 	"tobey/internal/colly"
+	logger "tobey/logger"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
-	collectors *lru.Cache[uint32, *colly.Collector] // Cannot grow unbound.
+	collectors *lru.Cache[string, *colly.Collector] // Cannot grow unbound.
 )
 
 // CreateVisitWorkersPool initizalizes a worker pool and fills it with a number
 // of VisitWorker.
 func CreateVisitWorkersPool(ctx context.Context, num int) sync.WaitGroup {
-	l, _ := lru.New[uint32, *colly.Collector](128)
+	log := logger.GetBaseLogger()
+	l, _ := lru.New[string, *colly.Collector](128)
 	collectors = l
 
 	var wg sync.WaitGroup
@@ -42,7 +45,9 @@ func CreateVisitWorkersPool(ctx context.Context, num int) sync.WaitGroup {
 
 // VisitWorker fetches a resource from a given URL, consumed from the work queue.
 func VisitWorker(ctx context.Context, id int) error {
+	log := logger.GetBaseLogger()
 	for {
+		var package_visit *VisitMessagePackage
 		var msg *VisitMessage
 		msgs, errs := workQueue.ConsumeVisit()
 
@@ -52,12 +57,18 @@ func VisitWorker(ctx context.Context, id int) error {
 			log.Print("Worker context cancelled, stopping worker...")
 			return nil
 		case err := <-errs:
+			_, span := tracer.Start(ctx, "handle.visit.queue.worker.error")
 			log.Printf("Failed to consume from work queue: %s", err)
+			span.RecordError(err)
+			span.End()
 			return err
 		case m := <-msgs:
-			msg = m
+			package_visit = m
+			msg = package_visit.payload
 		}
 
+		ctx_new, span := tracer.Start(*package_visit.context, "handle.visit.queue.worker")
+		span.SetAttributes(attribute.String("Url", msg.URL))
 		// We're creating a Collector lazily once it is needed.
 		//
 		// This is not only for saving time to construct these, but
@@ -86,13 +97,26 @@ func VisitWorker(ctx context.Context, id int) error {
 				func(url string) error {
 					ok := IsDomainAllowed(GetHostFromURL(url), msg.CollectorConfig.AllowedDomains)
 					if !ok {
+						log.Printf("hello world domain")
 						// log.Printf("Skipping enqueuing of crawl of URL (%s), domain not allowed...", msg.URL)
 						return nil
 					}
 					if has, _ := c.HasVisited(url); has {
+						log.Printf("hello world has visited queing")
 						return nil
 					}
+
+					progress.Update(ProgressUpdateMessagePackage{
+						*package_visit.context,
+						ProgressUpdateMessage{
+							PROGRESS_STAGE_NAME,
+							PROGRESS_STATE_QUEUED_FOR_CRAWLING,
+							msg.CrawlRequestID,
+							url,
+						},
+					})
 					return workQueue.PublishURL(
+						*package_visit.context, //todo find the righr
 						// Passing the crawl request ID, so when
 						// consumed the URL is crawled by the matching
 						// Collector.
@@ -108,9 +132,11 @@ func VisitWorker(ctx context.Context, id int) error {
 				// received via the queued message.
 				func(res *colly.Response) {
 					// log.Printf("Worker (%d, %d) scraped URL (%s) and got response", id, c.ID, res.Request.URL)
-
 					if msg.WebhookConfig != nil && msg.WebhookConfig.Endpoint != "" {
-						webhookDispatcher.Send(msg.WebhookConfig, res)
+						webhookDispatcher.Send(ctx_new, msg.WebhookConfig, res)
+					} else {
+						//TODO handle message differently
+						log.Error("Missing Webhook")
 					}
 				},
 			)
@@ -120,21 +146,43 @@ func VisitWorker(ctx context.Context, id int) error {
 		ok := IsDomainAllowed(GetHostFromURL(msg.URL), msg.CollectorConfig.AllowedDomains)
 		if !ok {
 			// log.Printf("Skipping crawl of URL (%s), domain not allowed...", msg.URL)
+			span.AddEvent("Domain is not Allowed",
+				trace.WithAttributes(
+					attribute.String("Url", msg.URL),
+				))
+			span.End()
 			continue
 		}
 		if has, _ := c.HasVisited(msg.URL); has {
+			log.Printf("hello world has visited viewing")
+			span.AddEvent("Url is already visited",
+				trace.WithAttributes(
+					attribute.String("Url", msg.URL),
+				))
+			span.End()
 			continue
 		}
 
 		ok, retryAfter, err := limiter(msg.URL)
 		if err != nil {
-			log.Printf("Error while checking rate limiter for  message: %d", msg.CrawlRequestID)
+			log.Printf("Error while checking rate limiter for  message: %v", msg.CrawlRequestID)
+			span.AddEvent("Url has reached rate limit",
+				trace.WithAttributes(
+					attribute.String("Url", msg.URL),
+				))
+			span.End()
 			return err
 			// TODO: Rollback, Nack and requeue msg, so it isn't lost.
 		} else if !ok { // Hit rate limit, retryAfter is now > 0
-			if err := workQueue.DelayVisit(retryAfter, msg); err != nil {
-				log.Printf("Failed to schedule delayed message: %d", msg.CrawlRequestID)
+			if err := workQueue.DelayVisit(retryAfter, package_visit); err != nil {
+				log.Printf("Failed to schedule delayed message: %v", msg.CrawlRequestID)
+
+				span.AddEvent("Failed to schedule delayed message",
+					trace.WithAttributes(
+						attribute.String("Url", msg.URL),
+					))
 				// TODO: Nack and requeue msg, so it isn't lost.
+				span.End()
 				return err
 			}
 		}
@@ -143,8 +191,37 @@ func VisitWorker(ctx context.Context, id int) error {
 		// Sync crawl the URL.
 		if err := c.Visit(msg.URL); err != nil {
 			log.Printf("Error visiting URL (%s): %s", msg.URL, err)
+			progress.Update(ProgressUpdateMessagePackage{
+				*package_visit.context,
+				ProgressUpdateMessage{
+					PROGRESS_STAGE_NAME,
+					PROGRESS_STATE_Errored,
+					msg.CrawlRequestID,
+					msg.URL,
+				},
+			})
+			span.AddEvent("Error Visiting Url",
+				trace.WithAttributes(
+					attribute.String("Url", msg.URL),
+				))
+			span.End()
 			continue
 		}
+
+		progress.Update(ProgressUpdateMessagePackage{
+			*package_visit.context,
+			ProgressUpdateMessage{
+				PROGRESS_STAGE_NAME,
+				PROGRESS_STATE_CRAWLED,
+				msg.CrawlRequestID,
+				msg.URL,
+			},
+		})
 		log.Printf("Worker (%d) scraped URL (%s), took %d ms", id, msg.URL, time.Since(msg.Created).Milliseconds())
+		span.AddEvent("Webpage is scraped",
+			trace.WithAttributes(
+				attribute.String("Url", msg.URL),
+			))
+		span.End()
 	}
 }

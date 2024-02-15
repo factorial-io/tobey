@@ -3,15 +3,18 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
+	"tobey/helper"
+	logger "tobey/logger"
 
 	"github.com/gorilla/mux"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
 )
 
 var (
@@ -30,9 +33,25 @@ var (
 )
 
 func main() {
-	log.Print("Tobey starting...")
 
+	logger.InitLoggerDefault(helper.GetEnvString("LOG_LEVEL", "debug"))
+
+	log := logger.GetBaseLogger().WithField("Version", "0.0.1")
+	//todo add opentelemetry logging
+	log.Print("Tobey starting...")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+
+	// Setup Opentelemetry
+	shutdown, erro := setupOTelSDK(ctx)
+	if erro != nil {
+		panic("ahh")
+	}
+	err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	go startHealthcheck()
 
 	redisconn = maybeRedis(ctx)
 	rabbitmqconn = maybeRabbitMQ(ctx)
@@ -43,12 +62,20 @@ func main() {
 	}
 
 	limiter = CreateLimiter(ctx, redisconn, 1*time.Second)
-	webhookDispatcher = NewWebhookDispatcher()
-	progress = MustStartProgressFromEnv()
+
+	// Create Webhook Handling
+	webhookQueue := make(chan WebhookPayloadPackage, helper.GetEnvInt("TORBEY_WEBHOOK_PAYLOAD_LIMIT", 100))
+	webhook := NewProcessWebhooksManager()
+	webhook.Start(ctx, webhookQueue)
+
+	webhookDispatcher = NewWebhookDispatcher(webhookQueue)
+
+	progress = MustStartProgressFromEnv(ctx)
 
 	workers := CreateVisitWorkersPool(ctx, NumVisitWorkers)
 
 	router := mux.NewRouter()
+	router.Use(otelmux.Middleware("torbey-api"))
 	addRoutes(router)
 
 	log.Printf("Starting HTTP server, listening on %s...", ":8080")
@@ -79,14 +106,13 @@ func main() {
 	if progress != nil {
 		progress.Close()
 	}
-	if webhookDispatcher != nil {
-		webhookDispatcher.Close()
-	}
 	if redisconn != nil {
 		redisconn.Close()
 	}
 	if rabbitmqconn != nil {
 		rabbitmqconn.Close()
 	}
+
+	shutdown(ctx)
 
 }
