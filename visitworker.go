@@ -97,12 +97,12 @@ func VisitWorker(ctx context.Context, id int) error {
 				func(url string) error {
 					ok := IsDomainAllowed(GetHostFromURL(url), msg.CollectorConfig.AllowedDomains)
 					if !ok {
-						log.Printf("hello world domain")
+						log.Debug("Domain is not allowed: ", url)
 						// log.Printf("Skipping enqueuing of crawl of URL (%s), domain not allowed...", msg.URL)
 						return nil
 					}
 					if has, _ := c.HasVisited(url); has {
-						log.Printf("hello world has visited queing")
+						log.Debug("Item ", url, " already visited.")
 						return nil
 					}
 
@@ -145,7 +145,7 @@ func VisitWorker(ctx context.Context, id int) error {
 
 		ok := IsDomainAllowed(GetHostFromURL(msg.URL), msg.CollectorConfig.AllowedDomains)
 		if !ok {
-			// log.Printf("Skipping crawl of URL (%s), domain not allowed...", msg.URL)
+			log.Debug("Skipping crawl of URL (", msg.URL, "), domain not allowed...")
 			span.AddEvent("Domain is not Allowed",
 				trace.WithAttributes(
 					attribute.String("Url", msg.URL),
@@ -154,7 +154,7 @@ func VisitWorker(ctx context.Context, id int) error {
 			continue
 		}
 		if has, _ := c.HasVisited(msg.URL); has {
-			log.Printf("hello world has visited viewing")
+			log.Debug("Skipping crawl of URL (", msg.URL, "), is already visited...")
 			span.AddEvent("Url is already visited",
 				trace.WithAttributes(
 					attribute.String("Url", msg.URL),
@@ -186,11 +186,11 @@ func VisitWorker(ctx context.Context, id int) error {
 				return err
 			}
 		}
-		log.Printf("Visiting URL (%s)...", msg.URL)
+		log.Info("Visiting URL ", msg.URL)
 
 		// Sync crawl the URL.
 		if err := c.Visit(msg.URL); err != nil {
-			log.Printf("Error visiting URL (%s): %s", msg.URL, err)
+			log.Error("Error visiting URL ", msg.URL, ":", err)
 			progress.Update(ProgressUpdateMessagePackage{
 				*package_visit.context,
 				ProgressUpdateMessage{
@@ -217,7 +217,7 @@ func VisitWorker(ctx context.Context, id int) error {
 				msg.URL,
 			},
 		})
-		log.Printf("Worker (%d) scraped URL (%s), took %d ms", id, msg.URL, time.Since(msg.Created).Milliseconds())
+		log.Infof("Worker (%d) scraped URL (%s), took %d ms", id, msg.URL, time.Since(msg.Created).Milliseconds())
 		span.AddEvent("Webpage is scraped",
 			trace.WithAttributes(
 				attribute.String("Url", msg.URL),

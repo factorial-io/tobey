@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"time"
+	logger "tobey/logger"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/kos-v/dsnparser"
@@ -16,11 +16,13 @@ import (
 )
 
 func maybeRedis(ctx context.Context) *redis.Client {
+	log := logger.GetBaseLogger()
+
 	rawdsn, ok := os.LookupEnv("TOBEY_REDIS_DSN")
 	if !ok {
 		return nil
 	}
-	log.Printf("Connecting to Redis with DSN (%s)...", rawdsn)
+	log.Infof("Connecting to Redis with DSN (%s)...", rawdsn)
 
 	dsn := dsnparser.Parse(rawdsn)
 	database, _ := strconv.Atoi(dsn.GetPath())
@@ -60,6 +62,8 @@ func maybeRedis(ctx context.Context) *redis.Client {
 }
 
 func maybeRabbitMQ(ctx context.Context) *amqp.Connection {
+	log := logger.GetBaseLogger()
+
 	dsn, ok := os.LookupEnv("TOBEY_RABBITMQ_DSN")
 	if !ok {
 		return nil

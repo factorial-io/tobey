@@ -123,6 +123,7 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data interface
 	// Marshal the data into JSON
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
+		log.Error("json marshal failed")
 		span.SetStatus(codes.Error, "json marshal failed")
 		span.SetAttributes(attribute.String("data", "TODO"))
 		span.RecordError(err)
@@ -132,6 +133,7 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data interface
 	// Prepare the webhook request
 	req, err := http.NewRequestWithContext(ctx_send_webhook, "POST", url, bytes.NewBuffer(jsonBytes))
 	if err != nil {
+		log.Error("Cant create request")
 		span.SetStatus(codes.Error, "cant create new request")
 		span.RecordError(err)
 		return err
@@ -142,6 +144,7 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data interface
 	// Send the webhook request
 	resp, err := w.client.Do(req)
 	if err != nil {
+		log.Error("Cant do request")
 		span.SetStatus(codes.Error, "Request failed")
 		span.SetAttributes(attribute.String("url", req.URL.String()))
 		span.RecordError(err)

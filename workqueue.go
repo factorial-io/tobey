@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
+	logger "tobey/logger"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -37,6 +37,8 @@ type VisitMessage struct {
 }
 
 func CreateWorkQueue(rabbitmq *amqp.Connection) WorkQueue {
+	log := logger.GetBaseLogger()
+
 	if rabbitmq != nil {
 		log.Print("Using distributed work queue...")
 		return &RabbitMQWorkQueue{conn: rabbitmq}
@@ -105,6 +107,7 @@ func (wq *RabbitMQWorkQueue) Open() error {
 // DelayVisit republishes a message with given delay.
 // Relies on: https://blog.rabbitmq.com/posts/2015/04/scheduling-messages-with-rabbitmq/
 func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessagePackage) error {
+	log := logger.GetBaseLogger()
 	log.Printf("Delaying message (%d) by %.2f s", msg.payload.ID, delay.Seconds())
 
 	b, err := json.Marshal(msg)
@@ -208,8 +211,10 @@ func (wq *MemoryWorkQueue) Open() error {
 
 func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, reqID string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
 	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
+	// TODO marvin take a look at the trace implementation.
+	ctx_test := context.TODO()
 	wq.msgs <- &VisitMessagePackage{
-		context: &ctx,
+		context: &ctx_test,
 		payload: &VisitMessage{
 			ID:              uuid.New().ID(),
 			Created:         time.Now(),
@@ -223,6 +228,7 @@ func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, reqID string, url str
 
 // DelayVisit republishes a message with given delay.
 func (wq *MemoryWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessagePackage) error {
+	log := logger.GetBaseLogger()
 	go func() {
 		log.Printf("Delaying message (%d) by %.2f s", msg.payload.ID, delay.Seconds())
 		time.Sleep(delay)

@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/url"
 	"strings"
 	"time"
+	logger "tobey/logger"
 
 	"github.com/go-redis/redis_rate/v10"
 	"github.com/redis/go-redis/v9"
@@ -20,6 +20,7 @@ var (
 type LimiterAllowFn func(url string) (ok bool, retryAfter time.Duration, err error)
 
 func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration) LimiterAllowFn {
+	log := logger.GetBaseLogger()
 	if redis != nil {
 		log.Print("Using distributed rate limiter...")
 		redisLimiter = redis_rate.NewLimiter(redis)
@@ -27,7 +28,7 @@ func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration)
 		return func(url string) (bool, time.Duration, error) {
 			host := GetHostFromURL(url)
 			res, err := redisLimiter.Allow(ctx, host, redis_rate.PerSecond(int(rate.Seconds())))
-
+			log.Info("hit me")
 			if err != nil {
 				log.Printf("Rate limit exceeded for host (%s)", host)
 			}

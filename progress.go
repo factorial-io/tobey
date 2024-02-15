@@ -41,10 +41,10 @@ type ProgressUpdateMessagePackage struct {
 }
 
 type ProgressUpdateMessage struct {
-	Stage    string `json:"stage"`
-	Status   string `json:"status"`   // only constanz allowed
-	Test_run string `json:"test_run"` // uuid of the run
-	Url      string `json:"url"`
+	Stage  string `json:"stage"`
+	Status string `json:"status"` // only constanz allowed
+	Run    string `json:"run"`    // uuid of the run
+	Url    string `json:"url"`
 }
 
 type ProgressManager struct {
@@ -118,6 +118,7 @@ func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUp
 	// Marshal the data into JSON
 	jsonBytes, err := json.Marshal(msg)
 	if err != nil {
+		log.Error("Cant create request")
 		span.SetStatus(codes.Error, "json marshal failed")
 		span.SetAttributes(attribute.String("data", "TODO"))
 		span.RecordError(err)
@@ -130,6 +131,7 @@ func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUp
 	// Prepare the webhook request
 	req, err := http.NewRequestWithContext(ctx_send_webhook, "POST", api_request_url, bytes.NewBuffer(jsonBytes))
 	if err != nil {
+		log.Error("Cant create request")
 		span.SetStatus(codes.Error, "cant create new request")
 		span.RecordError(err)
 		return err
@@ -140,6 +142,7 @@ func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUp
 	// Send the webhook request
 	resp, err := w.client.Do(req)
 	if err != nil {
+		log.Error("Cant do request")
 		span.SetStatus(codes.Error, "Request failed")
 		span.SetAttributes(attribute.String("url", req.URL.String()))
 		span.RecordError(err)
