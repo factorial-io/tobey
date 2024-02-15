@@ -43,17 +43,19 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	prop := newPropagator()
 	otel.SetTextMapPropagator(prop)
 
-	// Set up trace provider.
-	tracerProvider, err := newTraceProvider(ctx)
-	if err != nil {
-		handleErr(err)
-		return
+	if helper.GetEnvString("TOBEY_ENABLE_TRACING", "false") == "true" {
+		// Set up trace provider.
+		tracerProvider, erro := newTraceProvider(ctx)
+		if erro != nil {
+			handleErr(err)
+			return
+		}
+
+		shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
+		otel.SetTracerProvider(tracerProvider)
 	}
 
-	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
-	otel.SetTracerProvider(tracerProvider)
-
-	if helper.GetEnvString("TORBEY_ENABLE_METRICS", "false") == "true" {
+	if helper.GetEnvString("TOBEY_ENABLE_METRICS", "false") == "true" {
 		// Set up meter provider.
 		meterProvider, erra := newMeterProvider(ctx)
 		if erra != nil {
@@ -81,7 +83,7 @@ func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
 
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceName("tobey"),
+			semconv.ServiceName(helper.GetEnvString("OTEL_SERVICE_NAME", "tobey")),
 		),
 	)
 	if err != nil {

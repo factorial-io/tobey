@@ -208,8 +208,10 @@ func (wq *MemoryWorkQueue) Open() error {
 
 func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, reqID string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
 	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
+	// TODO marvin take a look at the trace implementation.
+	ctx_test := context.TODO()
 	wq.msgs <- &VisitMessagePackage{
-		context: &ctx,
+		context: &ctx_test,
 		payload: &VisitMessage{
 			ID:              uuid.New().ID(),
 			Created:         time.Now(),
