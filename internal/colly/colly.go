@@ -745,7 +745,7 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 			}
 			defer body.Close()
 		}
-		uHash := requestHash(u, body)
+		uHash := c.requestHash(u, body)
 		visited, err := c.store.IsVisited(uHash)
 		if err != nil {
 			return err
@@ -1328,7 +1328,7 @@ func (c *Collector) checkRedirectFunc() func(req *http.Request, via []*http.Requ
 				}
 				defer body.Close()
 			}
-			uHash := requestHash(req.URL.String(), body)
+			uHash := c.requestHash(req.URL.String(), body)
 			visited, err := c.store.IsVisited(uHash)
 			if err != nil {
 				return err
@@ -1377,7 +1377,7 @@ func (c *Collector) parseSettingsFromEnv() {
 }
 
 func (c *Collector) checkHasVisited(URL string, requestData map[string]string) (bool, error) {
-	hash := requestHash(URL, createFormReader(requestData))
+	hash := c.requestHash(URL, createFormReader(requestData))
 	return c.store.IsVisited(hash)
 }
 
@@ -1498,10 +1498,11 @@ func normalizeURL(u string) string {
 	return parsed.String()
 }
 
-func requestHash(url string, body io.Reader) uint64 {
+func (c *Collector) requestHash(url string, body io.Reader) uint64 {
 	h := fnv.New64a()
 	// reparse the url to fix ambiguities such as
 	// "http://example.com" vs "http://example.com/"
+	io.WriteString(h, strconv.FormatUint(uint64(c.ID), 10))
 	io.WriteString(h, normalizeURL(url))
 	if body != nil {
 		io.Copy(h, body)
