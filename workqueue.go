@@ -12,7 +12,7 @@ import (
 type WorkQueue interface {
 	Open() error
 
-	PublishURL(reqID uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
+	PublishURL(runID uint32, url string, whconf *WebhookConfig) error
 	ConsumeVisit() (<-chan *VisitMessage, <-chan error)
 	DelayVisit(delay time.Duration, msg *VisitMessage) error
 
@@ -20,12 +20,13 @@ type WorkQueue interface {
 }
 
 type VisitMessage struct {
-	ID              uint32
-	Created         time.Time
-	CrawlRequestID  uint32
-	URL             string
-	CollectorConfig *CollectorConfig
-	WebhookConfig   *WebhookConfig
+	ID    uint32
+	RunID uint32
+
+	URL           string
+	WebhookConfig *WebhookConfig
+
+	Created time.Time
 }
 
 func CreateWorkQueue(rabbitmq *amqp.Connection) WorkQueue {
@@ -36,6 +37,47 @@ func CreateWorkQueue(rabbitmq *amqp.Connection) WorkQueue {
 		log.Print("Using in-memory work queue...")
 		return &MemoryWorkQueue{}
 	}
+}
+
+type MemoryWorkQueue struct {
+	// TODO: MaxSize
+	msgs chan *VisitMessage
+}
+
+func (wq *MemoryWorkQueue) Open() error {
+	wq.msgs = make(chan *VisitMessage, 10000) // make sends non-blocking
+	return nil
+}
+
+func (wq *MemoryWorkQueue) PublishURL(runID uint32, url string, whconf *WebhookConfig) error {
+	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
+	wq.msgs <- &VisitMessage{
+		ID:            uuid.New().ID(),
+		RunID:         runID,
+		Created:       time.Now(),
+		URL:           url,
+		WebhookConfig: whconf,
+	}
+	return nil
+}
+
+// DelayVisit republishes a message with given delay.
+func (wq *MemoryWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) error {
+	go func() {
+		log.Printf("Delaying message (%d) by %.2f s", msg.ID, delay.Seconds())
+		time.Sleep(delay)
+		wq.msgs <- msg
+	}()
+	return nil
+}
+
+func (wq *MemoryWorkQueue) ConsumeVisit() (<-chan *VisitMessage, <-chan error) {
+	return wq.msgs, nil
+}
+
+func (wq *MemoryWorkQueue) Close() error {
+	close(wq.msgs)
+	return nil
 }
 
 type RabbitMQWorkQueue struct {
@@ -119,14 +161,13 @@ func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) 
 	)
 }
 
-func (wq *RabbitMQWorkQueue) PublishURL(reqID uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+func (wq *RabbitMQWorkQueue) PublishURL(runID uint32, url string, whconf *WebhookConfig) error {
 	msg := &VisitMessage{
-		ID:              uuid.New().ID(),
-		Created:         time.Now(),
-		CrawlRequestID:  reqID,
-		URL:             url,
-		CollectorConfig: cconf,
-		WebhookConfig:   whconf,
+		ID:            uuid.New().ID(),
+		Created:       time.Now(),
+		RunID:         runID,
+		URL:           url,
+		WebhookConfig: whconf,
 	}
 
 	b, err := json.Marshal(msg)
@@ -175,46 +216,4 @@ func (wq *RabbitMQWorkQueue) Close() error {
 		lasterr = err
 	}
 	return lasterr
-}
-
-type MemoryWorkQueue struct {
-	// TODO: MaxSize
-	msgs chan *VisitMessage
-}
-
-func (wq *MemoryWorkQueue) Open() error {
-	wq.msgs = make(chan *VisitMessage, 10000) // make sends non-blocking
-	return nil
-}
-
-func (wq *MemoryWorkQueue) PublishURL(reqID uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
-	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
-	wq.msgs <- &VisitMessage{
-		ID:              uuid.New().ID(),
-		Created:         time.Now(),
-		CrawlRequestID:  reqID,
-		URL:             url,
-		CollectorConfig: cconf,
-		WebhookConfig:   whconf,
-	}
-	return nil
-}
-
-// DelayVisit republishes a message with given delay.
-func (wq *MemoryWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) error {
-	go func() {
-		log.Printf("Delaying message (%d) by %.2f s", msg.ID, delay.Seconds())
-		time.Sleep(delay)
-		wq.msgs <- msg
-	}()
-	return nil
-}
-
-func (wq *MemoryWorkQueue) ConsumeVisit() (<-chan *VisitMessage, <-chan error) {
-	return wq.msgs, nil
-}
-
-func (wq *MemoryWorkQueue) Close() error {
-	close(wq.msgs)
-	return nil
 }

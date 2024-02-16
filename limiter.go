@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis_rate/v10"
@@ -13,8 +14,9 @@ import (
 )
 
 var (
-	redisLimiter   *redis_rate.Limiter
-	memoryLimiters map[string]*xrate.Limiter
+	redisLimiter       *redis_rate.Limiter
+	memoryLimiters     map[string]*xrate.Limiter
+	memoryLimitersLock sync.Mutex
 )
 
 type LimiterAllowFn func(url string) (ok bool, retryAfter time.Duration, err error)
@@ -42,12 +44,14 @@ func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration)
 		host := GetHostFromURL(url)
 
 		var memoryLimiter *xrate.Limiter
+		memoryLimitersLock.Lock()
 		if v, ok := memoryLimiters[host]; ok {
 			memoryLimiter = v
 		} else {
 			memoryLimiter = xrate.NewLimiter(xrate.Every(rate), 1)
 			memoryLimiters[host] = memoryLimiter
 		}
+		memoryLimitersLock.Unlock()
 
 		r := memoryLimiter.Reserve()
 

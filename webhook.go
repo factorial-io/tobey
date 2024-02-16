@@ -7,16 +7,10 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"tobey/internal/colly"
+	"tobey/internal/collector"
 
 	"github.com/cenkalti/backoff/v4"
 )
-
-type WebhookConfig struct {
-	Endpoint string      `json:"endpoint"`
-	Data     interface{} `json:"data"` // Accept arbitrary data here.
-}
 
 type WebhookPayload struct {
 	Action string `json:"action"`
@@ -41,7 +35,7 @@ func NewWebhookDispatcher() *WebhookDispatcher {
 }
 
 // Send tries to send a message to the configured webhook endpoint. The send
-func (wd *WebhookDispatcher) Send(webhook *WebhookConfig, res *colly.Response) error {
+func (wd *WebhookDispatcher) Send(webhook *WebhookConfig, res *collector.Response) error {
 
 	payload := &WebhookPayload{
 		Action: "collector.response",

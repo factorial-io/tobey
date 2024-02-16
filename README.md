@@ -77,6 +77,27 @@ allow the naked domain (and all its subdomains).
 }
 ```
 
+### Run Identifiers
+
+Each time you submit a URL to be crawled, a "run" is internally created. Tobey
+automatically creates a unique run ID for you, when you don't submit one
+yourself. You'll receive that created run ID in the response when submitting a
+URL to be crawled.
+
+When you already have a run ID yourself, you may as well submit in the crawl
+request, than your run ID will be used internally and visible when results are
+dispatched.
+
+```jsonc
+{
+  "url": "https://example.org",
+  "run_id": 23, // or "0033085c-685b-432a-9aa4-0aca59cc3e12"
+}
+```
+
+The run ID can be either a UUID as a string or number or any other unique number.
+
+
 ### Prioritites (not implemented)
 
 tbd
