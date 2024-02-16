@@ -11,6 +11,7 @@ import (
 type RunStore interface {
 	HasSeen(context.Context, uint32, string) bool
 	Seen(context.Context, uint32, string)
+	Clear(context.Context, uint32)
 }
 
 func CreateRunStore(redis *redis.Client) RunStore {
@@ -51,6 +52,13 @@ func (s *MemoryRunStore) Seen(ctx context.Context, runID uint32, url string) {
 	s.data[runID] = append(s.data[runID], url)
 }
 
+func (s *MemoryRunStore) Clear(ctx context.Context, runID uint32) {
+	s.Lock()
+	defer s.Unlock()
+
+	delete(s.data, runID)
+}
+
 type RedisRunStore struct {
 	conn *redis.Client
 }
@@ -62,4 +70,8 @@ func (s *RedisRunStore) HasSeen(ctx context.Context, runID uint32, url string) b
 
 func (s *RedisRunStore) Seen(ctx context.Context, runID uint32, url string) {
 	s.conn.SAdd(ctx, fmt.Sprintf("%d:seen", runID), url)
+}
+
+func (s *RedisRunStore) Clear(ctx context.Context, runID uint32) {
+	s.conn.Del(ctx, fmt.Sprintf("%d:seen", runID))
 }

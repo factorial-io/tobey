@@ -228,7 +228,9 @@ func main() {
 		)
 
 		// Provide workers access to the collector, through the collectors manager.
-		cm.Add(runID, c)
+		cm.Add(runID, c, func(id uint32) {
+			runStore.Clear(ctx, id)
+		})
 
 		c.EnqueueVisit(req.URL)
 		c.EnqueueVisit(fmt.Sprintf("%s/sitemap.xml", strings.TrimRight(req.URL, "/")))
