@@ -52,7 +52,7 @@ func (wd *WebhookDispatcher) Send(webhook *WebhookConfig, res *collector.Respons
 		return err
 	}
 
-	log.Printf("Sending webhook got for crawl response (%s), body length (%d)... %s", res.Request.URL, len(res.Body), webhook.Endpoint)
+	log.Printf("Sending webhook got for crawl response (%s)... %s", res.Request.URL, webhook.Endpoint)
 
 	req, err := http.NewRequest("POST", webhook.Endpoint, bytes.NewBuffer(body))
 	if err != nil {

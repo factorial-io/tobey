@@ -39,10 +39,8 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 		select {
 		// This allows to stop a worker gracefully.
 		case <-ctx.Done():
-			log.Print("Worker context cancelled, stopping worker...")
 			return nil
 		case err := <-errs:
-			log.Printf("Failed to consume from work queue: %s", err)
 			return err
 		case m := <-msgs:
 			msg = m

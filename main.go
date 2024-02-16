@@ -205,6 +205,8 @@ func main() {
 			// crawl request, i.e. the WebhookConfig, that we have
 			// received via the queued message.
 			func(c *collector.Collector, res *collector.Response) {
+				log.Printf("Got response (%s), body length (%d)...", res.Request.URL, len(res.Body))
+
 				if req.WebhookConfig != nil && req.WebhookConfig.Endpoint != "" {
 					webhookDispatcher.Send(req.WebhookConfig, res)
 				}
