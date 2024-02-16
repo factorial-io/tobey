@@ -9,7 +9,6 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/go-redis/redis_rate/v10 v10.0.1
 	github.com/google/uuid v1.5.0
-	github.com/gorilla/mux v1.8.1
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/kennygrant/sanitize v1.2.4

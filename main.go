@@ -18,7 +18,6 @@ import (
 	"tobey/internal/collector"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/mux"
 	"github.com/peterbourgon/diskv"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
@@ -82,16 +81,16 @@ func main() {
 
 	workers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm)
 
-	router := mux.NewRouter()
+	router := http.NewServeMux()
 
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		r.Body.Close()
 
 		fmt.Fprint(w, "Hello from Tobey.")
-	}).Methods("GET")
+	})
 
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("POST /", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := ioutil.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -223,7 +222,7 @@ func main() {
 		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(result)
-	}).Methods("POST")
+	})
 
 	log.Printf("Starting HTTP server, listening on %s...", ":8080")
 
