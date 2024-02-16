@@ -26,6 +26,10 @@ import (
 var (
 	// NumVisitWorkers hard codes the number of workers we start at startup.
 	NumVisitWorkers int = 10
+
+	// MaxParallelRuns specifies how many collectors we keep in memory, and thus
+	// limits the maximum number of parrallel runs that we can perform.
+	MaxParallelRuns int = 128
 )
 
 var (
@@ -77,7 +81,7 @@ func main() {
 
 	httpClient := NewCachingHTTPClient(cachedisk)
 
-	cm := collector.NewManager()
+	cm := collector.NewManager(MaxParallelRuns)
 
 	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm)
 

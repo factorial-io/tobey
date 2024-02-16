@@ -8,8 +8,8 @@ type Manager struct {
 	collectors *lru.Cache[uint32, *Collector] // Cannot grow unbound.
 }
 
-func NewManager() *Manager {
-	collectors, _ := lru.New[uint32, *Collector](128)
+func NewManager(maxCollectors int) *Manager {
+	collectors, _ := lru.New[uint32, *Collector](maxCollectors)
 
 	return &Manager{
 		collectors,
