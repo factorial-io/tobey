@@ -61,7 +61,7 @@ func NewProcessWebhooksManager() *ProcessWebhooksManager {
 }
 
 func (w ProcessWebhooksManager) startHandle(ctx context.Context, webhookQueue chan WebhookPayloadPackage, pnumber int) {
-	log := logger.GetBaseLogger()
+	log := logger.GetBaseLogger().WithField("Worker", pnumber)
 	// todo handle empty buffered queue
 	for {
 		select {
@@ -97,9 +97,9 @@ func (w ProcessWebhooksManager) startHandle(ctx context.Context, webhookQueue ch
 			}
 
 			err := backoff.RetryNotify(func() error {
-				err := w.sendWebhook(ctx_fresh, result, result.Data.Endpoint, "123")
+				err := w.sendWebhook(ctx_fresh, result, result.Data.Endpoint, "")
 				return err
-			}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 0), func(err error, t time.Duration) {
+			}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx), func(err error, t time.Duration) {
 				log.Info("Retrying to send webhook in", t, err)
 			})
 
@@ -114,7 +114,7 @@ func (w ProcessWebhooksManager) startHandle(ctx context.Context, webhookQueue ch
 	}
 }
 
-func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data interface{}, url string, webhookId string) error {
+func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data WebhookPayload, url string, webhookId string) error {
 	log := logger.GetBaseLogger().WithField("Path", "progress::sendProgressUpdate")
 
 	ctx_send_webhook, span := tracer.Start(ctx, "handle.webhook.queue.send")
@@ -131,6 +131,8 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data interface
 	}
 
 	// Prepare the webhook request
+	span.SetAttributes(attribute.String("webhook_url", url))
+	span.SetAttributes(attribute.String("request_url", data.RequestURL))
 	req, err := http.NewRequestWithContext(ctx_send_webhook, "POST", url, bytes.NewBuffer(jsonBytes))
 	if err != nil {
 		log.Error("Cant create request")
@@ -146,7 +148,7 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data interface
 	if err != nil {
 		log.Error("Cant do request")
 		span.SetStatus(codes.Error, "Request failed")
-		span.SetAttributes(attribute.String("url", req.URL.String()))
+		span.SetAttributes(attribute.String("url", resp.Status))
 		span.RecordError(err)
 		return err
 	}
@@ -158,7 +160,7 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data interface
 			log.Println("Error closing response body:", err)
 		}
 	}(resp.Body)
-
+	span.SetAttributes(attribute.String("status", resp.Status))
 	// Determine the status based on the response code
 	status := "failed"
 	if resp.StatusCode == http.StatusOK {

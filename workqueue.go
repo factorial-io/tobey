@@ -17,7 +17,7 @@ type WorkQueue interface {
 
 	PublishURL(ctx context.Context, reqID string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
 	ConsumeVisit() (<-chan *VisitMessagePackage, <-chan error)
-	DelayVisit(delay time.Duration, msg *VisitMessagePackage) error
+	DelayVisit(ctx context.Context, delay time.Duration, msg *VisitMessagePackage) error
 
 	Close() error
 }
@@ -106,17 +106,18 @@ func (wq *RabbitMQWorkQueue) Open() error {
 
 // DelayVisit republishes a message with given delay.
 // Relies on: https://blog.rabbitmq.com/posts/2015/04/scheduling-messages-with-rabbitmq/
-func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessagePackage) error {
+func (wq *RabbitMQWorkQueue) DelayVisit(ctx context.Context, delay time.Duration, msg *VisitMessagePackage) error {
 	log := logger.GetBaseLogger()
-	log.Printf("Delaying message (%d) by %.2f s", msg.payload.ID, delay.Seconds())
+	log.Infof("Delaying message (%d) by %.2f s", msg.payload.ID, delay.Seconds())
 
-	b, err := json.Marshal(msg)
+	// On the wire we only have payload
+	b, err := json.Marshal(msg.payload)
 	if err != nil {
 		return err
 	}
 
 	table := make(amqp.Table)
-	otel.GetTextMapPropagator().Inject(context.TODO(), MapCarrierRabbitmq(table))
+	otel.GetTextMapPropagator().Inject(ctx, MapCarrierRabbitmq(table))
 	table["x-delay"] = delay.Milliseconds()
 
 	return wq.channel.Publish(
@@ -227,11 +228,12 @@ func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, reqID string, url str
 }
 
 // DelayVisit republishes a message with given delay.
-func (wq *MemoryWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessagePackage) error {
+func (wq *MemoryWorkQueue) DelayVisit(ctx context.Context, delay time.Duration, msg *VisitMessagePackage) error {
 	log := logger.GetBaseLogger()
 	go func() {
 		log.Printf("Delaying message (%d) by %.2f s", msg.payload.ID, delay.Seconds())
 		time.Sleep(delay)
+		msg.context = &ctx
 		wq.msgs <- msg
 	}()
 	return nil

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -29,8 +30,8 @@ func addRoutes(router *mux.Router) {
 
 		w.Header().Set("Content-Type", "application/json")
 		reqID := uuid.New().String()
-		log.Printf("Handling incoming crawl request (%d)", reqID)
-		ctx, span := tracer.Start(r.Context(), "handleItem", trace.WithAttributes(attribute.String("Crawl Request", reqID)))
+		log.Infof("Handling incoming crawl request (%s)", reqID)
+		ctx, span := tracer.Start(r.Context(), "handleItem", trace.WithAttributes(attribute.String("crawl_request", reqID)))
 		defer span.End()
 
 		var req APIRequest
@@ -64,7 +65,17 @@ func addRoutes(router *mux.Router) {
 
 		// TODO sitemap should be ask from differente server
 		//workQueue.PublishURL(ctx, reqID, fmt.Sprintf("%s/sitemap.xml", cconf.Root), cconf, whconf)
-		workQueue.PublishURL(ctx, reqID, req.URL, cconf, whconf)
+
+		progress.Update(ProgressUpdateMessagePackage{
+			context.WithoutCancel(ctx),
+			ProgressUpdateMessage{
+				PROGRESS_STAGE_NAME,
+				PROGRESS_STATE_QUEUED_FOR_CRAWLING,
+				reqID,
+				req.URL,
+			},
+		})
+		workQueue.PublishURL(context.WithoutCancel(ctx), reqID, req.URL, cconf, whconf)
 
 		result := &APIResponse{
 			CrawlRequestID: reqID,

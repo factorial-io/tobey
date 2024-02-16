@@ -22,17 +22,20 @@ type LimiterAllowFn func(url string) (ok bool, retryAfter time.Duration, err err
 func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration) LimiterAllowFn {
 	log := logger.GetBaseLogger()
 	if redis != nil {
-		log.Print("Using distributed rate limiter...")
+		log.Info("Using distributed rate limiter...")
 		redisLimiter = redis_rate.NewLimiter(redis)
 
 		return func(url string) (bool, time.Duration, error) {
 			host := GetHostFromURL(url)
-			res, err := redisLimiter.Allow(ctx, host, redis_rate.PerSecond(int(rate.Seconds())))
-			log.Info("hit me")
+			res, err := redisLimiter.Allow(ctx, host, redis_rate.PerMinute(int(rate.Seconds())))
+			log.Trace("Hit the Rate Limiter and has ", int(rate.Seconds()), " elements per minute")
 			if err != nil {
-				log.Printf("Rate limit exceeded for host (%s)", host)
+				log.Infof("Rate limit exceeded for host (%s)", host)
 			}
-			return err == nil, res.RetryAfter, err
+			log.Trace("Rate Limiter: allowed ", res.Allowed, ",remaining ", res.Remaining)
+			log.Trace("Rate Limiter: Do a retry after ", res.RetryAfter)
+			// There is no error if the limit is htted
+			return res.Allowed != 0, res.RetryAfter, err
 		}
 	}
 	log.Print("Using in-memory rate limiter...")

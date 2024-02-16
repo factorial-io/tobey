@@ -41,10 +41,10 @@ type ProgressUpdateMessagePackage struct {
 }
 
 type ProgressUpdateMessage struct {
-	Stage  string `json:"stage"`
-	Status string `json:"status"` // only constanz allowed
-	Run    string `json:"run"`    // uuid of the run
-	Url    string `json:"url"`
+	Stage   string `json:"stage"`
+	Status  string `json:"status"`   // only constanz allowed
+	RunUuid string `json:"run_uuid"` // uuid of the run
+	Url     string `json:"url"`
 }
 
 type ProgressManager struct {
@@ -65,7 +65,7 @@ type Progress interface {
 }
 
 func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan ProgressUpdateMessagePackage, pnumber int) {
-	log := logger.GetBaseLogger()
+	log := logger.GetBaseLogger().WithField("Worker", pnumber)
 	// todo handle empty buffered queue
 	for {
 		select {
@@ -95,7 +95,7 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 			err := backoff.RetryNotify(func() error {
 				err := w.sendProgressUpdate(ctx_fresh, result)
 				return err
-			}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 0), func(err error, t time.Duration) {
+			}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx), func(err error, t time.Duration) {
 				log.Printf("Retrying to send progress in %s: %s", t, err)
 			})
 
@@ -112,7 +112,7 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 
 func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUpdateMessage) error {
 	log := logger.GetBaseLogger().WithField("Path", "progress::sendProgressUpdate")
-	ctx_send_webhook, span := tracer.Start(ctx, "handle.update.queue.send")
+	ctx_send_webhook, span := tracer.Start(ctx, "handle.progress.queue.send")
 	defer span.End()
 
 	// Marshal the data into JSON
@@ -127,7 +127,8 @@ func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUp
 
 	api_request_url := fmt.Sprintf("%v/%v", w.api_url, PROGRESS_ENDPOINTS_UPDATE)
 	span.SetAttributes(attribute.String("API_URL", api_request_url))
-
+	span.SetAttributes(attribute.String("url", msg.Url))
+	span.SetAttributes(attribute.String("status_update", msg.Status))
 	// Prepare the webhook request
 	req, err := http.NewRequestWithContext(ctx_send_webhook, "POST", api_request_url, bytes.NewBuffer(jsonBytes))
 	if err != nil {
@@ -144,7 +145,6 @@ func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUp
 	if err != nil {
 		log.Error("Cant do request")
 		span.SetStatus(codes.Error, "Request failed")
-		span.SetAttributes(attribute.String("url", req.URL.String()))
 		span.RecordError(err)
 		return err
 	}

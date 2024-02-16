@@ -36,7 +36,7 @@ func main() {
 
 	logger.InitLoggerDefault(helper.GetEnvString("LOG_LEVEL", "debug"))
 
-	log := logger.GetBaseLogger().WithField("Version", "0.0.1")
+	log := logger.GetBaseLogger().WithField("Version", "0.0.3")
 	//todo add opentelemetry logging
 	log.Print("Tobey starting...")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
