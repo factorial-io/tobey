@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,10 +31,10 @@ type VisitMessage struct {
 
 func CreateWorkQueue(rabbitmq *amqp.Connection) WorkQueue {
 	if rabbitmq != nil {
-		log.Print("Using distributed work queue...")
+		slog.Debug("Using distributed work queue...")
 		return &RabbitMQWorkQueue{conn: rabbitmq}
 	} else {
-		log.Print("Using in-memory work queue...")
+		slog.Debug("Using in-memory work queue...")
 		return &MemoryWorkQueue{}
 	}
 }
@@ -64,7 +64,8 @@ func (wq *MemoryWorkQueue) PublishURL(runID uint32, url string, whconf *WebhookC
 // DelayVisit republishes a message with given delay.
 func (wq *MemoryWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) error {
 	go func() {
-		log.Printf("Delaying message (%d) by %.2f s", msg.ID, delay.Seconds())
+		slog.Debug("Delaying message", "msg.id", msg.ID, "delay", delay.Seconds())
+
 		time.Sleep(delay)
 		wq.msgs <- msg
 	}()
@@ -139,7 +140,7 @@ func (wq *RabbitMQWorkQueue) Open() error {
 // DelayVisit republishes a message with given delay.
 // Relies on: https://blog.rabbitmq.com/posts/2015/04/scheduling-messages-with-rabbitmq/
 func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) error {
-	log.Printf("Delaying message (%d) by %.2f s", msg.ID, delay.Seconds())
+	slog.Debug("Delaying message", "msg.id", msg.ID, "delay", delay.Seconds())
 
 	b, err := json.Marshal(msg)
 	if err != nil {

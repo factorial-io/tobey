@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -52,7 +52,7 @@ func (wd *WebhookDispatcher) Send(webhook *WebhookConfig, res *collector.Respons
 		return err
 	}
 
-	log.Printf("Sending webhook got for crawl response (%s)... %s", res.Request.URL, webhook.Endpoint)
+	slog.Debug("Sending webhook got for crawl response...", "url", res.Request.URL, "endpoint", webhook.Endpoint)
 
 	req, err := http.NewRequest("POST", webhook.Endpoint, bytes.NewBuffer(body))
 	if err != nil {
@@ -65,10 +65,10 @@ func (wd *WebhookDispatcher) Send(webhook *WebhookConfig, res *collector.Respons
 			_, err := wd.client.Do(req)
 			return err
 		}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 0), func(err error, t time.Duration) {
-			log.Printf("Retrying to send webhook in %s: %s", t, err)
+			slog.Info("Retrying to send webhook...", "duration", t, "error", err)
 		})
 		if err != nil {
-			log.Printf("Sending webhook ultimately failed: %s", err)
+			slog.Error("Sending webhook ultimately failed.", "error", err)
 		} else {
 			// log.Printf("Webhook succesfully sent: %s", webhook.Endpoint)
 		}

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/url"
 	"strings"
 	"sync"
@@ -23,7 +23,7 @@ type LimiterAllowFn func(url string) (ok bool, retryAfter time.Duration, err err
 
 func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration) LimiterAllowFn {
 	if redis != nil {
-		log.Print("Using distributed rate limiter...")
+		slog.Debug("Using distributed rate limiter...")
 		redisLimiter = redis_rate.NewLimiter(redis)
 
 		return func(url string) (bool, time.Duration, error) {
@@ -31,12 +31,12 @@ func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration)
 			res, err := redisLimiter.Allow(ctx, host, redis_rate.PerSecond(int(rate.Seconds())))
 
 			if err != nil {
-				log.Printf("Rate limit exceeded for host (%s)", host)
+				slog.Info("Host rate limit exceeded.", "host", host)
 			}
 			return err == nil, res.RetryAfter, err
 		}
 	}
-	log.Print("Using in-memory rate limiter...")
+	slog.Debug("Using in-memory rate limiter...")
 
 	memoryLimiters = make(map[string]*xrate.Limiter)
 
@@ -56,7 +56,7 @@ func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration)
 		r := memoryLimiter.Reserve()
 
 		if !r.OK() {
-			log.Printf("Rate limit exceeded for host (%s)", host)
+			slog.Info("Host rate limit exceeded.", "host", host)
 		}
 		return r.OK(), r.Delay(), nil
 	}

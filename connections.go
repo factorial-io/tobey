@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -19,7 +19,7 @@ func maybeRedis(ctx context.Context) *redis.Client {
 	if !ok {
 		return nil
 	}
-	log.Printf("Connecting to Redis with DSN (%s)...", rawdsn)
+	slog.Debug("Connecting to Redis...", "dsn", rawdsn)
 
 	dsn := dsnparser.Parse(rawdsn)
 	database, _ := strconv.Atoi(dsn.GetPath())
@@ -36,15 +36,15 @@ func maybeRedis(ctx context.Context) *redis.Client {
 		},
 		backoff.WithContext(backoff.NewExponentialBackOff(), ctx),
 		func(err error, t time.Duration) {
-			log.Printf("Retrying connection: %s", err)
+			slog.Info("Retrying redis connection.", "error", err)
 		},
 	)
 
 	if err != nil {
-		log.Printf("Ultimately failed retrying: %s", err)
+		slog.Error("Ultimately failed retrying redis connection.", "error", err)
 		panic(err)
 	}
-	log.Print("Connection to Redis established :)")
+	slog.Debug("Connection to Redis established :)")
 	return client
 }
 
@@ -53,7 +53,7 @@ func maybeRabbitMQ(ctx context.Context) *amqp.Connection {
 	if !ok {
 		return nil
 	}
-	log.Printf("Connecting to RabbitMQ with DSN (%s)...", dsn)
+	slog.Debug("Connecting to RabbitMQ...", "dsn", dsn)
 
 	client, err := backoff.RetryNotifyWithData(
 		func() (*amqp.Connection, error) {
@@ -61,14 +61,14 @@ func maybeRabbitMQ(ctx context.Context) *amqp.Connection {
 		},
 		backoff.WithContext(backoff.NewExponentialBackOff(), ctx),
 		func(err error, t time.Duration) {
-			log.Printf("Retrying connection: %s", err)
+			slog.Info("Retrying RabbitMQ connection...", "error", err)
 		},
 	)
 	if err != nil {
-		log.Printf("Ultimately failed retrying: %s", err)
+		slog.Error("Ultimately failed retrying RabbitMQ connection.", "error", err)
 		panic(err)
 	}
-	log.Print("Connection to RabbitMQ established :)")
+	slog.Debug("Connection to RabbitMQ established :)")
 	return client
 
 }

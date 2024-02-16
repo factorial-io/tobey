@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -72,7 +72,7 @@ func NewCollector(ctx context.Context, client *http.Client, runID uint32, domain
 	})
 
 	c.OnError(func(res *Response, err error) {
-		log.Printf("Error while visiting URL (%s): %s, %d", res.Request.URL.String(), err, res.StatusCode)
+		slog.Info("Error while visiting URL.", "url", res.Request.URL.String(), "error", err, "response.status", res.StatusCode)
 	})
 
 	return c

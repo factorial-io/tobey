@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,6 +24,9 @@ import (
 )
 
 var (
+	// Debug enables or disables debug mode.
+	Debug = false
+
 	// NumVisitWorkers hard codes the number of workers we start at startup.
 	NumVisitWorkers int = 10
 
@@ -46,7 +49,12 @@ var (
 )
 
 func main() {
-	log.Print("Tobey starting...")
+	slog.Info("Tobey starting...")
+
+	if Debug {
+		slog.Info("Debug mode is on.")
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 
@@ -67,17 +75,15 @@ func main() {
 
 	wd, _ := os.Getwd()
 	cachedir := filepath.Join(wd, "cache")
-	log.Printf("Using cache directory (%s)...", cachedir)
 
 	tempdir := os.TempDir()
-	log.Printf("Using temporary directory (%s)...", tempdir)
 
 	cachedisk = diskv.New(diskv.Options{
 		BasePath:     cachedir,
 		TempDir:      tempdir,
 		CacheSizeMax: 1000 * 1024 * 1024, // 1GB
 	})
-	log.Print("Initialized disk backed cache with a 1GB limit.")
+	slog.Debug("Initialized disk backed cache with a 1GB limit.", "cachedir", cachedir, "tempdir", tempdir)
 
 	httpClient := NewCachingHTTPClient(cachedisk)
 
@@ -99,12 +105,12 @@ func main() {
 		r.Body.Close()
 
 		w.Header().Set("Content-Type", "application/json")
-		log.Print("Handling incoming crawl request...")
+		slog.Debug("Handling incoming crawl request...")
 
 		var req APIRequest
 		err := json.Unmarshal(body, &req)
 		if err != nil {
-			log.Printf("Failed to parse incoming JSON: %s", err)
+			slog.Error("Failed to parse incoming JSON.", "error", err)
 
 			result := &APIError{
 				Message: fmt.Sprintf("%s", err),
@@ -120,7 +126,7 @@ func main() {
 			if err != nil {
 				v, err := strconv.ParseUint(req.RunID, 10, 32)
 				if err != nil {
-					log.Printf("Failed to parse given run ID (%s) as UUID or number.", req.RunID)
+					slog.Error("Failed to parse given run ID as UUID or number.", "run.id", req.RunID)
 
 					result := &APIError{
 						Message: fmt.Sprintf("Failed to parse given run ID (%s) as UUID or number.", req.RunID),
@@ -168,15 +174,17 @@ func main() {
 				// chance that two processes enter this function with the same runID and url,
 				// before one of them is finished.
 				if !c.IsDomainAllowed(GetHostFromURL(url)) {
-					// log.Printf("Skipping enqueuing of crawl of URL (%s), domain not allowed...", msg.URL)
+					slog.Debug("Not enqueuing visit, domain not allowed.", "run.id", c.ID, "url", url)
 					return nil
 				}
 				if runStore.HasSeen(ctx, runID, url) {
 					// Do not need to enqueue an URL that has already been crawled, and its response
 					// can be served from cache.
+					slog.Debug("Not enqueuing visit, URL already seen.", "run.id", c.ID, "url", url)
 					return nil
 				}
 
+				slog.Debug("Publishing URL...", "run.id", c.ID, "url", url)
 				err := workQueue.PublishURL(
 					// Passing the crawl request ID, so when
 					// consumed the URL is crawled by the matching
@@ -187,6 +195,8 @@ func main() {
 				)
 				if err == nil {
 					runStore.Seen(ctx, runID, url)
+				} else {
+					slog.Error("Error enqueuing visit.", "run.id", c.ID, "url", url, "error", err)
 				}
 				return err
 			},
@@ -195,7 +205,7 @@ func main() {
 			func(c *collector.Collector, url string) (bool, time.Duration, error) {
 				ok, retryAfter, err := limiter(url)
 				if err != nil {
-					log.Printf("Error while checking rate limiter for  message: %d", c.ID)
+					slog.Error("Error while checking rate limiter for message.", "run.id", c.ID, "url", url)
 					return ok, retryAfter, err
 				}
 				if !ok {
@@ -209,7 +219,7 @@ func main() {
 			// crawl request, i.e. the WebhookConfig, that we have
 			// received via the queued message.
 			func(c *collector.Collector, res *collector.Response) {
-				log.Printf("Got response (%s), body length (%d)...", res.Request.URL, len(res.Body))
+				slog.Info("Collect suceeded.", "run.id", c.ID, "url", res.Request.URL, "response.body.length", len(res.Body), "response.status", res.StatusCode)
 
 				if req.WebhookConfig != nil && req.WebhookConfig.Endpoint != "" {
 					webhookDispatcher.Send(req.WebhookConfig, res)
@@ -220,8 +230,8 @@ func main() {
 		// Provide workers access to the collector, through the collectors manager.
 		cm.Add(runID, c)
 
-		c.EnqueueVisit(fmt.Sprintf("%s/sitemap.xml", strings.TrimRight(req.URL, "/")))
 		c.EnqueueVisit(req.URL)
+		c.EnqueueVisit(fmt.Sprintf("%s/sitemap.xml", strings.TrimRight(req.URL, "/")))
 
 		result := &APIResponse{
 			RunID: runID,
@@ -230,7 +240,7 @@ func main() {
 		json.NewEncoder(w).Encode(result)
 	})
 
-	log.Printf("Starting HTTP server, listening on %s...", ":8080")
+	slog.Debug("Starting HTTP server...", "port", "8080")
 
 	server := &http.Server{
 		Addr:    ":8080",
@@ -238,19 +248,19 @@ func main() {
 	}
 	go func() {
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("HTTP server error: %v", err)
+			slog.Error("HTTP server error.", "error", err)
 		}
-		log.Println("Stopped serving new HTTP connections.")
+		slog.Info("Stopped serving new HTTP connections.")
 	}()
 
 	<-ctx.Done()
-	log.Print("Exiting...")
+	slog.Info("Exiting...")
 	stop() // Exit everything that took the context.
 
-	log.Print("Cleaning up...")
+	slog.Debug("Cleaning up...")
 
 	visitWorkers.Wait()
-	log.Print("All visit workers stopped.")
+	slog.Debug("All visit workers stopped.")
 
 	server.Shutdown(context.Background())
 
