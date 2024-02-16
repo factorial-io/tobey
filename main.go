@@ -79,7 +79,7 @@ func main() {
 
 	cm := collector.NewManager()
 
-	workers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm)
+	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm)
 
 	router := http.NewServeMux()
 
@@ -242,7 +242,9 @@ func main() {
 	stop() // Exit everything that took the context.
 
 	log.Print("Cleaning up...")
-	workers.Wait()
+
+	visitWorkers.Wait()
+	log.Print("All visit workers stopped.")
 
 	server.Shutdown(context.Background())
 

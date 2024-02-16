@@ -11,7 +11,7 @@ import (
 
 // CreateVisitWorkersPool initizalizes a worker pool and fills it with a number
 // of VisitWorker.
-func CreateVisitWorkersPool(ctx context.Context, num int, cm *collector.Manager) sync.WaitGroup {
+func CreateVisitWorkersPool(ctx context.Context, num int, cm *collector.Manager) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
 	log.Printf("Starting %d visit workers...", num)
@@ -27,7 +27,7 @@ func CreateVisitWorkersPool(ctx context.Context, num int, cm *collector.Manager)
 			wg.Done()
 		}(i)
 	}
-	return wg
+	return &wg
 }
 
 // VisitWorker fetches a resource from a given URL, consumed from the work queue.
