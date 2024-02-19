@@ -14,7 +14,7 @@ func GetEnvString(key string, defaultVal string) string {
 		value = defaultVal
 	}
 
-	log.Trace("Set Environment", key, " to ", value, ".")
+	log.Trace("Set Environment ", key, " to ", value, ".")
 
 	return value
 }
@@ -29,7 +29,7 @@ func GetEnvBool(key string, defaultVal bool) bool {
 		return value
 	}
 
-	log.Trace("Set Environment", key, " to ", value, ".")
+	log.Trace("Set Environment ", key, " to ", value, ".")
 
 	return value
 }
@@ -45,7 +45,7 @@ func GetEnvInt(key string, defaultVal int) int {
 		return value
 	}
 
-	log.Trace("Set Environment", key, " to ", value, ".")
+	log.Trace("Set Environment ", key, " to ", value, ".")
 
 	return value
 }
@@ -60,7 +60,7 @@ func GetEnvFloat(key string, defaultVal float64) float64 {
 		return value
 	}
 
-	log.Trace("Set Environment", key, " to ", value, ".")
+	log.Trace("Set Environment ", key, " to ", value, ".")
 
 	return value
 }

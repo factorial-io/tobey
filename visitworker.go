@@ -45,10 +45,12 @@ func CreateVisitWorkersPool(ctx context.Context, num int) sync.WaitGroup {
 
 // VisitWorker fetches a resource from a given URL, consumed from the work queue.
 func VisitWorker(ctx context.Context, id int) error {
-	log := logger.GetBaseLogger()
+	log := logger.GetBaseLogger().WithField("Worker", id)
 	for {
+
 		var package_visit *VisitMessagePackage
 		var msg *VisitMessage
+
 		msgs, errs := workQueue.ConsumeVisit()
 
 		select {
@@ -82,6 +84,25 @@ func VisitWorker(ctx context.Context, id int) error {
 		if v, ok := collectors.Get(msg.CrawlRequestID); ok {
 			c = v
 		} else {
+
+			if msg.CrawlRequestID == "" {
+				log.Error("Message without CollectorConfig arrived.")
+				continue
+			}
+
+			if msg.URL == "" {
+				log.Error("Message without url arrived.")
+				continue
+			}
+			if msg.CollectorConfig == nil {
+				log.Error("Message without CollectorConfig arrived.")
+				continue
+			}
+
+			log.Print("pre break")
+			log.Print(msg.CollectorConfig)
+			log.Print(msg.CollectorConfig.AllowedDomains)
+
 			c = CreateCollector(
 				ctx,
 				msg.CrawlRequestID,
@@ -107,7 +128,7 @@ func VisitWorker(ctx context.Context, id int) error {
 					}
 
 					progress.Update(ProgressUpdateMessagePackage{
-						*package_visit.context,
+						ctx_new,
 						ProgressUpdateMessage{
 							PROGRESS_STAGE_NAME,
 							PROGRESS_STATE_QUEUED_FOR_CRAWLING,
@@ -116,7 +137,7 @@ func VisitWorker(ctx context.Context, id int) error {
 						},
 					})
 					return workQueue.PublishURL(
-						*package_visit.context, //todo find the righr
+						ctx_new, //todo find the righr
 						// Passing the crawl request ID, so when
 						// consumed the URL is crawled by the matching
 						// Collector.
@@ -174,7 +195,7 @@ func VisitWorker(ctx context.Context, id int) error {
 			return err
 			// TODO: Rollback, Nack and requeue msg, so it isn't lost.
 		} else if !ok { // Hit rate limit, retryAfter is now > 0
-			if err := workQueue.DelayVisit(retryAfter, package_visit); err != nil {
+			if err := workQueue.DelayVisit(ctx_new, retryAfter, package_visit); err != nil {
 				log.Printf("Failed to schedule delayed message: %v", msg.CrawlRequestID)
 
 				span.AddEvent("Failed to schedule delayed message",
@@ -192,7 +213,7 @@ func VisitWorker(ctx context.Context, id int) error {
 		if err := c.Visit(msg.URL); err != nil {
 			log.Error("Error visiting URL ", msg.URL, ":", err)
 			progress.Update(ProgressUpdateMessagePackage{
-				*package_visit.context,
+				ctx_new,
 				ProgressUpdateMessage{
 					PROGRESS_STAGE_NAME,
 					PROGRESS_STATE_Errored,
@@ -209,7 +230,7 @@ func VisitWorker(ctx context.Context, id int) error {
 		}
 
 		progress.Update(ProgressUpdateMessagePackage{
-			*package_visit.context,
+			ctx_new,
 			ProgressUpdateMessage{
 				PROGRESS_STAGE_NAME,
 				PROGRESS_STATE_CRAWLED,
