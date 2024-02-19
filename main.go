@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -13,14 +14,16 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
+	"tobey/helper"
 	"tobey/internal/collector"
 
 	"github.com/google/uuid"
 	"github.com/peterbourgon/diskv"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
+	_ "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
 )
 
 var (
@@ -51,12 +54,29 @@ var (
 func main() {
 	slog.Info("Tobey starting...")
 
+	if os.Getenv("TOBEY_DEBUG") == "true" {
+		Debug = true
+	}
 	if Debug {
 		slog.Info("Debug mode is on.")
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 
+	//todo add opentelemetry logging
+	log.Print("Tobey starting...")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+
+	// Setup Opentelemetry
+	shutdown, erro := setupOTelSDK(ctx)
+	if erro != nil {
+		panic("ahh")
+	}
+	err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	go startHealthcheck()
 
 	redisconn = maybeRedis(ctx)
 	rabbitmqconn = maybeRabbitMQ(ctx)
@@ -68,8 +88,14 @@ func main() {
 		panic(err)
 	}
 
-	webhookDispatcher = NewWebhookDispatcher()
-	progress = MustStartProgressFromEnv()
+	// Create Webhook Handling
+	webhookQueue := make(chan WebhookPayloadPackage, helper.GetEnvInt("TORBEY_WEBHOOK_PAYLOAD_LIMIT", 100))
+	webhook := NewProcessWebhooksManager()
+	webhook.Start(ctx, webhookQueue)
+
+	webhookDispatcher = NewWebhookDispatcher(webhookQueue)
+
+	progress = MustStartProgressFromEnv(ctx)
 
 	limiter = CreateLimiter(ctx, redisconn, 1*time.Second)
 
@@ -92,6 +118,7 @@ func main() {
 	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm)
 
 	router := http.NewServeMux()
+	// TODO: Use otel's http mux.
 
 	router.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
@@ -106,6 +133,10 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		slog.Debug("Handling incoming crawl request...")
+
+		// TODO: reenable
+		// ctx, span := tracer.Start(r.Context(), "handleItem", trace.WithAttributes(attribute.String("crawl_request", reqID)))
+		// defer span.End()
 
 		var req APIRequest
 		err := json.Unmarshal(body, &req)
@@ -219,10 +250,15 @@ func main() {
 			// crawl request, i.e. the WebhookConfig, that we have
 			// received via the queued message.
 			func(c *collector.Collector, res *collector.Response) {
-				slog.Info("Collect suceeded.", "run.id", c.ID, "url", res.Request.URL, "response.body.length", len(res.Body), "response.status", res.StatusCode)
-
+				slog.Info(
+					"Collect suceeded.",
+					"run.id", c.ID,
+					"url", res.Request.URL,
+					"response.body.length", len(res.Body),
+					"response.status", res.StatusCode,
+				)
 				if req.WebhookConfig != nil && req.WebhookConfig.Endpoint != "" {
-					webhookDispatcher.Send(req.WebhookConfig, res)
+					webhookDispatcher.Send(context.TODO(), req.WebhookConfig, res)
 				}
 			},
 		)
@@ -232,8 +268,19 @@ func main() {
 			runStore.Clear(ctx, id)
 		})
 
+		progress.Update(ProgressUpdateMessagePackage{
+			context.WithoutCancel(ctx),
+			ProgressUpdateMessage{
+				PROGRESS_STAGE_NAME,
+				PROGRESS_STATE_QUEUED_FOR_CRAWLING,
+				runID,
+				req.URL,
+			},
+		})
+
+		// TODO sitemap should be ask from differente server
+		// c.EnqueueVisit(fmt.Sprintf("%s/sitemap.xml", strings.TrimRight(req.URL, "/")))
 		c.EnqueueVisit(req.URL)
-		c.EnqueueVisit(fmt.Sprintf("%s/sitemap.xml", strings.TrimRight(req.URL, "/")))
 
 		result := &APIResponse{
 			RunID: runID,
@@ -272,13 +319,12 @@ func main() {
 	if progress != nil {
 		progress.Close()
 	}
-	if webhookDispatcher != nil {
-		webhookDispatcher.Close()
-	}
 	if redisconn != nil {
 		redisconn.Close()
 	}
 	if rabbitmqconn != nil {
 		rabbitmqconn.Close()
 	}
+
+	shutdown(ctx)
 }

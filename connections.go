@@ -11,6 +11,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/kos-v/dsnparser"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -45,6 +46,16 @@ func maybeRedis(ctx context.Context) *redis.Client {
 		panic(err)
 	}
 	slog.Debug("Connection to Redis established :)")
+
+	// Enable tracing instrumentation.
+	if err := redisotel.InstrumentTracing(client); err != nil {
+		panic(err)
+	}
+
+	// Enable metrics instrumentation.
+	if err := redisotel.InstrumentMetrics(client); err != nil {
+		panic(err)
+	}
 	return client
 }
 

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
 )
 
 type WorkQueue interface {
@@ -17,6 +20,11 @@ type WorkQueue interface {
 	DelayVisit(delay time.Duration, msg *VisitMessage) error
 
 	Close() error
+}
+
+type VisitMessagePackage struct {
+	context *context.Context
+	payload *VisitMessage
 }
 
 type VisitMessage struct {
@@ -53,8 +61,8 @@ func (wq *MemoryWorkQueue) PublishURL(runID uint32, url string, whconf *WebhookC
 	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
 	wq.msgs <- &VisitMessage{
 		ID:            uuid.New().ID(),
-		RunID:         runID,
 		Created:       time.Now(),
+		RunID:         runID,
 		URL:           url,
 		WebhookConfig: whconf,
 	}
@@ -146,6 +154,11 @@ func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) 
 	if err != nil {
 		return err
 	}
+
+	table := make(amqp.Table)
+	otel.GetTextMapPropagator().Inject(context.TODO(), MapCarrierRabbitmq(table))
+	table["x-delay"] = delay.Milliseconds()
+
 	return wq.channel.Publish(
 		"tobey.default", // exchange
 		wq.queue.Name,   // routing key
@@ -155,9 +168,7 @@ func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) 
 			DeliveryMode: amqp.Persistent, // TODO: check meaning
 			ContentType:  "application/json",
 			Body:         b,
-			Headers: amqp.Table{
-				"x-delay": delay.Milliseconds(),
-			},
+			Headers:      table,
 		},
 	)
 }
@@ -176,12 +187,16 @@ func (wq *RabbitMQWorkQueue) PublishURL(runID uint32, url string, whconf *Webhoo
 		return err
 	}
 
+	table := make(amqp.Table)
+	otel.GetTextMapPropagator().Inject(context.TODO(), MapCarrierRabbitmq(table))
+
 	return wq.channel.Publish(
 		"tobey.default", // exchange
 		wq.queue.Name,   // routing key
 		false,           // mandatory TODO: check meaning
 		false,           // immediate TODO: check meaning
 		amqp.Publishing{
+			Headers:      table,
 			DeliveryMode: amqp.Persistent, // TODO: check meaning
 			ContentType:  "application/json",
 			Body:         b,
@@ -196,7 +211,8 @@ func (wq *RabbitMQWorkQueue) ConsumeVisit() (<-chan *VisitMessage, <-chan error)
 	go func() {
 		var msg *VisitMessage
 		rawmsg := <-wq.receive // Blocks until we have at least one message.
-
+		// TODO: Check if we should bring this back.
+		// ctx := otel.GetTextMapPropagator().Extract(context.TODO(), MapCarrierRabbitmq(rawmsg.Headers))
 		if err := json.Unmarshal(rawmsg.Body, &msg); err != nil {
 			errchan <- err
 		} else {
@@ -217,4 +233,28 @@ func (wq *RabbitMQWorkQueue) Close() error {
 		lasterr = err
 	}
 	return lasterr
+}
+
+// Transformer for Opentelemetry
+
+// medium for propagated key-value pairs.
+type MapCarrierRabbitmq map[string]interface{}
+
+// Get returns the value associated with the passed key.
+func (c MapCarrierRabbitmq) Get(key string) string {
+	return fmt.Sprintf("%v", c[key])
+}
+
+// Set stores the key-value pair.
+func (c MapCarrierRabbitmq) Set(key, value string) {
+	c[key] = value
+}
+
+// Keys lists the keys stored in this carrier.
+func (c MapCarrierRabbitmq) Keys() []string {
+	keys := make([]string, 0, len(c))
+	for k := range c {
+		keys = append(keys, k)
+	}
+	return keys
 }
