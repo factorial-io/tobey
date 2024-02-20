@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"time"
 	"tobey/internal/collector"
 )
 
@@ -18,13 +17,13 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 		// chance that two processes enter this function with the same run and url,
 		// before one of them is finished.
 		if !c.IsDomainAllowed(GetHostFromURL(url)) {
-			slog.Debug("Not enqueuing visit, domain not allowed.", "run", c.Run, "url", url)
+			// slog.Debug("Not enqueuing visit, domain not allowed.", "run", c.Run, "url", url)
 			return nil
 		}
 		if runStore.HasSeen(ctx, c.Run, url) {
 			// Do not need to enqueue an URL that has already been crawled, and its response
 			// can be served from cache.
-			slog.Debug("Not enqueuing visit, URL already seen.", "run", c.Run, "url", url)
+			// slog.Debug("Not enqueuing visit, URL already seen.", "run", c.Run, "url", url)
 			return nil
 		}
 
@@ -43,24 +42,6 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 			slog.Error("Error enqueuing visit.", "run", c.Run, "url", url, "error", err)
 		}
 		return err
-	}
-}
-
-func getVisitFn(ctx context.Context, limiter LimiterAllowFn) collector.VisitFn {
-	return func(c *collector.Collector, url string) (bool, time.Duration, error) {
-		ok, retryAfter, err := limiter(url)
-		if err != nil {
-			slog.Error(
-				"Error while checking rate limiter for message.",
-				"run", c.Run,
-				"url", url,
-			)
-			return ok, retryAfter, err
-		}
-		if !ok {
-			return ok, retryAfter, err
-		}
-		return ok, retryAfter, c.Scrape(url)
 	}
 }
 

@@ -96,7 +96,7 @@ func main() {
 
 	progress = MustStartProgressFromEnv(ctx)
 
-	limiter = CreateLimiter(ctx, redisconn, 1*time.Second)
+	limiter = CreateLimiter(ctx, redisconn, 1)
 
 	wd, _ := os.Getwd()
 	cachedir := filepath.Join(wd, "cache")
@@ -186,7 +186,6 @@ func main() {
 			run,
 			allowedDomains,
 			getEnqueueFn(ctx, req.WebhookConfig),
-			getVisitFn(ctx, limiter),
 			getCollectFn(ctx, req.WebhookConfig),
 		)
 
@@ -207,7 +206,7 @@ func main() {
 
 		// TODO sitemap should be ask from differente server
 		// c.EnqueueVisit(fmt.Sprintf("%s/sitemap.xml", strings.TrimRight(req.URL, "/")))
-		c.EnqueueVisit(req.URL)
+		c.Enqueue(req.URL)
 
 		result := &APIResponse{
 			Run: run,

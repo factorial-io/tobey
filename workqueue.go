@@ -34,6 +34,9 @@ type VisitMessage struct {
 	URL           string
 	WebhookConfig *WebhookConfig
 
+	// Whether this visit has a valid reservation by a rate limiter.
+	HasReservation bool
+
 	Created time.Time
 }
 
@@ -76,6 +79,7 @@ func (wq *MemoryWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) er
 
 		time.Sleep(delay)
 		wq.msgs <- msg
+		slog.Debug("Delivering delayed message", "msg.id", msg.ID, "delay", delay.Seconds())
 	}()
 	return nil
 }

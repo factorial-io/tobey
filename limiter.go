@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -19,28 +20,25 @@ var (
 	memoryLimitersLock sync.Mutex
 )
 
-type LimiterAllowFn func(url string) (ok bool, retryAfter time.Duration, err error)
+type LimiterAllowFn func(url string) (retryAfter time.Duration, err error)
 
-func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration) LimiterAllowFn {
+func CreateLimiter(ctx context.Context, redis *redis.Client, ratePerS int) LimiterAllowFn {
 	if redis != nil {
 		slog.Debug("Using distributed rate limiter...")
 		redisLimiter = redis_rate.NewLimiter(redis)
 
-		return func(url string) (bool, time.Duration, error) {
+		return func(url string) (time.Duration, error) {
 			host := GetHostFromURL(url)
-			res, err := redisLimiter.Allow(ctx, host, redis_rate.PerSecond(int(rate.Seconds())))
+			res, err := redisLimiter.Allow(ctx, host, redis_rate.PerSecond(ratePerS))
 
-			if err != nil {
-				slog.Info("Host rate limit exceeded.", "host", host)
-			}
-			return err == nil, res.RetryAfter, err
+			return res.RetryAfter, err
 		}
 	}
 
 	slog.Debug("Using in-memory rate limiter...")
 	memoryLimiters = make(map[string]*xrate.Limiter)
 
-	return func(url string) (bool, time.Duration, error) {
+	return func(url string) (time.Duration, error) {
 		host := GetHostFromURL(url)
 
 		var memoryLimiter *xrate.Limiter
@@ -48,17 +46,16 @@ func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration)
 		if v, ok := memoryLimiters[host]; ok {
 			memoryLimiter = v
 		} else {
-			memoryLimiter = xrate.NewLimiter(xrate.Every(rate), 1)
+			memoryLimiter = xrate.NewLimiter(xrate.Limit(ratePerS), 1)
 			memoryLimiters[host] = memoryLimiter
 		}
 		memoryLimitersLock.Unlock()
 
 		r := memoryLimiter.Reserve()
-
 		if !r.OK() {
-			slog.Info("Host rate limit exceeded.", "host", host)
+			return r.Delay(), errors.New("failed to perform reservation")
 		}
-		return r.OK(), r.Delay(), nil
+		return r.Delay(), nil
 	}
 }
 

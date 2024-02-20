@@ -11,14 +11,12 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	whatwgUrl "github.com/nlnwa/whatwg-url/url"
 )
 
-type EnqueueFn func(*Collector, string) error                      // Enqueues a scrape.
-type VisitFn func(*Collector, string) (bool, time.Duration, error) // Performs a scrape, will call Collector.Scrape().
-type CollectFn func(*Collector, *Response)                         // Collects the result of a scrape.
+type EnqueueFn func(*Collector, string) error // Enqueues a scrape.
+type CollectFn func(*Collector, *Response)    // Collects the result of a scrape.
 
 var urlParser = whatwgUrl.NewParser(whatwgUrl.WithPercentEncodeSinglePercentSign())
 
@@ -29,7 +27,15 @@ type key int
 // ProxyURLKey is the context key for the request proxy address.
 const ProxyURLKey key = iota
 
-func NewCollector(ctx context.Context, client *http.Client, run uint32, domains []string, enqueue EnqueueFn, visit VisitFn, collect CollectFn) *Collector {
+func NewCollector(
+	ctx context.Context,
+	client *http.Client,
+	run uint32,
+	domains []string,
+	enqueue EnqueueFn,
+	collect CollectFn,
+) *Collector {
+
 	backend := &HTTPBackend{
 		Client: client,
 	}
@@ -40,7 +46,6 @@ func NewCollector(ctx context.Context, client *http.Client, run uint32, domains 
 		UserAgent:      fmt.Sprintf("Website Standards Bot/2.0"),
 
 		enqueueFn: enqueue,
-		visitFn:   visit,
 		collectFn: collect,
 
 		MaxBodySize:     10 * 1024 * 1024,
@@ -114,7 +119,6 @@ type Collector struct {
 	backend *HTTPBackend
 
 	enqueueFn EnqueueFn
-	visitFn   VisitFn
 	collectFn CollectFn
 
 	// Context is the context that will be used for HTTP requests. You can set this
@@ -131,15 +135,11 @@ type Collector struct {
 	scrapedCallbacks         []ScrapedCallback
 }
 
-func (c *Collector) EnqueueVisit(URL string) error {
+func (c *Collector) Enqueue(URL string) error {
 	return c.enqueueFn(c, URL)
 }
 
-func (c *Collector) Visit(URL string) (bool, time.Duration, error) {
-	return c.visitFn(c, URL)
-}
-
-func (c *Collector) Scrape(URL string) error {
+func (c *Collector) Visit(URL string) error {
 	if check := c.scrape(URL, "HEAD", 1, nil, nil, nil); check != nil {
 		return check
 	}

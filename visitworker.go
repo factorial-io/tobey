@@ -38,8 +38,6 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 	wlogger := slog.With("worker.id", id)
 
 	for {
-
-		var package_visit *VisitMessagePackage
 		var msg *VisitMessage
 
 		msgs, errs := workQueue.ConsumeVisit()
@@ -60,7 +58,8 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 		}
 		rlogger := wlogger.With("run", msg.Run, "url", msg.URL)
 
-		ctx_new, span := tracer.Start(*package_visit.context, "handle.visit.queue.worker")
+		// TODO: The active span and trace IDs from the publisher should get here without passing the context on a struct.
+		ctx, span := tracer.Start(context.TODO(), "handle.visit.queue.worker")
 		span.SetAttributes(attribute.String("Url", msg.URL))
 
 		if msg.Run == 0 {
@@ -73,15 +72,38 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 		}
 
 		c, _ := cm.Get(msg.Run)
-		ok, retryAfter, err := c.Visit(msg.URL)
-		if ok {
-			rlogger.Debug("Scraped URL.", "url", msg.URL, "took", time.Since(msg.Created).Milliseconds())
-			continue
+
+		if !msg.HasReservation {
+			retryAfter, err := limiter(msg.URL)
+			if err != nil {
+				slog.Error("Error while checking rate limiter.", "error", err)
+				return err
+			}
+			msg.HasReservation = true // Skip limiter next time.
+
+			if retryAfter > 0 {
+				rlogger.Debug("Delaying visit...", "delay", retryAfter)
+
+				if err := workQueue.DelayVisit(retryAfter, msg); err != nil {
+					rlogger.Error("Failed to schedule delayed message.")
+					span.AddEvent("Failed to schedule delayed message", trace.WithAttributes(
+						attribute.String("Url", msg.URL),
+					))
+
+					// TODO: Nack and requeue msg, so it isn't lost.
+					span.End()
+					return err
+				}
+
+				continue
+			}
 		}
-		if err != nil {
-			rlogger.Error("Error scraping URL.", "url", msg.URL, "error", err)
+
+		if err := c.Visit(msg.URL); err != nil {
+			rlogger.Error("Error visiting URL.", "error", err)
+
 			progress.Update(ProgressUpdateMessagePackage{
-				ctx_new,
+				ctx,
 				ProgressUpdateMessage{
 					PROGRESS_STAGE_NAME,
 					PROGRESS_STATE_Errored,
@@ -89,32 +111,22 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 					msg.URL,
 				},
 			})
-			span.AddEvent("Error Visiting Url",
-				trace.WithAttributes(
-					attribute.String("Url", msg.URL),
-				))
+			span.AddEvent("Error visiting URL", trace.WithAttributes(
+				attribute.String("Url", msg.URL),
+			))
 			span.End()
 			continue
 		}
-		if err := workQueue.DelayVisit(retryAfter, msg); err != nil {
-			rlogger.Error("Failed to schedule delayed message.", "run", msg.Run)
-			span.AddEvent("Failed to schedule delayed message", trace.WithAttributes(
-				attribute.String("Url", msg.URL),
-			))
-			// TODO: Nack and requeue msg, so it isn't lost.
-			span.End()
-			return err
-		}
 
-		rlogger.Info("Scraped URL.", "took", time.Since(msg.Created).Milliseconds())
-		span.AddEvent("URL has been scraped",
+		rlogger.Info("Visited URL.", "took", time.Since(msg.Created))
+		span.AddEvent("Visited URL.",
 			trace.WithAttributes(
 				attribute.String("Url", msg.URL),
 			))
 		span.End()
 
 		progress.Update(ProgressUpdateMessagePackage{
-			ctx_new,
+			ctx,
 			ProgressUpdateMessage{
 				PROGRESS_STAGE_NAME,
 				PROGRESS_STATE_CRAWLED,
