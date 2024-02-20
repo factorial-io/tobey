@@ -42,8 +42,8 @@ type ProgressUpdateMessagePackage struct {
 
 type ProgressUpdateMessage struct {
 	Stage  string `json:"stage"`
-	Status string `json:"status"` // only constanz allowed
-	RunID  uint32 `json:"run_id"` // uuid of the run
+	Status string `json:"status"`   // only constanz allowed
+	Run    uint32 `json:"run_uuid"` // uuid of the run
 	Url    string `json:"url"`
 }
 

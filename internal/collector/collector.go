@@ -29,14 +29,14 @@ type key int
 // ProxyURLKey is the context key for the request proxy address.
 const ProxyURLKey key = iota
 
-func NewCollector(ctx context.Context, client *http.Client, runID uint32, domains []string, enqueue EnqueueFn, visit VisitFn, collect CollectFn) *Collector {
+func NewCollector(ctx context.Context, client *http.Client, run uint32, domains []string, enqueue EnqueueFn, visit VisitFn, collect CollectFn) *Collector {
 	backend := &HTTPBackend{
 		Client: client,
 	}
 
 	c := &Collector{
 		AllowedDomains: domains,
-		ID:             runID,
+		Run:            run,
 		UserAgent:      fmt.Sprintf("Website Standards Bot/2.0"),
 
 		enqueueFn: enqueue,
@@ -79,8 +79,8 @@ func NewCollector(ctx context.Context, client *http.Client, runID uint32, domain
 }
 
 type Collector struct {
-	// ID is the unique identifier of a collector.
-	ID uint32
+	// Run is the unique identifier of a collector.
+	Run uint32
 
 	// AllowedDomains is a domain allowlist.
 	AllowedDomains []string

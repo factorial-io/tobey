@@ -15,32 +15,32 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 		// Ensure we never publish a URL twice for a single run. Not only does
 		// this help us not put unnecessary load on the queue, it also helps with
 		// ensuring there will only (mostly) be one result for a page. There is a slight
-		// chance that two processes enter this function with the same runID and url,
+		// chance that two processes enter this function with the same run and url,
 		// before one of them is finished.
 		if !c.IsDomainAllowed(GetHostFromURL(url)) {
-			slog.Debug("Not enqueuing visit, domain not allowed.", "run.id", c.ID, "url", url)
+			slog.Debug("Not enqueuing visit, domain not allowed.", "run", c.Run, "url", url)
 			return nil
 		}
-		if runStore.HasSeen(ctx, c.ID, url) {
+		if runStore.HasSeen(ctx, c.Run, url) {
 			// Do not need to enqueue an URL that has already been crawled, and its response
 			// can be served from cache.
-			slog.Debug("Not enqueuing visit, URL already seen.", "run.id", c.ID, "url", url)
+			slog.Debug("Not enqueuing visit, URL already seen.", "run", c.Run, "url", url)
 			return nil
 		}
 
-		slog.Debug("Publishing URL...", "run.id", c.ID, "url", url)
+		slog.Debug("Publishing URL...", "run", c.Run, "url", url)
 		err := workQueue.PublishURL(
 			// Passing the crawl request ID, so when
 			// consumed the URL is crawled by the matching
 			// Collector.
-			c.ID, // The collector's ID is the run ID.
+			c.Run, // The collector's ID is the run ID.
 			url,
 			webhookConfig,
 		)
 		if err == nil {
-			runStore.Seen(ctx, c.ID, url)
+			runStore.Seen(ctx, c.Run, url)
 		} else {
-			slog.Error("Error enqueuing visit.", "run.id", c.ID, "url", url, "error", err)
+			slog.Error("Error enqueuing visit.", "run", c.Run, "url", url, "error", err)
 		}
 		return err
 	}
@@ -52,7 +52,7 @@ func getVisitFn(ctx context.Context, limiter LimiterAllowFn) collector.VisitFn {
 		if err != nil {
 			slog.Error(
 				"Error while checking rate limiter for message.",
-				"run.id", c.ID,
+				"run", c.Run,
 				"url", url,
 			)
 			return ok, retryAfter, err
@@ -71,7 +71,7 @@ func getCollectFn(ctx context.Context, webhookConfig *WebhookConfig) collector.C
 	return func(c *collector.Collector, res *collector.Response) {
 		slog.Info(
 			"Collect suceeded.",
-			"run.id", c.ID,
+			"run", c.Run,
 			"url", res.Request.URL,
 			"response.body.length", len(res.Body),
 			"response.status", res.StatusCode,

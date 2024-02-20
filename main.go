@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"time"
 	"tobey/helper"
 	"tobey/internal/collector"
@@ -151,29 +150,24 @@ func main() {
 			return
 		}
 
-		var runID uint32
-		if req.RunID != "" {
-			v, err := uuid.Parse(req.RunID)
+		var run uint32
+		if req.Run != "" {
+			v, err := uuid.Parse(req.Run)
 			if err != nil {
-				v, err := strconv.ParseUint(req.RunID, 10, 32)
-				if err != nil {
-					slog.Error("Failed to parse given run ID as UUID or number.", "run.id", req.RunID)
+				slog.Error("Failed to parse given run as UUID.", "run", req.Run)
 
-					result := &APIError{
-						Message: fmt.Sprintf("Failed to parse given run ID (%s) as UUID or number.", req.RunID),
-					}
-
-					w.WriteHeader(http.StatusBadRequest)
-					json.NewEncoder(w).Encode(result)
-					return
-				} else {
-					runID = uint32(v)
+				result := &APIError{
+					Message: fmt.Sprintf("Failed to parse given run (%s) as UUID or number.", req.Run),
 				}
+
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(result)
+				return
 			} else {
-				runID = v.ID()
+				run = v.ID()
 			}
 		} else {
-			runID = uuid.New().ID()
+			run = uuid.New().ID()
 		}
 
 		// Ensure at least the URL host is in allowed domains, otherwise we'll
@@ -189,7 +183,7 @@ func main() {
 		c := collector.NewCollector(
 			ctx,
 			httpClient,
-			runID,
+			run,
 			allowedDomains,
 			getEnqueueFn(ctx, req.WebhookConfig),
 			getVisitFn(ctx, limiter),
@@ -197,7 +191,7 @@ func main() {
 		)
 
 		// Provide workers access to the collector, through the collectors manager.
-		cm.Add(runID, c, func(id uint32) {
+		cm.Add(run, c, func(id uint32) {
 			runStore.Clear(ctx, id)
 		})
 
@@ -206,7 +200,7 @@ func main() {
 			ProgressUpdateMessage{
 				PROGRESS_STAGE_NAME,
 				PROGRESS_STATE_QUEUED_FOR_CRAWLING,
-				runID,
+				run,
 				req.URL,
 			},
 		})
@@ -216,7 +210,7 @@ func main() {
 		c.EnqueueVisit(req.URL)
 
 		result := &APIResponse{
-			RunID: runID,
+			Run: run,
 		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(result)

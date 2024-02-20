@@ -15,7 +15,7 @@ import (
 type WorkQueue interface {
 	Open() error
 
-	PublishURL(runID uint32, url string, whconf *WebhookConfig) error
+	PublishURL(nun uint32, url string, whconf *WebhookConfig) error
 	ConsumeVisit() (<-chan *VisitMessage, <-chan error)
 	DelayVisit(delay time.Duration, msg *VisitMessage) error
 
@@ -28,8 +28,8 @@ type VisitMessagePackage struct {
 }
 
 type VisitMessage struct {
-	ID    uint32
-	RunID uint32
+	ID  uint32
+	Run uint32
 
 	URL           string
 	WebhookConfig *WebhookConfig
@@ -57,12 +57,12 @@ func (wq *MemoryWorkQueue) Open() error {
 	return nil
 }
 
-func (wq *MemoryWorkQueue) PublishURL(runID uint32, url string, whconf *WebhookConfig) error {
+func (wq *MemoryWorkQueue) PublishURL(run uint32, url string, whconf *WebhookConfig) error {
 	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
 	wq.msgs <- &VisitMessage{
 		ID:            uuid.New().ID(),
 		Created:       time.Now(),
-		RunID:         runID,
+		Run:           run,
 		URL:           url,
 		WebhookConfig: whconf,
 	}
@@ -173,11 +173,11 @@ func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) 
 	)
 }
 
-func (wq *RabbitMQWorkQueue) PublishURL(runID uint32, url string, whconf *WebhookConfig) error {
+func (wq *RabbitMQWorkQueue) PublishURL(run uint32, url string, whconf *WebhookConfig) error {
 	msg := &VisitMessage{
 		ID:            uuid.New().ID(),
 		Created:       time.Now(),
-		RunID:         runID,
+		Run:           run,
 		URL:           url,
 		WebhookConfig: whconf,
 	}

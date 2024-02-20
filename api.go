@@ -1,15 +1,16 @@
 package main
 
 type APIRequest struct {
-	// We accept either a valid UUID as a string, or as an integer. Or any other unsigned integer.
-	RunID         string         `json:"run_id"`
+	// We accept either a valid UUID as a string, or as an integer. If left
+	// empty, we'll generate one.
+	Run           string         `json:"run_uuid"`
 	URL           string         `json:"url"`
 	Domains       []string       `json:"domains"`
 	WebhookConfig *WebhookConfig `json:"webhook"`
 }
 
 type APIResponse struct {
-	RunID uint32 `json:"run_id"`
+	Run uint32 `json:"run_uuid"`
 }
 
 type APIError struct {

@@ -58,13 +58,13 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 		case m := <-msgs:
 			msg = m
 		}
-		rlogger := wlogger.With("run.id", msg.RunID, "url", msg.URL)
+		rlogger := wlogger.With("run", msg.Run, "url", msg.URL)
 
 		ctx_new, span := tracer.Start(*package_visit.context, "handle.visit.queue.worker")
 		span.SetAttributes(attribute.String("Url", msg.URL))
 
-		if msg.RunID == 0 {
-			rlogger.Error("Message without run ID arrived.")
+		if msg.Run == 0 {
+			rlogger.Error("Message without run arrived.")
 			continue
 		}
 		if msg.URL == "" {
@@ -72,7 +72,7 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 			continue
 		}
 
-		c, _ := cm.Get(msg.RunID)
+		c, _ := cm.Get(msg.Run)
 		ok, retryAfter, err := c.Visit(msg.URL)
 		if ok {
 			rlogger.Debug("Scraped URL.", "url", msg.URL, "took", time.Since(msg.Created).Milliseconds())
@@ -85,7 +85,7 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 				ProgressUpdateMessage{
 					PROGRESS_STAGE_NAME,
 					PROGRESS_STATE_Errored,
-					msg.RunID,
+					msg.Run,
 					msg.URL,
 				},
 			})
@@ -97,7 +97,7 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 			continue
 		}
 		if err := workQueue.DelayVisit(retryAfter, msg); err != nil {
-			rlogger.Error("Failed to schedule delayed message.", "run.id", msg.RunID)
+			rlogger.Error("Failed to schedule delayed message.", "run", msg.Run)
 			span.AddEvent("Failed to schedule delayed message", trace.WithAttributes(
 				attribute.String("Url", msg.URL),
 			))
@@ -118,7 +118,7 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 			ProgressUpdateMessage{
 				PROGRESS_STAGE_NAME,
 				PROGRESS_STATE_CRAWLED,
-				msg.RunID,
+				msg.Run,
 				msg.URL,
 			},
 		})

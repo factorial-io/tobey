@@ -27,14 +27,14 @@ type MemoryRunStore struct {
 	data map[uint32][]string
 }
 
-func (s *MemoryRunStore) HasSeen(ctx context.Context, runID uint32, url string) bool {
+func (s *MemoryRunStore) HasSeen(ctx context.Context, run uint32, url string) bool {
 	s.RLock()
 	defer s.RUnlock()
 
-	if _, ok := s.data[runID]; !ok {
+	if _, ok := s.data[run]; !ok {
 		return false
 	}
-	for _, v := range s.data[runID] {
+	for _, v := range s.data[run] {
 		if v == url {
 			return true
 		}
@@ -42,36 +42,36 @@ func (s *MemoryRunStore) HasSeen(ctx context.Context, runID uint32, url string) 
 	return false
 }
 
-func (s *MemoryRunStore) Seen(ctx context.Context, runID uint32, url string) {
+func (s *MemoryRunStore) Seen(ctx context.Context, run uint32, url string) {
 	s.Lock()
 	defer s.Unlock()
 
-	if _, ok := s.data[runID]; !ok {
-		s.data[runID] = make([]string, 0)
+	if _, ok := s.data[run]; !ok {
+		s.data[run] = make([]string, 0)
 	}
-	s.data[runID] = append(s.data[runID], url)
+	s.data[run] = append(s.data[run], url)
 }
 
-func (s *MemoryRunStore) Clear(ctx context.Context, runID uint32) {
+func (s *MemoryRunStore) Clear(ctx context.Context, run uint32) {
 	s.Lock()
 	defer s.Unlock()
 
-	delete(s.data, runID)
+	delete(s.data, run)
 }
 
 type RedisRunStore struct {
 	conn *redis.Client
 }
 
-func (s *RedisRunStore) HasSeen(ctx context.Context, runID uint32, url string) bool {
-	reply := s.conn.SIsMember(ctx, fmt.Sprintf("%d:seen", runID), url)
+func (s *RedisRunStore) HasSeen(ctx context.Context, run uint32, url string) bool {
+	reply := s.conn.SIsMember(ctx, fmt.Sprintf("%d:seen", run), url)
 	return reply.Val()
 }
 
-func (s *RedisRunStore) Seen(ctx context.Context, runID uint32, url string) {
-	s.conn.SAdd(ctx, fmt.Sprintf("%d:seen", runID), url)
+func (s *RedisRunStore) Seen(ctx context.Context, run uint32, url string) {
+	s.conn.SAdd(ctx, fmt.Sprintf("%d:seen", run), url)
 }
 
-func (s *RedisRunStore) Clear(ctx context.Context, runID uint32) {
-	s.conn.Del(ctx, fmt.Sprintf("%d:seen", runID))
+func (s *RedisRunStore) Clear(ctx context.Context, run uint32) {
+	s.conn.Del(ctx, fmt.Sprintf("%d:seen", run))
 }
