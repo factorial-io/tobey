@@ -162,7 +162,7 @@ through additional information to the target of the webhook.
   "webhook": {
     "endpoint": "https://metatags.factorial.io/accept-webhook",
     "data": { // Any additional data that you want the hook to receive.
-      "test_run": 12 
+      "magic_number": 12 
     }
   }
 }
@@ -174,7 +174,7 @@ This is how the payload will look like, and how it is received by the target:
 {
   "action": "tobey.result",
   "data": { // Passed-through data.
-    "test_run": 12
+    "magic_number": 12 
   },
   "crawl": 123,            // ID of the crawl that triggered the download of this resource.
   "request": {/* ... */},  // Raw request submitted to download the resource.
