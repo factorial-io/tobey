@@ -17,7 +17,7 @@ import (
 )
 
 type EnqueueFn func(*Collector, string) error                      // Enqueues a scrape.
-type VisitFn func(*Collector, string) (bool, time.Duration, error) // Performs a scrape.
+type VisitFn func(*Collector, string) (bool, time.Duration, error) // Performs a scrape, will call Collector.Scrape().
 type CollectFn func(*Collector, *Response)                         // Collects the result of a scrape.
 
 var urlParser = whatwgUrl.NewParser(whatwgUrl.WithPercentEncodeSinglePercentSign())

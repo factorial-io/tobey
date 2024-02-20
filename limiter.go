@@ -36,8 +36,8 @@ func CreateLimiter(ctx context.Context, redis *redis.Client, rate time.Duration)
 			return err == nil, res.RetryAfter, err
 		}
 	}
-	slog.Debug("Using in-memory rate limiter...")
 
+	slog.Debug("Using in-memory rate limiter...")
 	memoryLimiters = make(map[string]*xrate.Limiter)
 
 	return func(url string) (bool, time.Duration, error) {
