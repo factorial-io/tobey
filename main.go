@@ -40,7 +40,6 @@ var (
 var (
 	redisconn    *redis.Client
 	rabbitmqconn *amqp.Connection
-	cachedisk    *diskv.Diskv
 
 	workQueue WorkQueue
 	runStore  RunStore
@@ -102,17 +101,24 @@ func main() {
 	cachedir := filepath.Join(wd, "cache")
 
 	tempdir := os.TempDir()
+	slog.Debug("Using temporary directory for atomic file operations.", "dir", tempdir)
 
-	cachedisk = diskv.New(diskv.Options{
+	cachedisk := diskv.New(diskv.Options{
 		BasePath:     cachedir,
 		TempDir:      tempdir,
 		CacheSizeMax: 1000 * 1024 * 1024, // 1GB
 	})
-	slog.Debug("Initialized disk backed cache with a 1GB limit.", "cachedir", cachedir, "tempdir", tempdir)
+
+	httpClient := NewCachingHTTPClient(cachedisk)
+	slog.Debug(
+		"Initialized caching HTTP client.",
+		"cache.dir", cachedir,
+		"cache.size", cachedisk.CacheSizeMax,
+	)
 
 	cm := collector.NewManager(MaxParallelRuns)
 
-	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm)
+	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient)
 
 	router := http.NewServeMux()
 	// TODO: Use otel's http mux.
@@ -183,7 +189,7 @@ func main() {
 		// fear that we overwrite an existing one.
 		c := collector.NewCollector(
 			ctx,
-			NewCachingHTTPClient(cachedisk),
+			httpClient,
 			run,
 			allowedDomains,
 			getEnqueueFn(ctx, req.WebhookConfig),
