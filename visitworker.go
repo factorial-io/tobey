@@ -71,7 +71,23 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager) error {
 			continue
 		}
 
-		c, _ := cm.Get(msg.Run)
+		// If this tobey instance is also the instance that received the run request,
+		// we already have a Collector locally available. If this instance has retrieved
+		// a VisitMessage that was put in the queue by another tobey instance, we don't
+		// yet have a collector available via the Manager. Please note that Collectors
+		// are not shared by the Manager across tobey instances.
+		c, ok := cm.Get(msg.Run)
+		if !ok {
+			c = collector.NewCollector(
+				ctx,
+				NewCachingHTTPClient(cachedisk),
+				msg.CollectorConfig.Run,
+				msg.CollectorConfig.AllowedDomains,
+				getEnqueueFn(ctx, msg.WebhookConfig),
+				getCollectFn(ctx, msg.WebhookConfig),
+			)
+
+		}
 
 		if !msg.HasReservation {
 			retryAfter, err := limiter(msg.URL)

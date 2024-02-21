@@ -34,6 +34,12 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 			// Collector.
 			c.Run, // The collector's ID is the run ID.
 			url,
+			// This provides all the information necessary to re-construct
+			// a Collector by whoever receives this (might be another tobey instance).
+			&CollectorConfig{
+				Run:            c.Run,
+				AllowedDomains: c.AllowedDomains,
+			},
 			webhookConfig,
 		)
 		if err == nil {

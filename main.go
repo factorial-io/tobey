@@ -110,8 +110,6 @@ func main() {
 	})
 	slog.Debug("Initialized disk backed cache with a 1GB limit.", "cachedir", cachedir, "tempdir", tempdir)
 
-	httpClient := NewCachingHTTPClient(cachedisk)
-
 	cm := collector.NewManager(MaxParallelRuns)
 
 	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm)
@@ -180,16 +178,20 @@ func main() {
 			allowedDomains = append(allowedDomains, p.Hostname())
 		}
 
+		// Cannot be already present for this run, as the run starts here and
+		// now. We don't NewEncoder to check the Manager for an existing one, or
+		// fear that we overwrite an existing one.
 		c := collector.NewCollector(
 			ctx,
-			httpClient,
+			NewCachingHTTPClient(cachedisk),
 			run,
 			allowedDomains,
 			getEnqueueFn(ctx, req.WebhookConfig),
 			getCollectFn(ctx, req.WebhookConfig),
 		)
 
-		// Provide workers access to the collector, through the collectors manager.
+		// Also provide local workers access to the collector, through the
+		// collectors manager.
 		cm.Add(run, c, func(id uint32) {
 			runStore.Clear(ctx, id)
 		})

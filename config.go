@@ -1,7 +1,7 @@
 package main
 
 type CollectorConfig struct {
-	Root           string
+	Run            uint32
 	AllowedDomains []string
 }
 

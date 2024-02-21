@@ -15,7 +15,7 @@ import (
 type WorkQueue interface {
 	Open() error
 
-	PublishURL(nun uint32, url string, whconf *WebhookConfig) error
+	PublishURL(nun uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
 	ConsumeVisit() (<-chan *VisitMessage, <-chan error)
 	DelayVisit(delay time.Duration, msg *VisitMessage) error
 
@@ -31,8 +31,10 @@ type VisitMessage struct {
 	ID  uint32
 	Run uint32
 
-	URL           string
-	WebhookConfig *WebhookConfig
+	URL string
+
+	CollectorConfig *CollectorConfig
+	WebhookConfig   *WebhookConfig
 
 	// Whether this visit has a valid reservation by a rate limiter.
 	HasReservation bool
@@ -60,14 +62,15 @@ func (wq *MemoryWorkQueue) Open() error {
 	return nil
 }
 
-func (wq *MemoryWorkQueue) PublishURL(run uint32, url string, whconf *WebhookConfig) error {
+func (wq *MemoryWorkQueue) PublishURL(run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
 	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
 	wq.msgs <- &VisitMessage{
-		ID:            uuid.New().ID(),
-		Created:       time.Now(),
-		Run:           run,
-		URL:           url,
-		WebhookConfig: whconf,
+		ID:              uuid.New().ID(),
+		Created:         time.Now(),
+		Run:             run,
+		URL:             url,
+		CollectorConfig: cconf,
+		WebhookConfig:   whconf,
 	}
 	return nil
 }
@@ -177,13 +180,14 @@ func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) 
 	)
 }
 
-func (wq *RabbitMQWorkQueue) PublishURL(run uint32, url string, whconf *WebhookConfig) error {
+func (wq *RabbitMQWorkQueue) PublishURL(run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
 	msg := &VisitMessage{
-		ID:            uuid.New().ID(),
-		Created:       time.Now(),
-		Run:           run,
-		URL:           url,
-		WebhookConfig: whconf,
+		ID:              uuid.New().ID(),
+		Created:         time.Now(),
+		Run:             run,
+		URL:             url,
+		CollectorConfig: cconf,
+		WebhookConfig:   whconf,
 	}
 
 	b, err := json.Marshal(msg)
