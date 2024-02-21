@@ -44,7 +44,6 @@ var (
 	workQueue WorkQueue
 	runStore  RunStore
 
-	limiter           LimiterAllowFn
 	webhookDispatcher *WebhookDispatcher
 	progress          Progress
 )
@@ -95,7 +94,7 @@ func main() {
 
 	progress = MustStartProgressFromEnv(ctx)
 
-	limiter = CreateLimiter(ctx, redisconn, 1)
+	limiter := CreateLimiter(ctx, redisconn, 1)
 
 	wd, _ := os.Getwd()
 	cachedir := filepath.Join(wd, "cache")
@@ -118,7 +117,7 @@ func main() {
 
 	cm := collector.NewManager(MaxParallelRuns)
 
-	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient)
+	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter)
 
 	router := http.NewServeMux()
 	// TODO: Use otel's http mux.
