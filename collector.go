@@ -29,10 +29,11 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 
 		slog.Debug("Publishing URL...", "run", c.Run, "url", url)
 		err := workQueue.PublishURL(
-			// Passing the crawl request ID, so when
+			ctx, // The captured crawl run context.
+			// Passing the run ID to identify the crawl run, so when
 			// consumed the URL is crawled by the matching
 			// Collector.
-			c.Run, // The collector's ID is the run ID.
+			c.Run,
 			url,
 			// This provides all the information necessary to re-construct
 			// a Collector by whoever receives this (might be another tobey instance).
@@ -64,6 +65,7 @@ func getCollectFn(ctx context.Context, webhookConfig *WebhookConfig) collector.C
 			"response.status", res.StatusCode,
 		)
 		if webhookConfig != nil && webhookConfig.Endpoint != "" {
+			// Use the captured craw run context to send the webhook.
 			webhookDispatcher.Send(ctx, webhookConfig, res)
 		}
 	}

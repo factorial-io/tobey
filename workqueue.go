@@ -3,28 +3,25 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type WorkQueue interface {
 	Open() error
 
-	PublishURL(nun uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
-	ConsumeVisit() (<-chan *VisitMessage, <-chan error)
-	DelayVisit(delay time.Duration, msg *VisitMessage) error
+	// The following methods use the crawl run context.
+	PublishURL(ctx context.Context, run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
+	ConsumeVisit(ctx context.Context) (<-chan *VisitJob, <-chan error)
+	DelayVisit(ctx context.Context, delay time.Duration, j *VisitMessage) error
 
 	Close() error
-}
-
-type VisitMessagePackage struct {
-	context *context.Context
-	payload *VisitMessage
 }
 
 type VisitMessage struct {
@@ -42,6 +39,37 @@ type VisitMessage struct {
 	Created time.Time
 }
 
+// visitPackage is used by the in-memory implementation of the WorkQueue.
+// Implementations that have a built-in mechanism to transport headers do not
+// need to use this.
+type visitPackage struct {
+	Carrier propagation.MapCarrier
+	Message *VisitMessage
+}
+
+// VisitJob is similar to a http.Request, it exists only for a certain time. It
+// carries its own Context. And although this violates the strict variant of the
+// "do not store context on struct" it doe not violate the relaxed "do not store
+// a context" rule, as a Job is transitive.
+//
+// We initially saw the requirement to pass a context here as we wanted to carry
+// over TraceID and SpanID from the job publisher.
+type VisitJob struct {
+	*VisitMessage
+	Context context.Context
+}
+
+// Validate ensures mandatory fields are non-zero.
+func (j *VisitJob) Validate() (bool, error) {
+	if j.Run == 0 {
+		return false, errors.New("Job without run.")
+	}
+	if j.URL == "" {
+		return false, errors.New("Job without URL.")
+	}
+	return true, nil
+}
+
 func CreateWorkQueue(rabbitmq *amqp.Connection) WorkQueue {
 	if rabbitmq != nil {
 		slog.Debug("Using distributed work queue...")
@@ -54,45 +82,86 @@ func CreateWorkQueue(rabbitmq *amqp.Connection) WorkQueue {
 
 type MemoryWorkQueue struct {
 	// TODO: MaxSize
-	msgs chan *VisitMessage
+	pkgs chan *visitPackage
 }
 
 func (wq *MemoryWorkQueue) Open() error {
-	wq.msgs = make(chan *VisitMessage, 10000) // make sends non-blocking
+	wq.pkgs = make(chan *visitPackage, 10000) // TODO: make sends non-blocking
 	return nil
 }
 
-func (wq *MemoryWorkQueue) PublishURL(run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
 	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
-	wq.msgs <- &VisitMessage{
-		ID:              uuid.New().ID(),
-		Created:         time.Now(),
-		Run:             run,
-		URL:             url,
-		CollectorConfig: cconf,
-		WebhookConfig:   whconf,
+
+	// Extract tracing information from context, to transport it over the
+	// channel, without using a Context.
+	propagator := otel.GetTextMapPropagator()
+	carrier := propagation.MapCarrier{}
+	propagator.Inject(ctx, carrier)
+
+	wq.pkgs <- &visitPackage{
+		Carrier: carrier,
+		Message: &VisitMessage{
+			ID:              uuid.New().ID(),
+			Created:         time.Now(),
+			Run:             run,
+			URL:             url,
+			CollectorConfig: cconf,
+			WebhookConfig:   whconf,
+		},
 	}
 	return nil
 }
 
 // DelayVisit republishes a message with given delay.
-func (wq *MemoryWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) error {
+func (wq *MemoryWorkQueue) DelayVisit(ctx context.Context, delay time.Duration, msg *VisitMessage) error {
 	go func() {
 		slog.Debug("Delaying message", "msg.id", msg.ID, "delay", delay.Seconds())
 
+		// Extract tracing information from context, to transport it over the
+		// channel, without using a Context.
+		propagator := otel.GetTextMapPropagator()
+		carrier := propagation.MapCarrier{}
+		propagator.Inject(ctx, carrier)
+
 		time.Sleep(delay)
-		wq.msgs <- msg
+		wq.pkgs <- &visitPackage{
+			Carrier: carrier,
+			Message: msg,
+		}
 		slog.Debug("Delivering delayed message", "msg.id", msg.ID, "delay", delay.Seconds())
 	}()
 	return nil
 }
 
-func (wq *MemoryWorkQueue) ConsumeVisit() (<-chan *VisitMessage, <-chan error) {
-	return wq.msgs, nil
+func (wq *MemoryWorkQueue) ConsumeVisit(ctx context.Context) (<-chan *VisitJob, <-chan error) {
+	reschan := make(chan *VisitJob)
+	errchan := make(chan error)
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			close(reschan)
+			close(errchan)
+			return
+		case p := <-wq.pkgs:
+			// Initializes the context for the job. Than extract the tracing
+			// information from the carrier into the job's context.
+			jctx := context.Background()
+			jctx = otel.GetTextMapPropagator().Extract(jctx, p.Carrier)
+
+			reschan <- &VisitJob{
+				VisitMessage: p.Message,
+				Context:      jctx,
+			}
+		}
+	}()
+
+	return reschan, errchan
 }
 
 func (wq *MemoryWorkQueue) Close() error {
-	close(wq.msgs)
+	close(wq.pkgs)
 	return nil
 }
 
@@ -152,35 +221,7 @@ func (wq *RabbitMQWorkQueue) Open() error {
 	return nil
 }
 
-// DelayVisit republishes a message with given delay.
-// Relies on: https://blog.rabbitmq.com/posts/2015/04/scheduling-messages-with-rabbitmq/
-func (wq *RabbitMQWorkQueue) DelayVisit(delay time.Duration, msg *VisitMessage) error {
-	slog.Debug("Delaying message", "msg.id", msg.ID, "delay", delay.Seconds())
-
-	b, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	table := make(amqp.Table)
-	otel.GetTextMapPropagator().Inject(context.TODO(), MapCarrierRabbitmq(table))
-	table["x-delay"] = delay.Milliseconds()
-
-	return wq.channel.Publish(
-		"tobey.default", // exchange
-		wq.queue.Name,   // routing key
-		false,           // mandatory TODO: check meaning
-		false,           // immediate TODO: check meaning
-		amqp.Publishing{
-			DeliveryMode: amqp.Persistent, // TODO: check meaning
-			ContentType:  "application/json",
-			Body:         b,
-			Headers:      table,
-		},
-	)
-}
-
-func (wq *RabbitMQWorkQueue) PublishURL(run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
 	msg := &VisitMessage{
 		ID:              uuid.New().ID(),
 		Created:         time.Now(),
@@ -196,7 +237,10 @@ func (wq *RabbitMQWorkQueue) PublishURL(run uint32, url string, cconf *Collector
 	}
 
 	table := make(amqp.Table)
-	otel.GetTextMapPropagator().Inject(context.TODO(), MapCarrierRabbitmq(table))
+
+	// Add tracing information into the RabbitMQ headers, so that
+	// the consumer of the message can continue the trace.
+	otel.GetTextMapPropagator().Inject(ctx, MapCarrierRabbitmq(table))
 
 	return wq.channel.Publish(
 		"tobey.default", // exchange
@@ -212,19 +256,66 @@ func (wq *RabbitMQWorkQueue) PublishURL(run uint32, url string, cconf *Collector
 	)
 }
 
-func (wq *RabbitMQWorkQueue) ConsumeVisit() (<-chan *VisitMessage, <-chan error) {
-	reschan := make(chan *VisitMessage)
+// DelayVisit republishes a message with given delay.
+// Relies on: https://blog.rabbitmq.com/posts/2015/04/scheduling-messages-with-rabbitmq/
+func (wq *RabbitMQWorkQueue) DelayVisit(ctx context.Context, delay time.Duration, msg *VisitMessage) error {
+	slog.Debug("Delaying message", "msg.id", msg.ID, "delay", delay.Seconds())
+
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	table := make(amqp.Table)
+	table["x-delay"] = delay.Milliseconds()
+
+	// Extract tracing information from context into headers. The tracing information
+	// should already be present in the context of the caller.
+	otel.GetTextMapPropagator().Inject(ctx, MapCarrierRabbitmq(table))
+
+	return wq.channel.Publish(
+		"tobey.default", // exchange
+		wq.queue.Name,   // routing key
+		false,           // mandatory TODO: check meaning
+		false,           // immediate TODO: check meaning
+		amqp.Publishing{
+			DeliveryMode: amqp.Persistent, // TODO: check meaning
+			ContentType:  "application/json",
+			Body:         b,
+			Headers:      table,
+		},
+	)
+}
+
+func (wq *RabbitMQWorkQueue) ConsumeVisit(ctx context.Context) (<-chan *VisitJob, <-chan error) {
+	reschan := make(chan *VisitJob)
 	errchan := make(chan error)
 
 	go func() {
 		var msg *VisitMessage
-		rawmsg := <-wq.receive // Blocks until we have at least one message.
-		// TODO: Check if we should bring this back.
-		// ctx := otel.GetTextMapPropagator().Extract(context.TODO(), MapCarrierRabbitmq(rawmsg.Headers))
+		var rawmsg amqp.Delivery
+
+		select {
+		case v := <-wq.receive: // Blocks until we have at least one message.
+			rawmsg = v
+		case <-ctx.Done(): // The worker's context.
+			close(reschan)
+			close(errchan)
+			return // Exit if the context is cancelled.
+		}
+
 		if err := json.Unmarshal(rawmsg.Body, &msg); err != nil {
 			errchan <- err
 		} else {
-			reschan <- msg
+			// Initializes the context for the job. Than extract the tracing
+			// information from the RabbitMQ headers into the job's context.
+			jctx := context.Background()
+			jctx = otel.GetTextMapPropagator().Extract(jctx, MapCarrierRabbitmq(rawmsg.Headers))
+
+			reschan <- &VisitJob{
+				VisitMessage: msg,
+				Context:      jctx,
+			}
 		}
 	}()
 
@@ -241,28 +332,4 @@ func (wq *RabbitMQWorkQueue) Close() error {
 		lasterr = err
 	}
 	return lasterr
-}
-
-// Transformer for Opentelemetry
-
-// medium for propagated key-value pairs.
-type MapCarrierRabbitmq map[string]interface{}
-
-// Get returns the value associated with the passed key.
-func (c MapCarrierRabbitmq) Get(key string) string {
-	return fmt.Sprintf("%v", c[key])
-}
-
-// Set stores the key-value pair.
-func (c MapCarrierRabbitmq) Set(key, value string) {
-	c[key] = value
-}
-
-// Keys lists the keys stored in this carrier.
-func (c MapCarrierRabbitmq) Keys() []string {
-	keys := make([]string, 0, len(c))
-	for k := range c {
-		keys = append(keys, k)
-	}
-	return keys
 }

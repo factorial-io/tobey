@@ -134,11 +134,14 @@ func main() {
 		r.Body.Close()
 
 		w.Header().Set("Content-Type", "application/json")
-		slog.Debug("Handling incoming crawl request...")
+		slog.Debug("Handling incoming request for crawl run...")
 
-		// TODO: reenable
-		// ctx, span := tracer.Start(r.Context(), "handleItem", trace.WithAttributes(attribute.String("crawl_request", reqID)))
-		// defer span.End()
+		// The context of the HTTP request might contain OpenTelemetry information,
+		// i.e. SpanID or TraceID. If this is the case the line below creates
+		// a sub span. Otherwise we'll start a new root span here.
+		rctx, span := tracer.Start(r.Context(), "receive_crawl_request")
+		// This ends the very first span in handling the crawl run. It ends the HTTP handling span.
+		defer span.End()
 
 		var req APIRequest
 		err := json.Unmarshal(body, &req)
@@ -191,8 +194,10 @@ func main() {
 			httpClient,
 			run,
 			allowedDomains,
-			getEnqueueFn(ctx, req.WebhookConfig),
-			getCollectFn(ctx, req.WebhookConfig),
+			// Need to use WithoutCancel, to avoid the crawl run to be cancelled once
+			// the HTTP request is done. The crawl run should proceed to be handled.
+			getEnqueueFn(context.WithoutCancel(rctx), req.WebhookConfig),
+			getCollectFn(context.WithoutCancel(rctx), req.WebhookConfig),
 		)
 
 		// Also provide local workers access to the collector, through the
@@ -202,7 +207,7 @@ func main() {
 		})
 
 		progress.Update(ProgressUpdateMessagePackage{
-			context.WithoutCancel(ctx),
+			context.WithoutCancel(rctx),
 			ProgressUpdateMessage{
 				PROGRESS_STAGE_NAME,
 				PROGRESS_STATE_QUEUED_FOR_CRAWLING,

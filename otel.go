@@ -17,6 +17,30 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
+// Transformer for Opentelemetry
+
+// medium for propagated key-value pairs.
+type MapCarrierRabbitmq map[string]interface{}
+
+// Get returns the value associated with the passed key.
+func (c MapCarrierRabbitmq) Get(key string) string {
+	return fmt.Sprintf("%v", c[key])
+}
+
+// Set stores the key-value pair.
+func (c MapCarrierRabbitmq) Set(key, value string) {
+	c[key] = value
+}
+
+// Keys lists the keys stored in this carrier.
+func (c MapCarrierRabbitmq) Keys() []string {
+	keys := make([]string, 0, len(c))
+	for k := range c {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
 func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {

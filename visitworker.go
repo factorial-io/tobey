@@ -39,9 +39,9 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager, httpClient 
 	wlogger := slog.With("worker.id", id)
 
 	for {
-		var msg *VisitMessage
+		var job *VisitJob
 
-		msgs, errs := workQueue.ConsumeVisit()
+		jobs, errs := workQueue.ConsumeVisit(ctx)
 
 		select {
 		// This allows to stop a worker gracefully.
@@ -54,21 +54,16 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager, httpClient 
 			span.End()
 
 			return err
-		case m := <-msgs:
-			msg = m
+		case j := <-jobs:
+			job = j
 		}
-		rlogger := wlogger.With("run", msg.Run, "url", msg.URL)
+		jlogger := wlogger.With("run", job.Run, "url", job.URL)
 
-		// TODO: The active span and trace IDs from the publisher should get here without passing the context on a struct.
-		ctx, span := tracer.Start(context.TODO(), "handle.visit.queue.worker")
-		span.SetAttributes(attribute.String("Url", msg.URL))
+		jctx, span := tracer.Start(job.Context, "process_visit_job")
+		span.SetAttributes(attribute.String("Url", job.URL))
 
-		if msg.Run == 0 {
-			rlogger.Error("Message without run arrived.")
-			continue
-		}
-		if msg.URL == "" {
-			rlogger.Error("Message without URL arrived.")
+		if _, err := job.Validate(); err != nil {
+			jlogger.Error(err.Error())
 			continue
 		}
 
@@ -77,34 +72,33 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager, httpClient 
 		// a VisitMessage that was put in the queue by another tobey instance, we don't
 		// yet have a collector available via the Manager. Please note that Collectors
 		// are not shared by the Manager across tobey instances.
-		c, ok := cm.Get(msg.Run)
+		c, ok := cm.Get(job.Run)
 		if !ok {
 			c = collector.NewCollector(
-				ctx,
+				ctx, // Do not use the job's context here.
 				httpClient,
-				msg.CollectorConfig.Run,
-				msg.CollectorConfig.AllowedDomains,
-				getEnqueueFn(ctx, msg.WebhookConfig),
-				getCollectFn(ctx, msg.WebhookConfig),
+				job.CollectorConfig.Run,
+				job.CollectorConfig.AllowedDomains,
+				getEnqueueFn(ctx, job.WebhookConfig),
+				getCollectFn(ctx, job.WebhookConfig),
 			)
-
 		}
 
-		if !msg.HasReservation {
-			retryAfter, err := limiter(msg.URL)
+		if !job.HasReservation {
+			retryAfter, err := limiter(job.URL)
 			if err != nil {
 				slog.Error("Error while checking rate limiter.", "error", err)
 				return err
 			}
-			msg.HasReservation = true // Skip limiter next time.
+			job.HasReservation = true // Skip limiter next time.
 
 			if retryAfter > 0 {
-				rlogger.Debug("Delaying visit...", "delay", retryAfter)
+				jlogger.Debug("Delaying visit...", "delay", retryAfter)
 
-				if err := workQueue.DelayVisit(retryAfter, msg); err != nil {
-					rlogger.Error("Failed to schedule delayed message.")
+				if err := workQueue.DelayVisit(jctx, retryAfter, job.VisitMessage); err != nil {
+					jlogger.Error("Failed to schedule delayed message.")
 					span.AddEvent("Failed to schedule delayed message", trace.WithAttributes(
-						attribute.String("Url", msg.URL),
+						attribute.String("Url", job.URL),
 					))
 
 					// TODO: Nack and requeue msg, so it isn't lost.
@@ -116,29 +110,29 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager, httpClient 
 			}
 		}
 
-		if err := c.Visit(msg.URL); err != nil {
-			rlogger.Error("Error visiting URL.", "error", err)
+		if err := c.Visit(job.URL); err != nil {
+			jlogger.Error("Error visiting URL.", "error", err)
 
 			progress.Update(ProgressUpdateMessagePackage{
 				ctx,
 				ProgressUpdateMessage{
 					PROGRESS_STAGE_NAME,
 					PROGRESS_STATE_Errored,
-					msg.Run,
-					msg.URL,
+					job.Run,
+					job.URL,
 				},
 			})
 			span.AddEvent("Error visiting URL", trace.WithAttributes(
-				attribute.String("Url", msg.URL),
+				attribute.String("Url", job.URL),
 			))
 			span.End()
 			continue
 		}
 
-		rlogger.Info("Visited URL.", "took", time.Since(msg.Created))
+		jlogger.Info("Visited URL.", "took", time.Since(job.Created))
 		span.AddEvent("Visited URL.",
 			trace.WithAttributes(
-				attribute.String("Url", msg.URL),
+				attribute.String("Url", job.URL),
 			))
 		span.End()
 
@@ -147,8 +141,8 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager, httpClient 
 			ProgressUpdateMessage{
 				PROGRESS_STAGE_NAME,
 				PROGRESS_STATE_CRAWLED,
-				msg.Run,
-				msg.URL,
+				job.Run,
+				job.URL,
 			},
 		})
 
