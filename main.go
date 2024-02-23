@@ -37,6 +37,14 @@ var (
 	MaxParallelRuns int = 128
 )
 
+const (
+	// The port where the main HTTP server listens and the API is served.
+	ListenPort int = 8080
+
+	// The port where to ping for healtcheck.
+	HealthcheckListenPort int = 10241
+)
+
 var (
 	redisconn    *redis.Client
 	rabbitmqconn *amqp.Connection
@@ -72,8 +80,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	go startHealthcheck()
 
 	redisconn = maybeRedis(ctx)
 	rabbitmqconn = maybeRabbitMQ(ctx)
@@ -227,14 +233,37 @@ func main() {
 		json.NewEncoder(w).Encode(result)
 	})
 
-	slog.Debug("Starting HTTP server...", "port", "8080")
+	slog.Debug("Starting HTTP server...", "port", ListenPort)
 
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    fmt.Sprintf(":%d", ListenPort),
 		Handler: router,
 	}
 	go func() {
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("HTTP server error.", "error", err)
+		}
+		slog.Info("Stopped serving new HTTP connections.")
+	}()
+
+	hcrouter := http.NewServeMux()
+
+	// Supports HEAD requests as well.
+	hcrouter.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		r.Body.Close()
+
+		// TODO: Add actual healthchecking logic here.
+
+		fmt.Fprint(w, "OK")
+	})
+
+	hcserver := &http.Server{
+		Addr:    fmt.Sprintf(":%d", HealthcheckListenPort),
+		Handler: hcrouter,
+	}
+	go func() {
+		if err := hcserver.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("HTTP server error.", "error", err)
 		}
 		slog.Info("Stopped serving new HTTP connections.")
