@@ -260,7 +260,7 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 	if c.MaxDepth > 0 && c.MaxDepth < depth {
 		return ErrMaxDepth
 	}
-	if ok, err := c.IsVisitAllowed(parsedURL.Hostname()); !ok || err != nil {
+	if ok, err := c.IsVisitAllowed(parsedURL.String()); !ok || err != nil {
 		return err
 	}
 	return nil
@@ -268,7 +268,7 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 
 func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
-		if ok, err := c.IsVisitAllowed(req.URL.Hostname()); !ok {
+		if ok, err := c.IsVisitAllowed(req.URL.String()); !ok {
 			return fmt.Errorf("Not following redirect to %q: %w", req.URL, err)
 		}
 
