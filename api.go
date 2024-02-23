@@ -7,6 +7,12 @@ type APIRequest struct {
 	URL           string         `json:"url"`
 	Domains       []string       `json:"domains"`
 	WebhookConfig *WebhookConfig `json:"webhook"`
+
+	// If true, we'll ignore robots.txt check on the host.
+	SkipRobots bool `json:"skip_robots"`
+
+	// If true we'll not try to fetch the sitemap.xml file.
+	SkipSitemap bool `json:"skip_sitemap"`
 }
 
 type APIResponse struct {

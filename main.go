@@ -125,7 +125,7 @@ func main() {
 
 	robots := NewRobots(httpClient)
 
-	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter, robots.Check)
+	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter, robots)
 
 	router := http.NewServeMux()
 	// TODO: Use otel's http mux.
@@ -184,8 +184,7 @@ func main() {
 			run = uuid.New().ID()
 		}
 
-		// Ensure at least the URL host is in allowed domains, otherwise we'll
-		// crawl the whole internet.
+		// Ensure at least the URL host is in allowed domains.
 		var allowedDomains []string
 		if req.Domains != nil {
 			allowedDomains = req.Domains
@@ -202,7 +201,12 @@ func main() {
 			httpClient,
 			run,
 			allowedDomains,
-			robots.Check,
+			func(a string, u *url.URL) (bool, error) {
+				if req.SkipRobots {
+					return true, nil
+				}
+				return robots.Check(a, u)
+			},
 			// Need to use WithoutCancel, to avoid the crawl run to be cancelled once
 			// the HTTP request is done. The crawl run should proceed to be handled.
 			getEnqueueFn(context.WithoutCancel(rctx), req.WebhookConfig),
@@ -225,8 +229,10 @@ func main() {
 			},
 		})
 
-		// TODO sitemap should be ask from differente server
-		// c.EnqueueVisit(fmt.Sprintf("%s/sitemap.xml", strings.TrimRight(req.URL, "/")))
+		if !req.SkipSitemap {
+			p, _ := url.Parse(req.URL)
+			c.Enqueue(fmt.Sprintf("%s://%s/sitemap.xml", p.Scheme, p.Hostname()))
+		}
 		c.Enqueue(req.URL)
 
 		result := &APIResponse{

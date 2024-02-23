@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -21,7 +22,7 @@ func CreateVisitWorkersPool(
 	cm *collector.Manager,
 	httpClient *http.Client,
 	limiter LimiterAllowFn,
-	robotsCheck collector.RobotCheckFn,
+	robots *Robots,
 ) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
@@ -30,7 +31,7 @@ func CreateVisitWorkersPool(
 		wg.Add(1)
 
 		go func(id int) {
-			if err := VisitWorker(ctx, id, cm, httpClient, limiter, robotsCheck); err != nil {
+			if err := VisitWorker(ctx, id, cm, httpClient, limiter, robots); err != nil {
 				slog.Error("Visit worker exited with error.", "worker.id", id, "error", err)
 			} else {
 				slog.Debug("Visit worker exited cleanly.", "worker.id", id)
@@ -48,7 +49,7 @@ func VisitWorker(
 	cm *collector.Manager,
 	httpClient *http.Client,
 	limiter LimiterAllowFn,
-	robotsCheck collector.RobotCheckFn,
+	robots *Robots,
 ) error {
 	wlogger := slog.With("worker.id", id)
 
@@ -93,7 +94,12 @@ func VisitWorker(
 				httpClient,
 				job.CollectorConfig.Run,
 				job.CollectorConfig.AllowedDomains,
-				robotsCheck,
+				func(a string, u *url.URL) (bool, error) {
+					if job.CollectorConfig.SkipRobots {
+						return true, nil
+					}
+					return robots.Check(a, u)
+				},
 				getEnqueueFn(ctx, job.WebhookConfig),
 				getCollectFn(ctx, job.WebhookConfig),
 			)

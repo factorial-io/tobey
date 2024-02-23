@@ -12,6 +12,7 @@ import (
 type CollectorConfig struct {
 	Run            uint32
 	AllowedDomains []string
+	SkipRobots     bool
 }
 
 // getEnqueueFn returns the enqueue function, that will enqueue a single URL to

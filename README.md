@@ -95,6 +95,23 @@ dispatched.
 }
 ```
 
+### Skipping auto discovery of well known resources
+
+Tobey will by default automatically discover and use a sitemap if one is
+available to enhance the spidering process. The same applies to robots.txt.
+If this is discovered it will be used to check if a resource is allowed to be
+downloaded.
+
+You may disable this behavior by providing the `skip_robots` and/or the `skip_sitemap` key:
+
+```jsonc
+{
+  "url": "https://example.org",
+  "skip_robots": true,
+  "skip_sitemap": true
+}
+```
+
 ### Prioritites (not implemented)
 
 tbd
