@@ -143,9 +143,6 @@ func (c *Collector) Enqueue(URL string) error {
 }
 
 func (c *Collector) Visit(URL string) error {
-	if check := c.scrape(URL, "HEAD", 1, nil, nil, nil); check != nil {
-		return check
-	}
 	return c.scrape(URL, "GET", 1, nil, nil, nil)
 }
 
