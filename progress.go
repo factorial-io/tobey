@@ -54,7 +54,7 @@ type ProgressManager struct {
 
 func NewProgressManager() *ProgressManager {
 	return &ProgressManager{
-		helper.GetEnvString("TOBEY_PROGRESS_API_URL", "http://progress:8000"),
+		helper.GetEnvString("TOBEY_PROGRESS_DSN", "http://progress:9020"),
 		&http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
 	}
 }
