@@ -72,7 +72,7 @@ func VisitWorker(
 		case j := <-jobs:
 			job = j
 		}
-		jlogger := wlogger.With("run", job.Run, "url", job.URL)
+		jlogger := wlogger.With("run", job.Run, "url", job.URL, "job.id", job.ID)
 
 		jctx, span := tracer.Start(job.Context, "process_visit_job")
 		span.SetAttributes(attribute.String("Url", job.URL))
@@ -106,6 +106,8 @@ func VisitWorker(
 		}
 
 		if !job.HasReservation {
+			jlogger.Debug("Job has no reservation.")
+
 			retryAfter, err := limiter(job.URL)
 			if err != nil {
 				slog.Error("Error while checking rate limiter.", "error", err)
