@@ -18,6 +18,8 @@ import (
 type EnqueueFn func(*Collector, string) error // Enqueues a scrape.
 type CollectFn func(*Collector, *Response)    // Collects the result of a scrape.
 
+type RobotCheckFn func(agent string, u *url.URL) (bool, error)
+
 var urlParser = whatwgUrl.NewParser(whatwgUrl.WithPercentEncodeSinglePercentSign())
 
 // The key type is unexported to prevent collisions with context keys defined in
@@ -32,6 +34,7 @@ func NewCollector(
 	client *http.Client,
 	run uint32,
 	domains []string,
+	robots RobotCheckFn,
 	enqueue EnqueueFn,
 	collect CollectFn,
 ) *Collector {
@@ -48,10 +51,13 @@ func NewCollector(
 		enqueueFn: enqueue,
 		collectFn: collect,
 
-		MaxBodySize:     10 * 1024 * 1024,
-		backend:         backend,
+		MaxBodySize: 10 * 1024 * 1024,
+		backend:     backend,
+
+		robotsFn:        robots,
 		IgnoreRobotsTxt: true,
-		Context:         context.Background(),
+
+		Context: context.Background(),
 	}
 
 	// Unelegant, but this can be improved later.
@@ -105,6 +111,8 @@ type Collector struct {
 	// 0 means unlimited.
 	// The default value for MaxBodySize is 10MB (10 * 1024 * 1024 bytes).
 	MaxBodySize int
+
+	robotsFn RobotCheckFn
 
 	// IgnoreRobotsTxt allows the Collector to ignore any restrictions set by
 	// the target host's robots.txt file.  See http://www.robotstxt.org/ for more
@@ -257,24 +265,16 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 	if c.MaxDepth > 0 && c.MaxDepth < depth {
 		return ErrMaxDepth
 	}
-	if ok := c.IsDomainAllowed(parsedURL.Hostname()); !ok {
-		return ErrForbiddenDomain
+	if ok, err := c.IsVisitAllowed(parsedURL.Hostname()); !ok || err != nil {
+		return err
 	}
-
-	// TODO: Use again, once we implement robots support.
-	// if method != "HEAD" && !c.IgnoreRobotsTxt {
-	// 	if err := c.checkRobots(parsedURL); err != nil {
-	// 		return err
-	// 	}
-	// }
-
 	return nil
 }
 
 func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
-		if ok := c.IsDomainAllowed(req.URL.Hostname()); !ok {
-			return fmt.Errorf("Not following redirect to %q: %w", req.URL, ErrForbiddenDomain)
+		if ok, err := c.IsVisitAllowed(req.URL.Hostname()); !ok {
+			return fmt.Errorf("Not following redirect to %q: %w", req.URL, err)
 		}
 
 		// Honor golangs default of maximum of 10 redirects
@@ -292,21 +292,43 @@ func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Requ
 		return nil
 	}
 }
-func (c *Collector) IsDomainAllowed(in string) bool {
-	if c.AllowedDomains == nil || len(c.AllowedDomains) == 0 {
+func (c *Collector) IsVisitAllowed(in string) (bool, error) {
+	p, _ := url.Parse(in)
+
+	checkDomain := func(u *url.URL) bool {
+		// Ensure there is at least one domain in the allowlist. Do not treat an
+		// empty allowlist as a wildcard.
+		if c.AllowedDomains == nil || len(c.AllowedDomains) == 0 {
+			return false
+		}
+
+		naked := strings.TrimPrefix(p.Hostname(), "www.")
+		www := fmt.Sprintf("www.%s", naked)
+
+		for _, allowed := range c.AllowedDomains {
+			if allowed == naked {
+				return true
+			}
+			if allowed == www {
+				return true
+			}
+		}
 		return false
 	}
 
-	naked := strings.TrimPrefix(in, "www.")
-	www := fmt.Sprintf("www.%s", naked)
-
-	for _, allowed := range c.AllowedDomains {
-		if allowed == naked {
-			return true
-		}
-		if allowed == www {
-			return true
-		}
+	if !checkDomain(p) {
+		return false, ErrForbiddenDomain
 	}
-	return false
+
+	if c.IgnoreRobotsTxt {
+		return true, nil
+	}
+	ok, err := c.robotsFn(c.UserAgent, p)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, ErrRobotsTxtBlocked
+	}
+	return true, nil
 }

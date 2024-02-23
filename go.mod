@@ -9,7 +9,6 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/go-redis/redis_rate/v10 v10.0.1
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/mux v1.8.1
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/kennygrant/sanitize v1.2.4
@@ -21,7 +20,7 @@ require (
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d
 	github.com/stretchr/testify v1.8.4
-	go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux v0.48.0
+	github.com/temoto/robotstxt v1.1.2
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.48.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.48.0
 	go.opentelemetry.io/otel v1.23.1

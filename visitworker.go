@@ -15,7 +15,14 @@ import (
 
 // CreateVisitWorkersPool initizalizes a worker pool and fills it with a number
 // of VisitWorker.
-func CreateVisitWorkersPool(ctx context.Context, num int, cm *collector.Manager, httpClient *http.Client, limiter LimiterAllowFn) *sync.WaitGroup {
+func CreateVisitWorkersPool(
+	ctx context.Context,
+	num int,
+	cm *collector.Manager,
+	httpClient *http.Client,
+	limiter LimiterAllowFn,
+	robotsCheck collector.RobotCheckFn,
+) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
 	slog.Debug("Starting visit workers...", "num", num)
@@ -23,7 +30,7 @@ func CreateVisitWorkersPool(ctx context.Context, num int, cm *collector.Manager,
 		wg.Add(1)
 
 		go func(id int) {
-			if err := VisitWorker(ctx, id, cm, httpClient, limiter); err != nil {
+			if err := VisitWorker(ctx, id, cm, httpClient, limiter, robotsCheck); err != nil {
 				slog.Error("Visit worker exited with error.", "worker.id", id, "error", err)
 			} else {
 				slog.Debug("Visit worker exited cleanly.", "worker.id", id)
@@ -35,7 +42,14 @@ func CreateVisitWorkersPool(ctx context.Context, num int, cm *collector.Manager,
 }
 
 // VisitWorker fetches a resource from a given URL, consumed from the work queue.
-func VisitWorker(ctx context.Context, id int, cm *collector.Manager, httpClient *http.Client, limiter LimiterAllowFn) error {
+func VisitWorker(
+	ctx context.Context,
+	id int,
+	cm *collector.Manager,
+	httpClient *http.Client,
+	limiter LimiterAllowFn,
+	robotsCheck collector.RobotCheckFn,
+) error {
 	wlogger := slog.With("worker.id", id)
 
 	for {
@@ -79,6 +93,7 @@ func VisitWorker(ctx context.Context, id int, cm *collector.Manager, httpClient 
 				httpClient,
 				job.CollectorConfig.Run,
 				job.CollectorConfig.AllowedDomains,
+				robotsCheck,
 				getEnqueueFn(ctx, job.WebhookConfig),
 				getCollectFn(ctx, job.WebhookConfig),
 			)

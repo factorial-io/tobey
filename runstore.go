@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// RunStore stores metadata about runs.
 type RunStore interface {
 	HasSeen(context.Context, uint32, string) bool
 	Seen(context.Context, uint32, string)
@@ -24,6 +25,9 @@ func CreateRunStore(redis *redis.Client) RunStore {
 
 type MemoryRunStore struct {
 	sync.RWMutex
+
+	// data maps a run to a list of URLs that have been seen. Clear must be used
+	// to evict old runs. This is not done automatically.
 	data map[uint32][]string
 }
 

@@ -123,7 +123,9 @@ func main() {
 
 	cm := collector.NewManager(MaxParallelRuns)
 
-	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter)
+	robots := NewRobots(httpClient)
+
+	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter, robots.Check)
 
 	router := http.NewServeMux()
 	// TODO: Use otel's http mux.
@@ -200,6 +202,7 @@ func main() {
 			httpClient,
 			run,
 			allowedDomains,
+			robots.Check,
 			// Need to use WithoutCancel, to avoid the crawl run to be cancelled once
 			// the HTTP request is done. The crawl run should proceed to be handled.
 			getEnqueueFn(context.WithoutCancel(rctx), req.WebhookConfig),

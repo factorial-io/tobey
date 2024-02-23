@@ -16,7 +16,7 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 		// ensuring there will only (mostly) be one result for a page. There is a slight
 		// chance that two processes enter this function with the same run and url,
 		// before one of them is finished.
-		if !c.IsDomainAllowed(GetHostFromURL(url)) {
+		if ok, _ := c.IsVisitAllowed(url); !ok {
 			// slog.Debug("Not enqueuing visit, domain not allowed.", "run", c.Run, "url", url)
 			return nil
 		}
