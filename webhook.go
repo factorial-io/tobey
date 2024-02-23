@@ -21,6 +21,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
+type WebhookConfig struct {
+	Endpoint string      `json:"endpoint"`
+	Data     interface{} `json:"data"` // Accept arbitrary data here.
+}
+
 // Have a Package to handle metadata.
 type WebhookPayloadPackage struct {
 	ctx     context.Context

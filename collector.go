@@ -6,6 +6,14 @@ import (
 	"tobey/internal/collector"
 )
 
+// CollectorConfig is a serializable configuration that is passed to the
+// Collector when enqueuing a URL. It can be used to initialize a new Collector
+// later on.
+type CollectorConfig struct {
+	Run            uint32
+	AllowedDomains []string
+}
+
 // getEnqueueFn returns the enqueue function, that will enqueue a single URL to
 // be crawled. The enqueue function is called whenever a new URL is discovered
 // by that Collector, i.e. by looking at all links in a crawled page HTML.
