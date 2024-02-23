@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 	"tobey/helper"
 
@@ -50,6 +51,23 @@ type ProgressUpdateMessage struct {
 type ProgressManager struct {
 	api_url string
 	client  *http.Client
+}
+
+func MustStartProgressFromEnv(ctx context.Context) Progress {
+	if dsn := os.Getenv("TOBEY_PROGRESS_DSN"); dsn != "" {
+		slog.Info("Using progress service for updates.", "dsn", dsn)
+
+		queue := make(chan ProgressUpdateMessagePackage, helper.GetEnvInt("TORBEY_PROGRESS_PAYLOAD_LIMIT", 100))
+		progress_manager := NewProgressManager()
+		progress_manager.Start(ctx, queue)
+
+		return &BaseProgress{
+			queue,
+		}
+	} else {
+		slog.Debug("Not sharing progress updates.")
+		return &NoopProgress{}
+	}
 }
 
 func NewProgressManager() *ProgressManager {
@@ -212,14 +230,4 @@ func (p *BaseProgress) Update(update_message ProgressUpdateMessagePackage) error
 func (p *BaseProgress) Close() error {
 	close(p.progressQueue)
 	return nil
-}
-
-func MustStartProgressFromEnv(ctx context.Context) Progress {
-	queue := make(chan ProgressUpdateMessagePackage, helper.GetEnvInt("TORBEY_PROGRESS_PAYLOAD_LIMIT", 100))
-	progress_manager := NewProgressManager()
-	progress_manager.Start(ctx, queue)
-
-	return &BaseProgress{
-		queue,
-	}
 }
