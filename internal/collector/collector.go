@@ -54,8 +54,7 @@ func NewCollector(
 		MaxBodySize: 10 * 1024 * 1024,
 		backend:     backend,
 
-		robotsFn:        robots,
-		IgnoreRobotsTxt: true,
+		robotsCheckFn: robots,
 
 		Context: context.Background(),
 	}
@@ -112,12 +111,8 @@ type Collector struct {
 	// The default value for MaxBodySize is 10MB (10 * 1024 * 1024 bytes).
 	MaxBodySize int
 
-	robotsFn RobotCheckFn
-
-	// IgnoreRobotsTxt allows the Collector to ignore any restrictions set by
-	// the target host's robots.txt file.  See http://www.robotstxt.org/ for more
-	// information.
-	IgnoreRobotsTxt bool
+	// RobotsFn is the function to check if a request is allowed by robots.txt.
+	robotsCheckFn RobotCheckFn
 
 	// ParseHTTPErrorResponse allows parsing HTTP responses with non 2xx status codes.
 	// By default, Colly parses only successful HTTP responses. Set ParseHTTPErrorResponse
@@ -320,10 +315,7 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 		return false, ErrForbiddenDomain
 	}
 
-	if c.IgnoreRobotsTxt {
-		return true, nil
-	}
-	ok, err := c.robotsFn(c.UserAgent, p)
+	ok, err := c.robotsCheckFn(c.UserAgent, p)
 	if err != nil {
 		return false, err
 	}
