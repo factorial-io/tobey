@@ -127,17 +127,17 @@ func main() {
 
 	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter, robots)
 
-	router := http.NewServeMux()
+	apirouter := http.NewServeMux()
 	// TODO: Use otel's http mux.
 
-	router.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+	apirouter.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		r.Body.Close()
 
 		fmt.Fprint(w, "Hello from Tobey.")
 	})
 
-	router.HandleFunc("POST /", func(w http.ResponseWriter, r *http.Request) {
+	apirouter.HandleFunc("POST /", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := ioutil.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -242,19 +242,19 @@ func main() {
 		json.NewEncoder(w).Encode(result)
 	})
 
-	slog.Debug("Starting HTTP server...", "port", ListenPort)
-
-	server := &http.Server{
+	slog.Info("Starting HTTP API server...", "port", ListenPort)
+	apiserver := &http.Server{
 		Addr:    fmt.Sprintf(":%d", ListenPort),
-		Handler: router,
+		Handler: apirouter,
 	}
 	go func() {
-		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		if err := apiserver.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("HTTP server error.", "error", err)
 		}
-		slog.Info("Stopped serving new HTTP connections.")
+		slog.Info("Stopped serving new API HTTP connections.")
 	}()
 
+	slog.Info("Starting HTTP Healthcheck server...", "port", HealthcheckListenPort)
 	hcrouter := http.NewServeMux()
 
 	// Supports HEAD requests as well.
@@ -275,7 +275,7 @@ func main() {
 		if err := hcserver.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("HTTP server error.", "error", err)
 		}
-		slog.Info("Stopped serving new HTTP connections.")
+		slog.Info("Stopped serving new Healthcheck HTTP connections.")
 	}()
 
 	<-ctx.Done()
@@ -287,7 +287,8 @@ func main() {
 	visitWorkers.Wait()
 	slog.Debug("All visit workers stopped.")
 
-	server.Shutdown(context.Background())
+	apiserver.Shutdown(context.Background())
+	hcserver.Shutdown(context.Background())
 
 	if workQueue != nil {
 		workQueue.Close()
