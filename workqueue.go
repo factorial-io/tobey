@@ -129,7 +129,7 @@ func (wq *MemoryWorkQueue) DelayVisit(ctx context.Context, delay time.Duration, 
 			Carrier: carrier,
 			Message: msg,
 		}
-		slog.Debug("Delivering delayed message", "msg.id", msg.ID, "delay", delay.Seconds())
+		slog.Debug("Delayed message accepted.", "msg.id", msg.ID, "delay", delay.Seconds())
 	}()
 	return nil
 }
@@ -141,10 +141,14 @@ func (wq *MemoryWorkQueue) ConsumeVisit(ctx context.Context) (<-chan *VisitJob, 
 	go func() {
 		select {
 		case <-ctx.Done():
+			slog.Debug("Consume context cancelled, closing channels.")
+
 			close(reschan)
 			close(errchan)
 			return
 		case p := <-wq.pkgs:
+			slog.Debug("Received message, forwarding to results channel.", "msg.id", p.Message.ID)
+
 			// Initializes the context for the job. Than extract the tracing
 			// information from the carrier into the job's context.
 			jctx := context.Background()
@@ -154,6 +158,7 @@ func (wq *MemoryWorkQueue) ConsumeVisit(ctx context.Context) (<-chan *VisitJob, 
 				VisitMessage: p.Message,
 				Context:      jctx,
 			}
+			slog.Debug("Forwarded message to results channel.", "msg.id", p.Message.ID)
 		}
 	}()
 

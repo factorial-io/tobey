@@ -56,11 +56,13 @@ func VisitWorker(
 	for {
 		var job *VisitJob
 
+		wlogger.Debug("Waiting for job...")
 		jobs, errs := workQueue.ConsumeVisit(ctx)
 
 		select {
 		// This allows to stop a worker gracefully.
 		case <-ctx.Done():
+			wlogger.Debug("Context cancelled, stopping worker.")
 			return nil
 		case err := <-errs:
 			_, span := tracer.Start(ctx, "handle.visit.queue.worker.error")
@@ -73,6 +75,7 @@ func VisitWorker(
 			job = j
 		}
 		jlogger := wlogger.With("run", job.Run, "url", job.URL, "job.id", job.ID)
+		jlogger.Debug("Received job.")
 
 		jctx, span := tracer.Start(job.Context, "process_visit_job")
 		span.SetAttributes(attribute.String("Url", job.URL))
@@ -126,9 +129,8 @@ func VisitWorker(
 
 					// TODO: Nack and requeue msg, so it isn't lost.
 					span.End()
-					return err
+					continue
 				}
-
 				continue
 			}
 		}
@@ -168,6 +170,5 @@ func VisitWorker(
 				job.URL,
 			},
 		})
-
 	}
 }
