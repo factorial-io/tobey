@@ -294,6 +294,7 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 		// Ensure there is at least one domain in the allowlist. Do not treat an
 		// empty allowlist as a wildcard.
 		if c.AllowedDomains == nil || len(c.AllowedDomains) == 0 {
+			slog.Error("No domains have been added to the allowlist.", "run", c.Run)
 			return false
 		}
 
