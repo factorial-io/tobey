@@ -1,6 +1,6 @@
 .PHONY: dev
 dev:
-	go run .
+	TOBEY_DEBUG=true go run .
 
 .PHONY: clean
 clean:
