@@ -68,11 +68,11 @@ func main() {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 
-	//todo add opentelemetry logging
-	log.Print("Tobey starting...")
+	// This sets up the main process context.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 
 	// Setup Opentelemetry
+	//todo add opentelemetry logging
 	shutdown, erro := setupOTelSDK(ctx)
 	if erro != nil {
 		panic("ahh")
