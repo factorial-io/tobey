@@ -1,30 +1,27 @@
-# Tobey, Website Standards URL Spider & Fetcher Service
+# Tobey, a robust and scalable Crawler
 
-A service that exposes a simple HTTP API. Given a root URL to a site will spider
-the site for more URLs. Given an URL to a resource on the web, can be i.e. a web
-page or a XML sitemap, will fetch and return it's contents.
+The service is entirely stateless and receives requests to crawl a website via a
+simple HTTP API. Once a resources has been downloaded, forwards the results to a
+webhook, if one is configured.
+
+In its simplest form the service just receives a root URL of the website to be
+crawled.
+
+The service vertical scaling can be controlled by the number of workers used for
+crawling. The service is horizontally scalable by adding more instances on nodes
+in a cluster. In horizontal scaling, any instances can receive crawl requests,
+for easy load balancing. The instances will coordinate with each other via a
+RabbitMQ.
 
 ## Features
 
-- Combines spidering and crawling as there is overlap functionality wise, and it
-  makes sense to use the same code infra for that.
-- Doesn't need any client libraries to connect to it, it's API is straight-forward and simple. 
-- Batteries included, doesn't depend on external resources or scheduling.
-- Honors robots.txt
-- Detects and uses a sitemap automatically, to enhance spidering quality.
-
-## Implementation Details
-
-The spider is implemented on to of the colly, a crawling framework for Go. We've
-chose this framework, as it allows us to outgrow it gradually. In the current
-version of tobey, we use our own implementation for queuing, that doesn't
-require modifications to the original framework code. However as we have to provide
-our own cache storage implementation we forked the framework to `internal`.
-
-A future version will support JavaScript-rendered fetch alongside plain fetch.
-
-Scheduling of re-crawls isn't (yet) part of the implementation, as we're still
-finding the right place (inside/outside) for this functionality.
+- No configuration required.
+- Simple HTTP API to submit crawl requests.
+- Scalable, horizontally and vertically.
+- Stateless, no data store required, as nothing is persisted.
+- No further service dependencies, when operating as a single instance.
+- Detects and uses a sitemap and robots.txt automatically (can be disabled).
+- Per host rate limiting, even when multiple instances are used.
 
 ## Quickstart
 
@@ -32,7 +29,7 @@ To quickly try out the service, ensure you have Go installed. And run the follow
 
 ```sh
 # In the first terminal start the service.
-make dev
+go run . 
 
 # In another terminal, submit a crawl request.
 curl -X POST http://127.0.0.1:8080 \
@@ -40,24 +37,36 @@ curl -X POST http://127.0.0.1:8080 \
      -d '{"url": "https://www.factorial.io/"}'
 ```
 
+## Configuration
+
+The service is configured via environment variables. The following environment
+variables are available:
+
+| Variable Name  | Default Value  | Supported Values | Description                      |
+|----------------|----------------|------------------|----------------------------------|
+| `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
+| `TOBEY_RABBITMQ_DSN` | empty | i.e. `amqp://guest:guest@rabbitmq:5672/` | DSN to reach a RabbitMQ instance. Only needed when operating multiple instances. |
+| `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
+| `TOBEY_PROGRESS_DSN` | empty | i.e. `http://localhost:9020`  | DSN where to reach a progress service. When configured tobey will send progress updates there. |
+
 ## Submitting a Basic Crawl Request
 
 Tobey currently has a single API endpoint to receive crawl requests: `/`.
 
 In its most simple form you submit a single URL that is used as the entry
-point to for the spidering process. This will discover further URLs to crawl
-automatically by looking at the sitemap - if one is available - and by
+point to for the crawling process. This will discover further resource URLs to
+crawl automatically by looking at the sitemap - if one is available - and by
 extracting links for content of the webpages.
 
 ```jsonc
 {
-  "url": "https://factorial.io"
+  "url": "https://example.org"
 }
 ```
 
-### Constraining Spidering
+### Constraining Crawling
 
-When spidering a whole website tobey will only download resources from the
+When crawling a whole website tobey will only download resources from the
 host as provided in the URL, this is so we don't end up downloading the whole
 internet. You may additionally provide host domains that are an alias to the
 URLs domain that we will download from.
@@ -98,7 +107,7 @@ dispatched.
 ### Skipping auto discovery of well known resources
 
 Tobey will by default automatically discover and use a sitemap if one is
-available to enhance the spidering process. The same applies to robots.txt.
+available to enhance the crawling process. The same applies to robots.txt.
 If this is discovered it will be used to check if a resource is allowed to be
 downloaded.
 
@@ -164,7 +173,7 @@ using the `urls` key:
 
 [Webhooks](https://mailchimp.com/en/marketing-glossary/webhook) are a technique to notify other services about a result, once its ready.
 
-Once the spider has results for a resource, it will deliver them to a webhook,
+Once the crawlwer has results for a resource, it will deliver them to a webhook,
 if one is configured via the `webhook` key. Using the `data` key you can pass
 through additional information to the target of the webhook.
 

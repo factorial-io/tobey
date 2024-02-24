@@ -26,15 +26,9 @@ import (
 )
 
 var (
-	// Debug enables or disables debug mode.
+	// Debug enables or disables debug mode, this can be controlled
+	// via the environment variable TOBEY_DEBUG.
 	Debug = false
-
-	// NumVisitWorkers hard codes the number of workers we start at startup.
-	NumVisitWorkers int = 10
-
-	// MaxParallelRuns specifies how many collectors we keep in memory, and thus
-	// limits the maximum number of parrallel runs that we can perform.
-	MaxParallelRuns int = 128
 )
 
 const (
@@ -43,6 +37,13 @@ const (
 
 	// The port where to ping for healtcheck.
 	HealthcheckListenPort int = 10241
+
+	// NumVisitWorkers hard codes the number of workers we start at startup.
+	NumVisitWorkers int = 10
+
+	// MaxParallelRuns specifies how many collectors we keep in memory, and thus
+	// limits the maximum number of parrallel runs that we can perform.
+	MaxParallelRuns int = 128
 )
 
 var (
