@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/signal"
 	"time"
-	"tobey/helper"
 	"tobey/internal/collector"
 
 	"github.com/google/uuid"
@@ -106,7 +105,7 @@ func main() {
 	}
 
 	// Create Webhook Handling
-	webhookQueue := make(chan WebhookPayloadPackage, helper.GetEnvInt("TORBEY_WEBHOOK_PAYLOAD_LIMIT", 100))
+	webhookQueue := make(chan WebhookPayloadPackage, GetEnvInt("TORBEY_WEBHOOK_PAYLOAD_LIMIT", 100))
 	webhook := NewProcessWebhooksManager()
 	webhook.Start(ctx, webhookQueue)
 

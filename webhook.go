@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"tobey/helper"
 	"tobey/internal/collector"
 
 	"github.com/cenkalti/backoff/v4"
@@ -184,7 +183,7 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data WebhookPa
 func (w *ProcessWebhooksManager) Start(ctx context.Context, webhookQueue chan WebhookPayloadPackage) {
 	//todo add recovery
 	go func(ctx context.Context, webhookQueue chan WebhookPayloadPackage) {
-		count := helper.GetEnvInt("TOBEY_WEBHOOK_WORKER", 4)
+		count := GetEnvInt("TOBEY_WEBHOOK_WORKER", 4)
 		for i := 0; i < count; i++ {
 			go w.startHandle(ctx, webhookQueue, i)
 		}

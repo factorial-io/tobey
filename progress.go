@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"time"
-	"tobey/helper"
 
 	"github.com/cenkalti/backoff/v4"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -58,7 +57,7 @@ func MustStartProgressFromEnv(ctx context.Context) Progress {
 	if dsn := os.Getenv("TOBEY_PROGRESS_DSN"); dsn != "" {
 		slog.Info("Using progress service for updates.", "dsn", dsn)
 
-		queue := make(chan ProgressUpdateMessagePackage, helper.GetEnvInt("TORBEY_PROGRESS_PAYLOAD_LIMIT", 100))
+		queue := make(chan ProgressUpdateMessagePackage, GetEnvInt("TORBEY_PROGRESS_PAYLOAD_LIMIT", 100))
 		progress_manager := NewProgressManager()
 		progress_manager.Start(ctx, queue)
 
@@ -73,7 +72,7 @@ func MustStartProgressFromEnv(ctx context.Context) Progress {
 
 func NewProgressManager() *ProgressManager {
 	return &ProgressManager{
-		helper.GetEnvString("TOBEY_PROGRESS_DSN", "http://progress:9020"),
+		GetEnvString("TOBEY_PROGRESS_DSN", "http://progress:9020"),
 		&http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
 	}
 }
@@ -201,7 +200,7 @@ func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUp
 func (w *ProgressManager) Start(ctx context.Context, progressQueue chan ProgressUpdateMessagePackage) {
 	//todo add recovery
 	go func(ctx context.Context, progressQueue chan ProgressUpdateMessagePackage) {
-		count := helper.GetEnvInt("TOBEY_PROGRESS_WORKER", 4)
+		count := GetEnvInt("TOBEY_PROGRESS_WORKER", 4)
 		for i := 0; i < count; i++ {
 			go w.startHandle(ctx, progressQueue, i)
 		}

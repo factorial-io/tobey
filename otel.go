@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-	"tobey/helper"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -67,7 +66,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	prop := newPropagator()
 	otel.SetTextMapPropagator(prop)
 
-	if helper.GetEnvString("TOBEY_ENABLE_TRACING", "false") == "true" {
+	if GetEnvString("TOBEY_ENABLE_TRACING", "false") == "true" {
 		// Set up trace provider.
 		tracerProvider, erro := newTraceProvider(ctx)
 		if erro != nil {
@@ -79,7 +78,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		otel.SetTracerProvider(tracerProvider)
 	}
 
-	if helper.GetEnvString("TOBEY_ENABLE_METRICS", "false") == "true" {
+	if GetEnvString("TOBEY_ENABLE_METRICS", "false") == "true" {
 		// Set up meter provider.
 		meterProvider, erra := newMeterProvider(ctx)
 		if erra != nil {
@@ -107,7 +106,7 @@ func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
 
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceName(helper.GetEnvString("OTEL_SERVICE_NAME", "tobey")),
+			semconv.ServiceName(GetEnvString("OTEL_SERVICE_NAME", "tobey")),
 		),
 	)
 	if err != nil {
