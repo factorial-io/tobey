@@ -48,6 +48,10 @@ const (
 
 	// CachePath is the absolute or relative path (to the working directory) where we store the cache.
 	CachePath = "./cache"
+
+	// UserAgent to be used with all HTTP request. The value is set to a
+	// backwards compatible one. Some sites allowwlist this specific user agent.
+	UserAgent = "WebsiteStandardsBot/1.0"
 )
 
 var (
@@ -110,7 +114,7 @@ func main() {
 
 	progress = MustStartProgressFromEnv(ctx)
 	limiter := CreateLimiter(ctx, redisconn, 1)
-	httpClient := CreateHTTPClient()
+	httpClient := CreateCrawlerHTTPClient()
 	cm := collector.NewManager(MaxParallelRuns)
 	robots := NewRobots(httpClient)
 
@@ -201,6 +205,9 @@ func main() {
 			getEnqueueFn(context.WithoutCancel(rctx), req.WebhookConfig),
 			getCollectFn(context.WithoutCancel(rctx), req.WebhookConfig),
 		)
+
+		// Ensure CrawlerHTTPClient's UA and Collector's UA are the same.
+		c.UserAgent = UserAgent
 
 		// Also provide local workers access to the collector, through the
 		// collectors manager.

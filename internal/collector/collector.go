@@ -47,10 +47,6 @@ func NewCollector(
 		AllowedDomains: domains,
 		Run:            run,
 
-		// Kept here for backwards compatibility. Some sites
-		// allowwlist this specific user agent.
-		UserAgent: "WebsiteStandardsBot/1.0",
-
 		enqueueFn: enqueue,
 		collectFn: collect,
 

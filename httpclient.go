@@ -12,12 +12,13 @@ import (
 	"github.com/peterbourgon/diskv"
 )
 
-// CreateHTTPClient creates a new HTTP client configured and optimized for use
+// CreateCrawlerHTTPClient creates a new HTTP client configured and optimized for use
 // in crawling actions.
-func CreateHTTPClient() *http.Client {
+func CreateCrawlerHTTPClient() *http.Client {
 	if SkipCache {
 		return &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
+			Transport: &UserAgentTransport{},
 		}
 	}
 	tempdir := os.TempDir()
@@ -36,10 +37,21 @@ func CreateHTTPClient() *http.Client {
 		"cache.size", cachedisk.CacheSizeMax,
 	)
 
-	t := httpcache.NewTransport(diskcache.NewWithDiskv(cachedisk))
-
 	return &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: t,
+		Timeout: 10 * time.Second,
+		Transport: &UserAgentTransport{
+			Transport: httpcache.NewTransport(diskcache.NewWithDiskv(cachedisk)),
+		},
 	}
+}
+
+// UserAgentTransport is a simple http.RoundTripper that adds a User-Agent
+// header to each request.
+type UserAgentTransport struct {
+	Transport http.RoundTripper
+}
+
+func (t *UserAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Add("User-Agent", UserAgent)
+	return t.Transport.RoundTrip(req)
 }

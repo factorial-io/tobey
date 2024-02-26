@@ -65,8 +65,9 @@ func (r *Robots) get(u *url.URL) (*robotstxt.RobotsData, error) {
 		return robot, nil
 	}
 
-	slog.Debug("Fetching missing robots.txt file...", "host", u.Host)
-	res, err := r.client.Get(u.Scheme + "://" + u.Host + "/robots.txt")
+	rurl := u.Scheme + "://" + u.Host + "/robots.txt"
+	slog.Debug("Fetching missing robots.txt file...", "url", rurl, "host", u.Host)
+	res, err := r.client.Get(rurl)
 	if err != nil {
 		return robot, err
 	}

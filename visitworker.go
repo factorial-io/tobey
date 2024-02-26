@@ -106,6 +106,9 @@ func VisitWorker(
 				getEnqueueFn(ctx, job.WebhookConfig),
 				getCollectFn(ctx, job.WebhookConfig),
 			)
+
+			// Ensure CrawlerHTTPClient's UA and Collector's UA are the same.
+			c.UserAgent = UserAgent
 		}
 
 		if !job.HasReservation {
