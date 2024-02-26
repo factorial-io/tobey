@@ -66,7 +66,7 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 // WebhookConfig, that we have received via the queued message.
 func getCollectFn(ctx context.Context, webhookConfig *WebhookConfig) collector.CollectFn {
 	return func(c *collector.Collector, res *collector.Response) {
-		slog.Info(
+		slog.Debug(
 			"Collect suceeded.",
 			"run", c.Run,
 			"url", res.Request.URL,
