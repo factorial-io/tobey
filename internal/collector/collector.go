@@ -46,7 +46,10 @@ func NewCollector(
 	c := &Collector{
 		AllowedDomains: domains,
 		Run:            run,
-		UserAgent:      fmt.Sprintf("Website Standards Bot/2.0"),
+
+		// Kept here for backwards compatibility. Some sites
+		// allowwlist this specific user agent.
+		UserAgent: "WebsiteStandardsBot/1.0",
 
 		enqueueFn: enqueue,
 		collectFn: collect,
