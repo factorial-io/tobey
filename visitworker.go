@@ -115,13 +115,15 @@ func VisitWorker(
 		if !job.HasReservation {
 			jlogger.Debug("Job has no reservation.")
 
-			retryAfter, err := limiter(job.URL)
+			nowReserved, retryAfter, err := limiter(job.URL)
 			if err != nil {
 				slog.Error("Error while checking rate limiter.", "error", err)
 				span.End()
 				return err
 			}
-			job.HasReservation = true // Skip limiter next time.
+			// Some limiters will always perform a reservation, others will ask
+			// you to retry and reserve again later.
+			job.HasReservation = nowReserved // Skip limiter next time.
 
 			if retryAfter > 0 {
 				jlogger.Debug("Delaying visit...", "delay", retryAfter)
