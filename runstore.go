@@ -11,7 +11,7 @@ import (
 // RunStore stores metadata about runs.
 type RunStore interface {
 	HasSeen(context.Context, uint32, string) bool
-	Seen(context.Context, uint32, string)
+	MarkSeen(context.Context, uint32, string)
 	Clear(context.Context, uint32)
 }
 
@@ -46,7 +46,7 @@ func (s *MemoryRunStore) HasSeen(ctx context.Context, run uint32, url string) bo
 	return false
 }
 
-func (s *MemoryRunStore) Seen(ctx context.Context, run uint32, url string) {
+func (s *MemoryRunStore) MarkSeen(ctx context.Context, run uint32, url string) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -72,7 +72,7 @@ func (s *RedisRunStore) HasSeen(ctx context.Context, run uint32, url string) boo
 	return reply.Val()
 }
 
-func (s *RedisRunStore) Seen(ctx context.Context, run uint32, url string) {
+func (s *RedisRunStore) MarkSeen(ctx context.Context, run uint32, url string) {
 	s.conn.SAdd(ctx, fmt.Sprintf("%d:seen", run), url)
 }
 

@@ -53,7 +53,7 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 			webhookConfig,
 		)
 		if err == nil {
-			runStore.Seen(ctx, c.Run, url)
+			runStore.MarkSeen(ctx, c.Run, url)
 		} else {
 			slog.Error("Error enqueuing visit.", "run", c.Run, "url", url, "error", err)
 		}
