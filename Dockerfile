@@ -1,4 +1,4 @@
-FROM golang:1.22
+FROM golang:1.22 AS builder
 
 WORKDIR /build
 
@@ -9,6 +9,10 @@ COPY *.go ./
 COPY internal ./internal
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app
+
+FROM alpine:3.12 as runner
+
+COPY --from=builder /app /app
 
 EXPOSE 8080
 
