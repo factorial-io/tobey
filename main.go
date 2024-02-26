@@ -12,13 +12,11 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"time"
 	"tobey/helper"
 	"tobey/internal/collector"
 
 	"github.com/google/uuid"
-	"github.com/peterbourgon/diskv"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
 	_ "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -29,6 +27,9 @@ var (
 	// Debug enables or disables debug mode, this can be controlled
 	// via the environment variable TOBEY_DEBUG.
 	Debug = false
+
+	// SkipCache disables caching when true. It can be controlled via the TOBEY_SKIP_CACHE environment variable.
+	SkipCache = false
 )
 
 const (
@@ -44,6 +45,9 @@ const (
 	// MaxParallelRuns specifies how many collectors we keep in memory, and thus
 	// limits the maximum number of parrallel runs that we can perform.
 	MaxParallelRuns int = 128
+
+	// CachePath is the absolute or relative path (to the working directory) where we store the cache.
+	CachePath = "./cache"
 )
 
 var (
@@ -66,6 +70,11 @@ func main() {
 	if Debug {
 		slog.Info("Debug mode is on.")
 		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
+
+	if os.Getenv("TOBEY_SKIP_CACHE") == "true" {
+		SkipCache = true
+		slog.Info("Skipping cache.")
 	}
 
 	// This sets up the main process context.
@@ -100,30 +109,9 @@ func main() {
 	webhookDispatcher = NewWebhookDispatcher(webhookQueue)
 
 	progress = MustStartProgressFromEnv(ctx)
-
 	limiter := CreateLimiter(ctx, redisconn, 1)
-
-	wd, _ := os.Getwd()
-	cachedir := filepath.Join(wd, "cache")
-
-	tempdir := os.TempDir()
-	slog.Debug("Using temporary directory for atomic file operations.", "dir", tempdir)
-
-	cachedisk := diskv.New(diskv.Options{
-		BasePath:     cachedir,
-		TempDir:      tempdir,
-		CacheSizeMax: 1000 * 1024 * 1024, // 1GB
-	})
-
-	httpClient := NewCachingHTTPClient(cachedisk)
-	slog.Debug(
-		"Initialized caching HTTP client.",
-		"cache.dir", cachedir,
-		"cache.size", cachedisk.CacheSizeMax,
-	)
-
+	httpClient := CreateHTTPClient()
 	cm := collector.NewManager(MaxParallelRuns)
-
 	robots := NewRobots(httpClient)
 
 	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter, robots)

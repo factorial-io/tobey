@@ -45,6 +45,7 @@ variables are available:
 | Variable Name  | Default Value  | Supported Values | Description                      |
 |----------------|----------------|------------------|----------------------------------|
 | `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
+| `TOBEY_SKIP_CACHE` | `false` | `true`, `false`  | Controls caching access. |
 | `TOBEY_RABBITMQ_DSN` | empty | i.e. `amqp://guest:guest@rabbitmq:5672/` | DSN to reach a RabbitMQ instance. Only needed when operating multiple instances. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
 | `TOBEY_PROGRESS_DSN` | empty | i.e. `http://localhost:9020`  | DSN where to reach a progress service. When configured tobey will send progress updates there. |
