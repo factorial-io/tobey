@@ -13,9 +13,7 @@ import (
 // robots.txt file for each host.
 //
 // TODO: Need to handle refreshing and expiry of robot.txt files.
-// TODO: This is not shared across workers, so we might end up fetching the
-//
-//	same robots.txt file multiple times.
+// TODO: This is not shared across workers, so we might end up fetching the same robots.txt file multiple times.
 type Robots struct {
 	sync.RWMutex
 

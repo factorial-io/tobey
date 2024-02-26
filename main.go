@@ -243,6 +243,7 @@ func main() {
 			} else if len(urls) > 0 {
 				sitemaps = urls
 			} else {
+				slog.Debug("No sitemap URLs found in robots.txt.")
 				sitemaps = append(sitemaps, fmt.Sprintf("%s://%s/sitemap.xml", p.Scheme, p.Hostname()))
 			}
 			for _, url := range sitemaps {

@@ -20,6 +20,8 @@ type CollectorConfig struct {
 // by that Collector, i.e. by looking at all links in a crawled page HTML.
 func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.EnqueueFn {
 	return func(c *collector.Collector, url string) error {
+		logger := slog.With("run", c.Run, "url", url)
+
 		// Ensure we never publish a URL twice for a single run. Not only does
 		// this help us not put unnecessary load on the queue, it also helps with
 		// ensuring there will only (mostly) be one result for a page. There is a slight
@@ -36,7 +38,7 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 			return nil
 		}
 
-		slog.Debug("Publishing URL...", "run", c.Run, "url", url)
+		logger.Debug("Publishing URL...")
 		err := workQueue.PublishURL(
 			ctx, // The captured crawl run context.
 			// Passing the run ID to identify the crawl run, so when
@@ -54,8 +56,9 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig) collector.E
 		)
 		if err == nil {
 			runStore.MarkSeen(ctx, c.Run, url)
+			logger.Debug("URL marked as seen.", "total", runStore.CountSeen(ctx, c.Run))
 		} else {
-			slog.Error("Error enqueuing visit.", "run", c.Run, "url", url, "error", err)
+			logger.Error("Error enqueuing visit.", "error", err)
 		}
 		return err
 	}

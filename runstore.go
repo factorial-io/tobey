@@ -10,8 +10,9 @@ import (
 
 // RunStore stores metadata about runs.
 type RunStore interface {
-	HasSeen(context.Context, uint32, string) bool
 	MarkSeen(context.Context, uint32, string)
+	HasSeen(context.Context, uint32, string) bool
+	CountSeen(context.Context, uint32) uint32
 	Clear(context.Context, uint32)
 }
 
@@ -31,6 +32,16 @@ type MemoryRunStore struct {
 	data map[uint32][]string
 }
 
+func (s *MemoryRunStore) MarkSeen(ctx context.Context, run uint32, url string) {
+	s.Lock()
+	defer s.Unlock()
+
+	if _, ok := s.data[run]; !ok {
+		s.data[run] = make([]string, 0)
+	}
+	s.data[run] = append(s.data[run], url)
+}
+
 func (s *MemoryRunStore) HasSeen(ctx context.Context, run uint32, url string) bool {
 	s.RLock()
 	defer s.RUnlock()
@@ -46,14 +57,14 @@ func (s *MemoryRunStore) HasSeen(ctx context.Context, run uint32, url string) bo
 	return false
 }
 
-func (s *MemoryRunStore) MarkSeen(ctx context.Context, run uint32, url string) {
-	s.Lock()
-	defer s.Unlock()
+func (s *MemoryRunStore) CountSeen(ctx context.Context, run uint32) uint32 {
+	s.RLock()
+	defer s.RUnlock()
 
 	if _, ok := s.data[run]; !ok {
-		s.data[run] = make([]string, 0)
+		return 0
 	}
-	s.data[run] = append(s.data[run], url)
+	return uint32(len(s.data[run]))
 }
 
 func (s *MemoryRunStore) Clear(ctx context.Context, run uint32) {
@@ -67,13 +78,18 @@ type RedisRunStore struct {
 	conn *redis.Client
 }
 
+func (s *RedisRunStore) MarkSeen(ctx context.Context, run uint32, url string) {
+	s.conn.SAdd(ctx, fmt.Sprintf("%d:seen", run), url)
+}
+
 func (s *RedisRunStore) HasSeen(ctx context.Context, run uint32, url string) bool {
 	reply := s.conn.SIsMember(ctx, fmt.Sprintf("%d:seen", run), url)
 	return reply.Val()
 }
 
-func (s *RedisRunStore) MarkSeen(ctx context.Context, run uint32, url string) {
-	s.conn.SAdd(ctx, fmt.Sprintf("%d:seen", run), url)
+func (s *RedisRunStore) CountSeen(ctx context.Context, run uint32) uint32 {
+	reply := s.conn.SCard(ctx, fmt.Sprintf("%d:seen", run))
+	return uint32(reply.Val())
 }
 
 func (s *RedisRunStore) Clear(ctx context.Context, run uint32) {
