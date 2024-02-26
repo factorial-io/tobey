@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	// TODO: These constants should follow the naming convention of the other constants.
 	PROGRESS_STATE_UKNOWN                = "unknown"
 	PROGRESS_STATE_QUEUED_FOR_CRAWLING   = "queued_for_crawling"
 	PROGRESS_STATE_CRAWLED               = "crawled"
@@ -49,8 +50,8 @@ type ProgressUpdateMessage struct {
 }
 
 type ProgressManager struct {
-	api_url string
-	client  *http.Client
+	apiURL string
+	client *http.Client
 }
 
 func MustStartProgressFromEnv(ctx context.Context) Progress {
@@ -144,7 +145,7 @@ func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUp
 		return err
 	}
 
-	api_request_url := fmt.Sprintf("%v/%v", w.api_url, PROGRESS_ENDPOINTS_UPDATE)
+	api_request_url := fmt.Sprintf("%v/%v", w.apiURL, PROGRESS_ENDPOINTS_UPDATE)
 	span.SetAttributes(attribute.String("API_URL", api_request_url))
 	span.SetAttributes(attribute.String("url", msg.Url))
 	span.SetAttributes(attribute.String("status_update", msg.Status))
