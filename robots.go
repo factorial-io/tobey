@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sync"
@@ -12,6 +13,9 @@ import (
 // robots.txt file for each host.
 //
 // TODO: Need to handle refreshing and expiry of robot.txt files.
+// TODO: This is not shared across workers, so we might end up fetching the
+//
+//	same robots.txt file multiple times.
 type Robots struct {
 	sync.RWMutex
 
@@ -28,28 +32,7 @@ func NewRobots(client *http.Client) *Robots {
 }
 
 func (r *Robots) Check(agent string, u *url.URL) (bool, error) {
-	var robot *robotstxt.RobotsData
-
-	r.RLock()
-	robot, ok := r.data[u.Host]
-	r.RUnlock()
-
-	if !ok {
-		res, err := r.client.Get(u.Scheme + "://" + u.Host + "/robots.txt")
-		if err != nil {
-			return false, err
-		}
-		defer res.Body.Close()
-
-		robot, err = robotstxt.FromResponse(res)
-		if err != nil {
-			return false, err
-		}
-
-		r.Lock()
-		r.data[u.Host] = robot
-		r.Unlock()
-	}
+	robot, _ := r.get(u)
 
 	group := robot.FindGroup(agent)
 	if group == nil {
@@ -61,4 +44,44 @@ func (r *Robots) Check(agent string, u *url.URL) (bool, error) {
 		eu += "?" + u.Query().Encode()
 	}
 	return group.Test(eu), nil
+}
+
+// Sitemaps returns available sitemap URLs for the given host.
+func (r *Robots) Sitemaps(u *url.URL) ([]string, error) {
+	robot, err := r.get(u)
+	if err != nil {
+		return nil, err
+	}
+	return robot.Sitemaps, nil
+}
+
+// get ensures that the robots.txt file for the given host is fetched.
+func (r *Robots) get(u *url.URL) (*robotstxt.RobotsData, error) {
+	var robot *robotstxt.RobotsData
+
+	r.RLock()
+	robot, ok := r.data[u.Host]
+	r.RUnlock()
+
+	if ok {
+		return robot, nil
+	}
+
+	slog.Debug("Fetching missing robots.txt file...", "host", u.Host)
+	res, err := r.client.Get(u.Scheme + "://" + u.Host + "/robots.txt")
+	if err != nil {
+		return robot, err
+	}
+	defer res.Body.Close()
+
+	robot, err = robotstxt.FromResponse(res)
+	if err != nil {
+		return robot, err
+	}
+
+	r.Lock()
+	r.data[u.Host] = robot
+	r.Unlock()
+
+	return robot, nil
 }

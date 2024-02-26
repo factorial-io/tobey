@@ -232,7 +232,23 @@ func main() {
 
 		if !req.SkipSitemap {
 			p, _ := url.Parse(req.URL)
-			c.Enqueue(fmt.Sprintf("%s://%s/sitemap.xml", p.Scheme, p.Hostname()))
+			sitemaps := make([]string, 0)
+
+			// Discover sitemaps for the host, if the robots.txt has no
+			// information about it, fall back to a well known location.
+			urls, err := robots.Sitemaps(p)
+			if err != nil {
+				slog.Error("Failed to fetch sitemap URLs.", "error", err)
+				sitemaps = append(sitemaps, fmt.Sprintf("%s://%s/sitemap.xml", p.Scheme, p.Hostname()))
+			} else if len(urls) > 0 {
+				sitemaps = urls
+			} else {
+				sitemaps = append(sitemaps, fmt.Sprintf("%s://%s/sitemap.xml", p.Scheme, p.Hostname()))
+			}
+			for _, url := range sitemaps {
+				slog.Debug("Enqueueing sitemap URL for crawling.", "url", url)
+				c.Enqueue(url)
+			}
 		}
 		c.Enqueue(req.URL)
 
