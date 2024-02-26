@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 	"tobey/internal/collector"
 
@@ -29,6 +30,9 @@ var (
 
 	// SkipCache disables caching when true. It can be controlled via the TOBEY_SKIP_CACHE environment variable.
 	SkipCache = false
+
+	UseTracing = false
+	UseMetrics = false
 )
 
 const (
@@ -64,20 +68,33 @@ var (
 	progress          Progress
 )
 
-func main() {
-	slog.Info("Tobey starting...")
-
+func configure() {
 	if os.Getenv("TOBEY_DEBUG") == "true" {
 		Debug = true
 	}
-	if Debug {
-		slog.Info("Debug mode is on.")
-		slog.SetLogLoggerLevel(slog.LevelDebug)
-	}
-
 	if os.Getenv("TOBEY_SKIP_CACHE") == "true" {
 		SkipCache = true
 		slog.Info("Skipping cache.")
+	}
+
+	v := os.Getenv("TOBEY_TELEMETRY")
+	if strings.Contains(v, "tracing") {
+		UseTracing = true
+		slog.Info("Tracing enabled.")
+	}
+	if strings.Contains(v, "metrics") {
+		UseMetrics = true
+		slog.Info("Metrics enabled.")
+	}
+}
+
+func main() {
+	slog.Info("Tobey starting...")
+	configure()
+
+	if Debug {
+		slog.Info("Debug mode is on.")
+		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 
 	// This sets up the main process context.

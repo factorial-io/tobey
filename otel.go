@@ -66,7 +66,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	prop := newPropagator()
 	otel.SetTextMapPropagator(prop)
 
-	if GetEnvString("TOBEY_ENABLE_TRACING", "false") == "true" {
+	if UseTracing {
 		// Set up trace provider.
 		tracerProvider, erro := newTraceProvider(ctx)
 		if erro != nil {
@@ -78,7 +78,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		otel.SetTracerProvider(tracerProvider)
 	}
 
-	if GetEnvString("TOBEY_ENABLE_METRICS", "false") == "true" {
+	if UseMetrics {
 		// Set up meter provider.
 		meterProvider, erra := newMeterProvider(ctx)
 		if erra != nil {
