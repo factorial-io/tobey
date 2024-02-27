@@ -44,7 +44,7 @@ type ProgressUpdateMessagePackage struct {
 type ProgressUpdateMessage struct {
 	Stage  string `json:"stage"`
 	Status string `json:"status"`   // only constanz allowed
-	Run    uint32 `json:"run_uuid"` // uuid of the run
+	Run    string `json:"run_uuid"` // uuid of the run
 	Url    string `json:"url"`
 }
 
@@ -98,7 +98,6 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 			if result_package.ctx == nil {
 				result_package.ctx = context.Background()
 			}
-
 			// Start the tracing
 			ctx_fresh, parentSpan := tracer.Start(result_package.ctx, "handle.progress.queue.worker")
 			result := result_package.payload

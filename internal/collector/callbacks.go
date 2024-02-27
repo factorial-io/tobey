@@ -5,6 +5,7 @@ package collector
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -25,16 +26,16 @@ type ResponseHeadersCallback func(*Response)
 type ResponseCallback func(*Response)
 
 // HTMLCallback is a type alias for OnHTML callback functions
-type HTMLCallback func(*HTMLElement)
+type HTMLCallback func(context.Context, *HTMLElement)
 
 // XMLCallback is a type alias for OnXML callback functions
-type XMLCallback func(*XMLElement)
+type XMLCallback func(context.Context, *XMLElement)
 
 // ErrorCallback is a type alias for OnError callback functions
 type ErrorCallback func(*Response, error)
 
 // ScrapedCallback is a type alias for OnScraped callback functions
-type ScrapedCallback func(*Response)
+type ScrapedCallback func(context.Context, *Response)
 
 type htmlCallbackContainer struct {
 	Selector string
@@ -168,7 +169,7 @@ func (c *Collector) handleOnResponseHeaders(r *Response) {
 	}
 }
 
-func (c *Collector) handleOnHTML(resp *Response) error {
+func (c *Collector) handleOnHTML(ctx context.Context, resp *Response) error {
 	if len(c.htmlCallbacks) == 0 || !strings.Contains(strings.ToLower(resp.Headers.Get("Content-Type")), "html") {
 		return nil
 	}
@@ -192,14 +193,14 @@ func (c *Collector) handleOnHTML(resp *Response) error {
 			for _, n := range s.Nodes {
 				e := NewHTMLElementFromSelectionNode(resp, s, n, i)
 				i++
-				cc.Function(e)
+				cc.Function(ctx, e)
 			}
 		})
 	}
 	return nil
 }
 
-func (c *Collector) handleOnXML(resp *Response) error {
+func (c *Collector) handleOnXML(ctx context.Context, resp *Response) error {
 	if len(c.xmlCallbacks) == 0 {
 		return nil
 	}
@@ -229,7 +230,7 @@ func (c *Collector) handleOnXML(resp *Response) error {
 		for _, cc := range c.xmlCallbacks {
 			for _, n := range htmlquery.Find(doc, cc.Query) {
 				e := NewXMLElementFromHTMLNode(resp, n)
-				cc.Function(e)
+				cc.Function(ctx, e)
 			}
 		}
 	} else if strings.Contains(contentType, "xml") || isXMLFile {
@@ -241,7 +242,7 @@ func (c *Collector) handleOnXML(resp *Response) error {
 		for _, cc := range c.xmlCallbacks {
 			xmlquery.FindEach(doc, cc.Query, func(i int, n *xmlquery.Node) {
 				e := NewXMLElementFromXMLNode(resp, n)
-				cc.Function(e)
+				cc.Function(ctx, e)
 			})
 		}
 	}
@@ -276,8 +277,8 @@ func (c *Collector) handleOnError(response *Response, err error, request *Reques
 	return err
 }
 
-func (c *Collector) handleOnScraped(r *Response) {
+func (c *Collector) handleOnScraped(ctx context.Context, r *Response) {
 	for _, f := range c.scrapedCallbacks {
-		f(r)
+		f(ctx, r)
 	}
 }

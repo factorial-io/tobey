@@ -10,17 +10,17 @@ import (
 
 // RunStore stores metadata about runs.
 type RunStore interface {
-	MarkSeen(context.Context, uint32, string)
-	HasSeen(context.Context, uint32, string) bool
-	CountSeen(context.Context, uint32) uint32
-	Clear(context.Context, uint32)
+	MarkSeen(context.Context, string, string)
+	HasSeen(context.Context, string, string) bool
+	CountSeen(context.Context, string) uint32
+	Clear(context.Context, string)
 }
 
 func CreateRunStore(redis *redis.Client) RunStore {
 	if redis != nil {
 		return &RedisRunStore{conn: redis}
 	} else {
-		return &MemoryRunStore{data: make(map[uint32][]string)}
+		return &MemoryRunStore{data: make(map[string][]string)}
 	}
 }
 
@@ -29,10 +29,10 @@ type MemoryRunStore struct {
 
 	// data maps a run to a list of URLs that have been seen. Clear must be used
 	// to evict old runs. This is not done automatically.
-	data map[uint32][]string
+	data map[string][]string
 }
 
-func (s *MemoryRunStore) MarkSeen(ctx context.Context, run uint32, url string) {
+func (s *MemoryRunStore) MarkSeen(ctx context.Context, run string, url string) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -42,7 +42,7 @@ func (s *MemoryRunStore) MarkSeen(ctx context.Context, run uint32, url string) {
 	s.data[run] = append(s.data[run], url)
 }
 
-func (s *MemoryRunStore) HasSeen(ctx context.Context, run uint32, url string) bool {
+func (s *MemoryRunStore) HasSeen(ctx context.Context, run string, url string) bool {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -57,7 +57,7 @@ func (s *MemoryRunStore) HasSeen(ctx context.Context, run uint32, url string) bo
 	return false
 }
 
-func (s *MemoryRunStore) CountSeen(ctx context.Context, run uint32) uint32 {
+func (s *MemoryRunStore) CountSeen(ctx context.Context, run string) uint32 {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -67,7 +67,7 @@ func (s *MemoryRunStore) CountSeen(ctx context.Context, run uint32) uint32 {
 	return uint32(len(s.data[run]))
 }
 
-func (s *MemoryRunStore) Clear(ctx context.Context, run uint32) {
+func (s *MemoryRunStore) Clear(ctx context.Context, run string) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -78,20 +78,20 @@ type RedisRunStore struct {
 	conn *redis.Client
 }
 
-func (s *RedisRunStore) MarkSeen(ctx context.Context, run uint32, url string) {
+func (s *RedisRunStore) MarkSeen(ctx context.Context, run string, url string) {
 	s.conn.SAdd(ctx, fmt.Sprintf("%d:seen", run), url)
 }
 
-func (s *RedisRunStore) HasSeen(ctx context.Context, run uint32, url string) bool {
+func (s *RedisRunStore) HasSeen(ctx context.Context, run string, url string) bool {
 	reply := s.conn.SIsMember(ctx, fmt.Sprintf("%d:seen", run), url)
 	return reply.Val()
 }
 
-func (s *RedisRunStore) CountSeen(ctx context.Context, run uint32) uint32 {
+func (s *RedisRunStore) CountSeen(ctx context.Context, run string) uint32 {
 	reply := s.conn.SCard(ctx, fmt.Sprintf("%d:seen", run))
 	return uint32(reply.Val())
 }
 
-func (s *RedisRunStore) Clear(ctx context.Context, run uint32) {
+func (s *RedisRunStore) Clear(ctx context.Context, run string) {
 	s.conn.Del(ctx, fmt.Sprintf("%d:seen", run))
 }

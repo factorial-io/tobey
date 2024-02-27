@@ -5,6 +5,7 @@ type APIRequest struct {
 	// empty, we'll generate one.
 	Run           string         `json:"run_uuid"`
 	URL           string         `json:"url"`
+	URLS          []string       `json:"urls"`
 	Domains       []string       `json:"domains"`
 	WebhookConfig *WebhookConfig `json:"webhook"`
 
@@ -16,9 +17,20 @@ type APIRequest struct {
 }
 
 type APIResponse struct {
-	Run uint32 `json:"run_uuid"`
+	Run string `json:"run_uuid"`
 }
 
 type APIError struct {
 	Message string `json:"message"`
+}
+
+type CloudEventJson struct {
+	Specversion     string `json:"specversion"`
+	Event_type      string `json:"type"`
+	Source          string `json:"source"`
+	Subject         string `json:"subject"`
+	Id              string `json:"id"`
+	Time            string `json:"time"`
+	Datacontenttype string `json:"datacontenttype"`
+	Data            string `json:"data"`
 }

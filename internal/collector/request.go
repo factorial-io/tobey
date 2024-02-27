@@ -15,6 +15,7 @@
 package collector
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -112,19 +113,19 @@ func (r *Request) AbsoluteURL(u string) string {
 // Visit continues Collector's collecting job by creating a
 // request and preserves the Context of the previous request.
 // Visit also calls the previously provided callbacks
-func (r *Request) Visit(URL string) error {
-	return r.collector.scrape(r.AbsoluteURL(URL), "GET", r.Depth+1, nil, r.Ctx, nil)
+func (r *Request) Visit(rctx context.Context, URL string) error {
+	return r.collector.scrape(rctx, r.AbsoluteURL(URL), "GET", r.Depth+1, nil, r.Ctx, nil)
 }
 
 // Retry submits HTTP request again with the same parameters
 func (r *Request) Retry() error {
 	r.Headers.Del("Cookie")
-	return r.collector.scrape(r.URL.String(), r.Method, r.Depth, r.Body, r.Ctx, *r.Headers)
+	return r.collector.scrape(context.TODO(), r.URL.String(), r.Method, r.Depth, r.Body, r.Ctx, *r.Headers)
 }
 
 // Do submits the request
 func (r *Request) Do() error {
-	return r.collector.scrape(r.URL.String(), r.Method, r.Depth, r.Body, r.Ctx, *r.Headers)
+	return r.collector.scrape(context.TODO(), r.URL.String(), r.Method, r.Depth, r.Body, r.Ctx, *r.Headers)
 }
 
 // Marshal serializes the Request

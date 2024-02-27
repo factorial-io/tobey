@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	_ "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 )
@@ -137,7 +138,6 @@ func main() {
 	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter, robots)
 
 	apirouter := http.NewServeMux()
-	// TODO: Use otel's http mux.
 
 	apirouter.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
@@ -173,7 +173,7 @@ func main() {
 			return
 		}
 
-		var run uint32
+		var run string
 		if req.Run != "" {
 			v, err := uuid.Parse(req.Run)
 			if err != nil {
@@ -187,10 +187,10 @@ func main() {
 				json.NewEncoder(w).Encode(result)
 				return
 			} else {
-				run = v.ID()
+				run = v.String()
 			}
 		} else {
-			run = uuid.New().ID()
+			run = uuid.New().String()
 		}
 
 		// Ensure at least the URL host is in allowed domains.
@@ -227,19 +227,17 @@ func main() {
 
 		// Also provide local workers access to the collector, through the
 		// collectors manager.
-		cm.Add(run, c, func(id uint32) {
+		cm.Add(c, func(id string) {
 			runStore.Clear(ctx, id)
 		})
 
-		progress.Update(ProgressUpdateMessagePackage{
-			context.WithoutCancel(rctx),
-			ProgressUpdateMessage{
-				PROGRESS_STAGE_NAME,
-				PROGRESS_STATE_QUEUED_FOR_CRAWLING,
-				run,
-				req.URL,
-			},
-		})
+		var handle_urls []string
+		if req.URL == "" {
+			handle_urls = append(handle_urls, req.URL)
+		}
+		if req.URLS != nil {
+			handle_urls = append(handle_urls, req.URLS...)
+		}
 
 		if !req.SkipSitemap {
 			p, _ := url.Parse(req.URL)
@@ -259,14 +257,23 @@ func main() {
 			}
 			for _, url := range sitemaps {
 				slog.Debug("Enqueueing sitemap URL for crawling.", "url", url)
-				c.Enqueue(url)
+				c.Enqueue(context.WithoutCancel(rctx), url)
 			}
 		}
-		c.Enqueue(req.URL)
+
+		for _, enqueue_url := range handle_urls {
+			_, err := url.ParseRequestURI(enqueue_url)
+			if err != nil {
+				slog.Error("Invalid url", enqueue_url)
+				continue
+			}
+			c.Enqueue(context.WithoutCancel(rctx), enqueue_url)
+		}
 
 		result := &APIResponse{
 			Run: run,
 		}
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(result)
 	})
@@ -274,7 +281,7 @@ func main() {
 	slog.Info("Starting HTTP API server...", "port", ListenPort)
 	apiserver := &http.Server{
 		Addr:    fmt.Sprintf(":%d", ListenPort),
-		Handler: apirouter,
+		Handler: otelhttp.NewHandler(apirouter, "get_new_request"),
 	}
 	go func() {
 		if err := apiserver.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
