@@ -17,7 +17,7 @@ type WorkQueue interface {
 	Open() error
 
 	// The following methods use the crawl run context.
-	PublishURL(ctx context.Context, run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
+	PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
 	ConsumeVisit(ctx context.Context) (<-chan *VisitJob, <-chan error)
 	DelayVisit(ctx context.Context, delay time.Duration, j *VisitMessage) error
 
@@ -26,7 +26,7 @@ type WorkQueue interface {
 
 type VisitMessage struct {
 	ID  uint32
-	Run uint32
+	Run string
 
 	URL string
 
@@ -61,11 +61,11 @@ type VisitJob struct {
 
 // Validate ensures mandatory fields are non-zero.
 func (j *VisitJob) Validate() (bool, error) {
-	if j.Run == 0 {
-		return false, errors.New("Job without run.")
+	if j.Run == "" {
+		return false, errors.New("job without run")
 	}
 	if j.URL == "" {
-		return false, errors.New("Job without URL.")
+		return false, errors.New("job without URL")
 	}
 	return true, nil
 }
@@ -90,7 +90,7 @@ func (wq *MemoryWorkQueue) Open() error {
 	return nil
 }
 
-func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
 	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
 
 	// Extract tracing information from context, to transport it over the
@@ -226,7 +226,9 @@ func (wq *RabbitMQWorkQueue) Open() error {
 	return nil
 }
 
-func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run uint32, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+	jmlctx, span := tracer.Start(ctx, "publish_url")
+	defer span.End()
 	msg := &VisitMessage{
 		ID:              uuid.New().ID(),
 		Created:         time.Now(),
@@ -245,7 +247,7 @@ func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run uint32, url str
 
 	// Add tracing information into the RabbitMQ headers, so that
 	// the consumer of the message can continue the trace.
-	otel.GetTextMapPropagator().Inject(ctx, MapCarrierRabbitmq(table))
+	otel.GetTextMapPropagator().Inject(jmlctx, MapCarrierRabbitmq(table))
 
 	return wq.channel.Publish(
 		"tobey.default", // exchange
@@ -314,8 +316,7 @@ func (wq *RabbitMQWorkQueue) ConsumeVisit(ctx context.Context) (<-chan *VisitJob
 		} else {
 			// Initializes the context for the job. Than extract the tracing
 			// information from the RabbitMQ headers into the job's context.
-			jctx := context.Background()
-			jctx = otel.GetTextMapPropagator().Extract(jctx, MapCarrierRabbitmq(rawmsg.Headers))
+			jctx := otel.GetTextMapPropagator().Extract(context.Background(), MapCarrierRabbitmq(rawmsg.Headers))
 
 			reschan <- &VisitJob{
 				VisitMessage: msg,

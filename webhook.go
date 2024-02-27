@@ -147,7 +147,6 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data WebhookPa
 	if err != nil {
 		logger.Error("Cant do request")
 		span.SetStatus(codes.Error, "Request failed")
-		span.SetAttributes(attribute.String("url", resp.Status))
 		span.RecordError(err)
 		return err
 	}

@@ -56,6 +56,7 @@ func maybeRedis(ctx context.Context) *redis.Client {
 	if err := redisotel.InstrumentMetrics(client); err != nil {
 		panic(err)
 	}
+
 	return client
 }
 

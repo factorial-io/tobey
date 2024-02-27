@@ -10,6 +10,7 @@ import (
 	"github.com/gregjones/httpcache"
 	"github.com/gregjones/httpcache/diskcache"
 	"github.com/peterbourgon/diskv"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // CreateCrawlerHTTPClient creates a new HTTP client configured and optimized for use
@@ -40,7 +41,7 @@ func CreateCrawlerHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &UserAgentTransport{
-			Transport: httpcache.NewTransport(diskcache.NewWithDiskv(cachedisk)),
+			Transport: otelhttp.NewTransport(httpcache.NewTransport(diskcache.NewWithDiskv(cachedisk))),
 		},
 	}
 }

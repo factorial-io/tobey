@@ -15,8 +15,8 @@ import (
 	whatwgUrl "github.com/nlnwa/whatwg-url/url"
 )
 
-type EnqueueFn func(*Collector, string) error // Enqueues a scrape.
-type CollectFn func(*Collector, *Response)    // Collects the result of a scrape.
+type EnqueueFn func(context.Context, *Collector, string) error // Enqueues a scrape.
+type CollectFn func(context.Context, *Collector, *Response)    // Collects the result of a scrape.
 
 type RobotCheckFn func(agent string, u *url.URL) (bool, error)
 
@@ -32,7 +32,7 @@ const ProxyURLKey key = iota
 func NewCollector(
 	ctx context.Context,
 	client *http.Client,
-	run uint32,
+	run string,
 	domains []string,
 	robots RobotCheckFn,
 	enqueue EnqueueFn,
@@ -62,22 +62,22 @@ func NewCollector(
 	backend.WithCheckRedirect(c.CheckRedirectFunc())
 
 	// c.robotsMap = make(map[string]*robotstxt.RobotsData)
-
-	c.OnHTML("a[href]", func(e *HTMLElement) {
-		enqueue(c, e.Request.AbsoluteURL(e.Attr("href")))
+	//TODO check how to bubble
+	c.OnHTML("a[href]", func(ctx context.Context, e *HTMLElement) {
+		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")))
 	})
 
-	c.OnScraped(func(res *Response) {
-		collect(c, res)
+	c.OnScraped(func(ctx context.Context, res *Response) {
+		collect(ctx, c, res)
 	})
 
 	// Resolve linked sitemaps.
-	c.OnXML("//sitemap/loc", func(e *XMLElement) {
-		enqueue(c, e.Text)
+	c.OnXML("//sitemap/loc", func(ctx context.Context, e *XMLElement) {
+		enqueue(ctx, c, e.Text)
 	})
 
-	c.OnXML("//urlset/url/loc", func(e *XMLElement) {
-		enqueue(c, e.Text)
+	c.OnXML("//urlset/url/loc", func(ctx context.Context, e *XMLElement) {
+		enqueue(ctx, c, e.Text)
 	})
 
 	c.OnError(func(res *Response, err error) {
@@ -89,7 +89,7 @@ func NewCollector(
 
 type Collector struct {
 	// Run is the unique identifier of a collector.
-	Run uint32
+	Run string
 
 	// AllowedDomains is a domain allowlist.
 	AllowedDomains []string
@@ -137,15 +137,15 @@ type Collector struct {
 	scrapedCallbacks         []ScrapedCallback
 }
 
-func (c *Collector) Enqueue(URL string) error {
-	return c.enqueueFn(c, URL)
+func (c *Collector) Enqueue(rctx context.Context, URL string) error {
+	return c.enqueueFn(rctx, c, URL)
 }
 
-func (c *Collector) Visit(URL string) error {
-	return c.scrape(URL, "GET", 1, nil, nil, nil)
+func (c *Collector) Visit(rctx context.Context, URL string) error {
+	return c.scrape(rctx, URL, "GET", 1, nil, nil, nil)
 }
 
-func (c *Collector) scrape(u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header) error {
+func (c *Collector) scrape(rctx context.Context, u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header) error {
 	parsedWhatwgURL, err := urlParser.Parse(u)
 	if err != nil {
 		return err
@@ -172,15 +172,15 @@ func (c *Collector) scrape(u, method string, depth int, requestData io.Reader, c
 	}
 	// note: once 1.13 is minimum supported Go version,
 	// replace this with http.NewRequestWithContext
-	req = req.WithContext(c.Context)
+	req = req.WithContext(rctx)
 	if err := c.requestCheck(parsedURL, method, req.GetBody, depth); err != nil {
 		return err
 	}
 	u = parsedURL.String()
-	return c.fetch(u, method, depth, requestData, ctx, hdr, req)
+	return c.fetch(rctx, u, method, depth, requestData, ctx, hdr, req)
 }
 
-func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header, req *http.Request) error {
+func (c *Collector) fetch(rctx context.Context, u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header, req *http.Request) error {
 	if ctx == nil {
 		ctx = NewContext()
 	}
@@ -237,17 +237,17 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 
 	c.handleOnResponse(response)
 
-	err = c.handleOnHTML(response)
+	err = c.handleOnHTML(rctx, response)
 	if err != nil {
 		c.handleOnError(response, err, request, ctx)
 	}
 
-	err = c.handleOnXML(response)
+	err = c.handleOnXML(rctx, response)
 	if err != nil {
 		c.handleOnError(response, err, request, ctx)
 	}
 
-	c.handleOnScraped(response)
+	c.handleOnScraped(rctx, response)
 
 	return err
 }
@@ -265,7 +265,7 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
 		if ok, err := c.IsVisitAllowed(req.URL.String()); !ok {
-			return fmt.Errorf("Not following redirect to %q: %w", req.URL, err)
+			return fmt.Errorf("not following redirect to %q: %w", req.URL, err)
 		}
 
 		// Honor golangs default of maximum of 10 redirects

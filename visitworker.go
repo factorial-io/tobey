@@ -82,6 +82,7 @@ func VisitWorker(
 
 		if _, err := job.Validate(); err != nil {
 			jlogger.Error(err.Error())
+			span.End()
 			continue
 		}
 
@@ -117,6 +118,7 @@ func VisitWorker(
 			retryAfter, err := limiter(job.URL)
 			if err != nil {
 				slog.Error("Error while checking rate limiter.", "error", err)
+				span.End()
 				return err
 			}
 			job.HasReservation = true // Skip limiter next time.
@@ -134,15 +136,16 @@ func VisitWorker(
 					span.End()
 					continue
 				}
+				span.End()
 				continue
 			}
 		}
 
-		if err := c.Visit(job.URL); err != nil {
+		if err := c.Visit(jctx, job.URL); err != nil {
 			jlogger.Error("Error visiting URL.", "error", err)
 
 			progress.Update(ProgressUpdateMessagePackage{
-				ctx,
+				jctx,
 				ProgressUpdateMessage{
 					PROGRESS_STAGE_NAME,
 					PROGRESS_STATE_Errored,
@@ -157,15 +160,8 @@ func VisitWorker(
 			continue
 		}
 
-		jlogger.Info("Visited URL.", "took", time.Since(job.Created))
-		span.AddEvent("Visited URL.",
-			trace.WithAttributes(
-				attribute.String("Url", job.URL),
-			))
-		span.End()
-
 		progress.Update(ProgressUpdateMessagePackage{
-			ctx,
+			jctx,
 			ProgressUpdateMessage{
 				PROGRESS_STAGE_NAME,
 				PROGRESS_STATE_CRAWLED,
@@ -173,5 +169,13 @@ func VisitWorker(
 				job.URL,
 			},
 		})
+
+		jlogger.Info("Visited URL.", "took", time.Since(job.Created))
+		span.AddEvent("Visited URL.",
+			trace.WithAttributes(
+				attribute.String("Url", job.URL),
+			))
+		span.End()
+
 	}
 }
