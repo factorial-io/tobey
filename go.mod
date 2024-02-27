@@ -3,7 +3,7 @@ module tobey
 go 1.22
 
 require (
-	github.com/PuerkitoBio/goquery v1.8.1
+	github.com/PuerkitoBio/goquery v1.9.0
 	github.com/antchfx/htmlquery v1.3.0
 	github.com/antchfx/xmlquery v1.3.18
 	github.com/cenkalti/backoff/v4 v4.2.1
@@ -35,7 +35,7 @@ require (
 )
 
 require (
-	github.com/andybalholm/cascadia v1.3.1 // indirect
+	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/antchfx/xpath v1.2.4 // indirect
 	github.com/bits-and-blooms/bitset v1.5.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
