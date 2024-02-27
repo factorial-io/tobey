@@ -49,6 +49,12 @@ variables are available:
 | `TOBEY_RABBITMQ_DSN` | empty | i.e. `amqp://guest:guest@rabbitmq:5672/` | DSN to reach a RabbitMQ instance. Only needed when operating multiple instances. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
 | `TOBEY_PROGRESS_DSN` | empty | i.e. `http://localhost:9020`  | DSN where to reach a progress service. When configured tobey will send progress updates there. |
+| `TOBEY_TELEMETRY` | empty | i.e. `metrics traces` | Space separated list of what kind of telemetry is emitted. |
+
+On top of these variables, the service's telemetry
+feature can be configured via the commonly known [OpenTelemetry environment
+variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-export
+er/).
 
 ## Submitting a Basic Crawl Request
 
@@ -206,17 +212,3 @@ This is how the payload will look like, and how it is received by the target:
   // ... 
 }
 ```
-
-| Environment Variabel        |  Default Value           |
-| ------------- |:-------------:|
-| RABBIT_USER     | rabbitmq |
-| RABBIT_PW      | rabbitmq     |
-| RABBIT_HOST | localhost     |
-| RABBIT_PORT | 5672     |
-|SERVICE_DISCOVERY | localhost|
-|OWN_ADDRESS| ""|
-|GRPC_PORT|6543|
-|OWN_PORT| 8000|
-|SERVICE_DISCOVERY_NAMESPACE| workers|
-|SERVICE_DISCOVERY_TAGS| drupal_workers|
-|PHP_FILE_PATH| ./src/Command/Worker.php"|
