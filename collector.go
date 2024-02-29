@@ -38,7 +38,7 @@ func getEnqueueFn(ctx context.Context, hconf *WebhookConfig, q WorkQueue, runs M
 			// slog.Debug("Not enqueuing visit, domain not allowed.", "run", c.Run, "url", url)
 			return nil
 		}
-		if runs.HasSeen(tctx, c.Run, url) {
+		if runs.HasSeenURL(tctx, c.Run, url) {
 			// Do not need to enqueue an URL that has already been crawled, and its response
 			// can be served from cache.
 			// slog.Debug("Not enqueuing visit, URL already seen.", "run", c.Run, "url", url)
@@ -73,8 +73,8 @@ func getEnqueueFn(ctx context.Context, hconf *WebhookConfig, q WorkQueue, runs M
 		})
 
 		if err == nil {
-			runs.MarkSeen(tctx, c.Run, url)
-			logger.Debug("URL marked as seen.", "total", runs.CountSeen(ctx, c.Run))
+			runs.SawURL(tctx, c.Run, url)
+			logger.Debug("URL marked as seen.", "total", runs.CountSeenURLs(ctx, c.Run))
 		} else {
 			logger.Error("Error enqueuing visit.", "error", err)
 		}

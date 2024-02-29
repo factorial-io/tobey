@@ -10,9 +10,9 @@ import (
 
 // MetaStore stores metadata about runs.
 type MetaStore interface {
-	MarkSeen(context.Context, string, string)
-	HasSeen(context.Context, string, string) bool
-	CountSeen(context.Context, string) uint32
+	SawURL(context.Context, string, string)
+	HasSeenURL(context.Context, string, string) bool
+	CountSeenURLs(context.Context, string) uint32
 	Clear(context.Context, string)
 }
 
@@ -32,7 +32,7 @@ type MemoryMetaStore struct {
 	data map[string][]string
 }
 
-func (s *MemoryMetaStore) MarkSeen(ctx context.Context, run string, url string) {
+func (s *MemoryMetaStore) SawURL(ctx context.Context, run string, url string) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -42,7 +42,7 @@ func (s *MemoryMetaStore) MarkSeen(ctx context.Context, run string, url string) 
 	s.data[run] = append(s.data[run], url)
 }
 
-func (s *MemoryMetaStore) HasSeen(ctx context.Context, run string, url string) bool {
+func (s *MemoryMetaStore) HasSeenURL(ctx context.Context, run string, url string) bool {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -57,7 +57,7 @@ func (s *MemoryMetaStore) HasSeen(ctx context.Context, run string, url string) b
 	return false
 }
 
-func (s *MemoryMetaStore) CountSeen(ctx context.Context, run string) uint32 {
+func (s *MemoryMetaStore) CountSeenURLs(ctx context.Context, run string) uint32 {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -78,16 +78,16 @@ type RedisMetaStore struct {
 	conn *redis.Client
 }
 
-func (s *RedisMetaStore) MarkSeen(ctx context.Context, run string, url string) {
+func (s *RedisMetaStore) SawURL(ctx context.Context, run string, url string) {
 	s.conn.SAdd(ctx, fmt.Sprintf("%s:seen", run), url)
 }
 
-func (s *RedisMetaStore) HasSeen(ctx context.Context, run string, url string) bool {
+func (s *RedisMetaStore) HasSeenURL(ctx context.Context, run string, url string) bool {
 	reply := s.conn.SIsMember(ctx, fmt.Sprintf("%s:seen", run), url)
 	return reply.Val()
 }
 
-func (s *RedisMetaStore) CountSeen(ctx context.Context, run string) uint32 {
+func (s *RedisMetaStore) CountSeenURLs(ctx context.Context, run string) uint32 {
 	reply := s.conn.SCard(ctx, fmt.Sprintf("%s:seen", run))
 	return uint32(reply.Val())
 }
