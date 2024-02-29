@@ -17,8 +17,6 @@ import (
 	"tobey/internal/collector"
 
 	"github.com/google/uuid"
-	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	_ "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -56,11 +54,6 @@ const (
 	// UserAgent to be used with all HTTP request. The value is set to a
 	// backwards compatible one. Some sites allowwlist this specific user agent.
 	UserAgent = "WebsiteStandardsBot/1.0"
-)
-
-var (
-	redisconn    *redis.Client
-	rabbitmqconn *amqp.Connection
 )
 
 func configure() {
@@ -106,8 +99,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	redisconn = maybeRedis(ctx)
-	rabbitmqconn = maybeRabbitMQ(ctx)
+	redisconn, err := maybeRedis(ctx)
+	if err != nil {
+		panic(err)
+	}
+	rabbitmqconn, err := maybeRabbitMQ(ctx)
+	if err != nil {
+		panic(err)
+	}
 
 	runs := CreateMetaStore(redisconn)
 

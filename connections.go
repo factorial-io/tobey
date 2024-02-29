@@ -15,10 +15,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func maybeRedis(ctx context.Context) *redis.Client {
+func maybeRedis(ctx context.Context) (*redis.Client, error) {
 	rawdsn, ok := os.LookupEnv("TOBEY_REDIS_DSN")
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	slog.Debug("Connecting to Redis...", "dsn", rawdsn)
 
@@ -42,28 +42,27 @@ func maybeRedis(ctx context.Context) *redis.Client {
 	)
 
 	if err != nil {
-		slog.Error("Ultimately failed retrying redis connection.", "error", err)
-		panic(err)
+		return nil, fmt.Errorf("ultimately failed retrying redis connection: %w", err)
 	}
 	slog.Debug("Connection to Redis established :)")
 
-	// Enable tracing instrumentation.
-	if err := redisotel.InstrumentTracing(client); err != nil {
-		panic(err)
+	if UseTracing {
+		if err := redisotel.InstrumentTracing(client); err != nil {
+			return client, err
+		}
 	}
-
-	// Enable metrics instrumentation.
-	if err := redisotel.InstrumentMetrics(client); err != nil {
-		panic(err)
+	if UseMetrics {
+		if err := redisotel.InstrumentMetrics(client); err != nil {
+			return client, err
+		}
 	}
-
-	return client
+	return client, nil
 }
 
-func maybeRabbitMQ(ctx context.Context) *amqp.Connection {
+func maybeRabbitMQ(ctx context.Context) (*amqp.Connection, error) {
 	dsn, ok := os.LookupEnv("TOBEY_RABBITMQ_DSN")
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	slog.Debug("Connecting to RabbitMQ...", "dsn", dsn)
 
@@ -77,10 +76,10 @@ func maybeRabbitMQ(ctx context.Context) *amqp.Connection {
 		},
 	)
 	if err != nil {
-		slog.Error("Ultimately failed retrying RabbitMQ connection.", "error", err)
-		panic(err)
+		return nil, fmt.Errorf("ultimately failed retrying RabitMQ connection: %w", err)
 	}
+
 	slog.Debug("Connection to RabbitMQ established :)")
-	return client
+	return client, nil
 
 }
