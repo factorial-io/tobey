@@ -117,12 +117,6 @@ func (r *Request) Visit(rctx context.Context, URL string) error {
 	return r.collector.scrape(rctx, r.AbsoluteURL(URL), "GET", r.Depth+1, nil, r.Ctx, nil)
 }
 
-// Retry submits HTTP request again with the same parameters
-func (r *Request) Retry() error {
-	r.Headers.Del("Cookie")
-	return r.collector.scrape(context.TODO(), r.URL.String(), r.Method, r.Depth, r.Body, r.Ctx, *r.Headers)
-}
-
 // Do submits the request
 func (r *Request) Do() error {
 	return r.collector.scrape(context.TODO(), r.URL.String(), r.Method, r.Depth, r.Body, r.Ctx, *r.Headers)
