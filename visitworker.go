@@ -19,14 +19,14 @@ import (
 func CreateVisitWorkersPool(
 	ctx context.Context,
 	num int,
-	cm *collector.Manager,
-	httpClient *http.Client,
+	colls *collector.Manager,
+	client *http.Client,
 	limiter LimiterAllowFn,
 	robots *Robots,
-	workqueue WorkQueue,
-	runstore RunStore,
+	q WorkQueue,
+	runs MetaStore,
 	progress Progress,
-	webhookdis *WebhookDispatcher,
+	hooks *WebhookDispatcher,
 ) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
@@ -35,7 +35,7 @@ func CreateVisitWorkersPool(
 		wg.Add(1)
 
 		go func(id int) {
-			if err := VisitWorker(ctx, id, cm, httpClient, limiter, robots, workqueue, runstore, progress, webhookdis); err != nil {
+			if err := VisitWorker(ctx, id, colls, client, limiter, robots, q, runs, progress, hooks); err != nil {
 				slog.Error("Visit worker exited with error.", "worker.id", id, "error", err)
 			} else {
 				slog.Debug("Visit worker exited cleanly.", "worker.id", id)
@@ -50,14 +50,14 @@ func CreateVisitWorkersPool(
 func VisitWorker(
 	ctx context.Context,
 	id int,
-	cm *collector.Manager,
-	httpClient *http.Client,
+	colls *collector.Manager,
+	client *http.Client,
 	limiter LimiterAllowFn,
 	robots *Robots,
-	workqueue WorkQueue,
-	runstore RunStore,
+	q WorkQueue,
+	runs MetaStore,
 	progress Progress,
-	webhookdis *WebhookDispatcher,
+	hooks *WebhookDispatcher,
 ) error {
 	wlogger := slog.With("worker.id", id)
 
@@ -65,7 +65,7 @@ func VisitWorker(
 		var job *VisitJob
 
 		wlogger.Debug("Waiting for job...")
-		jobs, errs := workqueue.ConsumeVisit(ctx)
+		jobs, errs := q.ConsumeVisit(ctx)
 
 		select {
 		// This allows to stop a worker gracefully.
@@ -99,11 +99,11 @@ func VisitWorker(
 		// a VisitMessage that was put in the queue by another tobey instance, we don't
 		// yet have a collector available via the Manager. Please note that Collectors
 		// are not shared by the Manager across tobey instances.
-		c, ok := cm.Get(job.Run)
+		c, ok := colls.Get(job.Run)
 		if !ok {
 			c = collector.NewCollector(
 				ctx, // Do not use the job's context here.
-				httpClient,
+				client,
 				job.CollectorConfig.Run,
 				job.CollectorConfig.AllowedDomains,
 				func(a string, u *url.URL) (bool, error) {
@@ -112,8 +112,8 @@ func VisitWorker(
 					}
 					return robots.Check(a, u)
 				},
-				getEnqueueFn(ctx, job.WebhookConfig, workqueue, runstore, progress),
-				getCollectFn(ctx, job.WebhookConfig, webhookdis),
+				getEnqueueFn(ctx, job.WebhookConfig, q, runs, progress),
+				getCollectFn(ctx, job.WebhookConfig, hooks),
 			)
 
 			// Ensure CrawlerHTTPClient's UA and Collector's UA are the same.
@@ -136,7 +136,7 @@ func VisitWorker(
 			if retryAfter > 0 {
 				jlogger.Debug("Delaying visit...", "delay", retryAfter)
 
-				if err := workqueue.DelayVisit(jctx, retryAfter, job.VisitMessage); err != nil {
+				if err := q.DelayVisit(jctx, retryAfter, job.VisitMessage); err != nil {
 					jlogger.Error("Failed to schedule delayed message.")
 					span.AddEvent("Failed to schedule delayed message", trace.WithAttributes(
 						attribute.String("Url", job.URL),

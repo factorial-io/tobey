@@ -20,8 +20,9 @@ type CollectorConfig struct {
 // getEnqueueFn returns the enqueue function, that will enqueue a single URL to
 // be crawled. The enqueue function is called whenever a new URL is discovered
 // by that Collector, i.e. by looking at all links in a crawled page HTML.
-func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig, workqueue WorkQueue, runstore RunStore, progress Progress) collector.EnqueueFn {
+func getEnqueueFn(ctx context.Context, hconf *WebhookConfig, q WorkQueue, runs MetaStore, progress Progress) collector.EnqueueFn {
 
+	// The returned function takes the run context.
 	return func(rctx context.Context, c *collector.Collector, url string) error {
 		logger := slog.With("run", c.Run, "url", url)
 		tctx, span := tracer.Start(rctx, "enqueue_element")
@@ -37,7 +38,7 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig, workqueue W
 			// slog.Debug("Not enqueuing visit, domain not allowed.", "run", c.Run, "url", url)
 			return nil
 		}
-		if runstore.HasSeen(tctx, c.Run, url) {
+		if runs.HasSeen(tctx, c.Run, url) {
 			// Do not need to enqueue an URL that has already been crawled, and its response
 			// can be served from cache.
 			// slog.Debug("Not enqueuing visit, URL already seen.", "run", c.Run, "url", url)
@@ -45,7 +46,7 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig, workqueue W
 		}
 
 		logger.Debug("Publishing URL...")
-		err := workqueue.PublishURL(
+		err := q.PublishURL(
 			context.WithoutCancel(tctx), // The captured crawl run context.
 			// Passing the run ID to identify the crawl run, so when
 			// consumed the URL is crawled by the matching
@@ -58,7 +59,7 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig, workqueue W
 				Run:            c.Run,
 				AllowedDomains: c.AllowedDomains,
 			},
-			webhookConfig,
+			hconf,
 		)
 
 		progress.Update(ProgressUpdateMessagePackage{
@@ -72,8 +73,8 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig, workqueue W
 		})
 
 		if err == nil {
-			runstore.MarkSeen(tctx, c.Run, url)
-			logger.Debug("URL marked as seen.", "total", runstore.CountSeen(ctx, c.Run))
+			runs.MarkSeen(tctx, c.Run, url)
+			logger.Debug("URL marked as seen.", "total", runs.CountSeen(ctx, c.Run))
 		} else {
 			logger.Error("Error enqueuing visit.", "error", err)
 		}
@@ -84,7 +85,9 @@ func getEnqueueFn(ctx context.Context, webhookConfig *WebhookConfig, workqueue W
 // getCollectFn returns the collect function that is called once we have a
 // result. Uses the information provided in the original crawl request, i.e. the
 // WebhookConfig, that we have received via the queued message.
-func getCollectFn(ctx context.Context, webhookConfig *WebhookConfig, webhookdis *WebhookDispatcher) collector.CollectFn {
+func getCollectFn(ctx context.Context, hconf *WebhookConfig, hooks *WebhookDispatcher) collector.CollectFn {
+
+	// The returned function takes the run context.
 	return func(rctx context.Context, c *collector.Collector, res *collector.Response) {
 		slog.Debug(
 			"Collect suceeded.",
@@ -93,9 +96,9 @@ func getCollectFn(ctx context.Context, webhookConfig *WebhookConfig, webhookdis 
 			"response.body.length", len(res.Body),
 			"response.status", res.StatusCode,
 		)
-		if webhookConfig != nil && webhookConfig.Endpoint != "" {
+		if hconf != nil && hconf.Endpoint != "" {
 			// Use the captured craw run context to send the webhook.
-			webhookdis.Send(rctx, webhookConfig, res)
+			hooks.Send(rctx, hconf, res)
 		}
 	}
 }
