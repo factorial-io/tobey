@@ -79,19 +79,19 @@ type RedisMetaStore struct {
 }
 
 func (s *RedisMetaStore) MarkSeen(ctx context.Context, run string, url string) {
-	s.conn.SAdd(ctx, fmt.Sprintf("%d:seen", run), url)
+	s.conn.SAdd(ctx, fmt.Sprintf("%s:seen", run), url)
 }
 
 func (s *RedisMetaStore) HasSeen(ctx context.Context, run string, url string) bool {
-	reply := s.conn.SIsMember(ctx, fmt.Sprintf("%d:seen", run), url)
+	reply := s.conn.SIsMember(ctx, fmt.Sprintf("%s:seen", run), url)
 	return reply.Val()
 }
 
 func (s *RedisMetaStore) CountSeen(ctx context.Context, run string) uint32 {
-	reply := s.conn.SCard(ctx, fmt.Sprintf("%d:seen", run))
+	reply := s.conn.SCard(ctx, fmt.Sprintf("%s:seen", run))
 	return uint32(reply.Val())
 }
 
 func (s *RedisMetaStore) Clear(ctx context.Context, run string) {
-	s.conn.Del(ctx, fmt.Sprintf("%d:seen", run))
+	s.conn.Del(ctx, fmt.Sprintf("%s:seen", run))
 }

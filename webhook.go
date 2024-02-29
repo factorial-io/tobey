@@ -99,7 +99,7 @@ func (w ProcessWebhooksManager) startHandle(ctx context.Context, webhookQueue ch
 				err := w.sendWebhook(ctx_fresh, result, result.Data.Endpoint, "")
 				return err
 			}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx), func(err error, t time.Duration) {
-				wlogger.Info("Retrying to send webhook in", t, err)
+				wlogger.Info("Retrying to send webhook in", "time", t, "error", err)
 			})
 
 			if err != nil {
