@@ -249,7 +249,7 @@ func (c *Collector) handleOnXML(ctx context.Context, resp *Response) error {
 	return nil
 }
 
-func (c *Collector) handleOnError(response *Response, err error, request *Request, ctx *Context) error {
+func (c *Collector) handleOnError(response *Response, err error, request *Request) error {
 	if err == nil && response.StatusCode == 304 {
 		return nil
 	}
@@ -262,14 +262,10 @@ func (c *Collector) handleOnError(response *Response, err error, request *Reques
 	if response == nil {
 		response = &Response{
 			Request: request,
-			Ctx:     ctx,
 		}
 	}
 	if response.Request == nil {
 		response.Request = request
-	}
-	if response.Ctx == nil {
-		response.Ctx = request.Ctx
 	}
 	for _, f := range c.errorCallbacks {
 		f(response, err)

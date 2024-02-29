@@ -23,7 +23,7 @@ type CollectorConfig struct {
 func getEnqueueFn(hconf *WebhookConfig, q WorkQueue, runs MetaStore, progress Progress) collector.EnqueueFn {
 
 	// The returned function takes the run context.
-	return func(ctx context.Context, c *collector.Collector, url string) error {
+	return func(ctx context.Context, c *collector.Collector, url string, flags uint8) error {
 		logger := slog.With("run", c.Run, "url", url)
 		tctx, span := tracer.Start(ctx, "enqueue_element")
 		defer span.End()
@@ -60,21 +60,26 @@ func getEnqueueFn(hconf *WebhookConfig, q WorkQueue, runs MetaStore, progress Pr
 				AllowedDomains: c.AllowedDomains,
 			},
 			hconf,
+			flags,
 		)
 
-		progress.Update(ProgressUpdateMessagePackage{
-			context.WithoutCancel(tctx),
-			ProgressUpdateMessage{
-				PROGRESS_STAGE_NAME,
-				PROGRESS_STATE_QUEUED_FOR_CRAWLING,
-				c.Run,
-				url,
-			},
-		})
+		if flags&collector.FlagInternal == 0 {
+			progress.Update(ProgressUpdateMessagePackage{
+				context.WithoutCancel(tctx),
+				ProgressUpdateMessage{
+					PROGRESS_STAGE_NAME,
+					PROGRESS_STATE_QUEUED_FOR_CRAWLING,
+					c.Run,
+					url,
+				},
+			})
+		}
 
 		if err == nil {
-			runs.SawURL(tctx, c.Run, url)
-			logger.Debug("URL marked as seen.", "total", runs.CountSeenURLs(ctx, c.Run))
+			if flags&collector.FlagInternal == 0 {
+				runs.SawURL(tctx, c.Run, url)
+				logger.Debug("URL marked as seen.", "total", runs.CountSeenURLs(ctx, c.Run))
+			}
 		} else {
 			logger.Error("Error enqueuing visit.", "error", err)
 		}
@@ -88,7 +93,7 @@ func getEnqueueFn(hconf *WebhookConfig, q WorkQueue, runs MetaStore, progress Pr
 func getCollectFn(hconf *WebhookConfig, hooks *WebhookDispatcher) collector.CollectFn {
 
 	// The returned function takes the run context.
-	return func(ctx context.Context, c *collector.Collector, res *collector.Response) {
+	return func(ctx context.Context, c *collector.Collector, res *collector.Response, flags uint8) {
 		slog.Debug(
 			"Collect suceeded.",
 			"run", c.Run,
@@ -96,8 +101,10 @@ func getCollectFn(hconf *WebhookConfig, hooks *WebhookDispatcher) collector.Coll
 			"response.body.length", len(res.Body),
 			"response.status", res.StatusCode,
 		)
-		if hconf != nil && hconf.Endpoint != "" {
-			hooks.Send(ctx, hconf, res)
+		if flags&collector.FlagInternal == 0 {
+			if hconf != nil && hconf.Endpoint != "" {
+				hooks.Send(ctx, hconf, res)
+			}
 		}
 	}
 }

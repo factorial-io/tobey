@@ -150,7 +150,7 @@ func main() {
 		// The context of the HTTP request might contain OpenTelemetry information,
 		// i.e. SpanID or TraceID. If this is the case the line below creates
 		// a sub span. Otherwise we'll start a new root span here.
-		rctx, span := tracer.Start(r.Context(), "receive_crawl_request")
+		reqctx, span := tracer.Start(r.Context(), "receive_crawl_request")
 		// This ends the very first span in handling the crawl run. It ends the HTTP handling span.
 		defer span.End()
 
@@ -241,13 +241,13 @@ func main() {
 			urls = append(urls, req.URLs...)
 		}
 		for _, u := range urls {
-			c.Enqueue(context.WithoutCancel(rctx), u)
+			c.Enqueue(context.WithoutCancel(reqctx), u)
 		}
 
 		if !req.SkipSitemap {
 			for _, u := range discoverSitemaps(ctx, urls, robots) {
 				slog.Debug("Enqueueing sitemap for crawling.", "url", u)
-				c.Enqueue(context.WithoutCancel(rctx), u)
+				c.EnqueueWithFlags(context.WithoutCancel(reqctx), u, collector.FlagInternal)
 			}
 		}
 

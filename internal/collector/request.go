@@ -31,8 +31,6 @@ type Request struct {
 	Headers *http.Header
 	// the Host header
 	Host string
-	// Ctx is a context between a Request and a Response
-	Ctx *Context
 	// Depth is the number of the parents of the request
 	Depth int
 	// Method is the HTTP method of the request
@@ -77,7 +75,6 @@ func (r *Request) New(method, URL string, body io.Reader) (*Request, error) {
 		Method:    method,
 		URL:       u2,
 		Body:      body,
-		Ctx:       r.Ctx,
 		Headers:   &http.Header{},
 		Host:      r.Host,
 		collector: r.collector,
@@ -114,23 +111,16 @@ func (r *Request) AbsoluteURL(u string) string {
 // request and preserves the Context of the previous request.
 // Visit also calls the previously provided callbacks
 func (r *Request) Visit(rctx context.Context, URL string) error {
-	return r.collector.scrape(rctx, r.AbsoluteURL(URL), "GET", r.Depth+1, nil, r.Ctx, nil)
+	return r.collector.scrape(rctx, r.AbsoluteURL(URL), "GET", r.Depth+1, nil, nil)
 }
 
 // Do submits the request
 func (r *Request) Do() error {
-	return r.collector.scrape(context.TODO(), r.URL.String(), r.Method, r.Depth, r.Body, r.Ctx, *r.Headers)
+	return r.collector.scrape(context.TODO(), r.URL.String(), r.Method, r.Depth, r.Body, *r.Headers)
 }
 
 // Marshal serializes the Request
 func (r *Request) Marshal() ([]byte, error) {
-	ctx := make(map[string]interface{})
-	if r.Ctx != nil {
-		r.Ctx.ForEach(func(k string, v interface{}) interface{} {
-			ctx[k] = v
-			return nil
-		})
-	}
 	var err error
 	var body []byte
 	if r.Body != nil {
@@ -146,7 +136,6 @@ func (r *Request) Marshal() ([]byte, error) {
 		Depth:  r.Depth,
 		Body:   body,
 		ID:     r.ID,
-		Ctx:    ctx,
 	}
 	if r.Headers != nil {
 		sr.Headers = *r.Headers

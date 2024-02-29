@@ -15,8 +15,13 @@ import (
 	whatwgUrl "github.com/nlnwa/whatwg-url/url"
 )
 
-type EnqueueFn func(ctx context.Context, c *Collector, u string) error // Enqueues a scrape.
-type CollectFn func(ctx context.Context, c *Collector, res *Response)  // Collects the result of a scrape.
+const (
+	FlagNone uint8 = 1 << iota
+	FlagInternal
+)
+
+type EnqueueFn func(ctx context.Context, c *Collector, u string, flags uint8) error // Enqueues a scrape.
+type CollectFn func(ctx context.Context, c *Collector, res *Response, flags uint8)  // Collects the result of a scrape.
 
 type RobotCheckFn func(agent string, u string) (bool, error)
 
@@ -63,20 +68,19 @@ func NewCollector(
 
 	//TODO check how to bubble
 	c.OnHTML("a[href]", func(ctx context.Context, e *HTMLElement) {
-		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")))
+		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")), 0)
 	})
 
 	c.OnScraped(func(ctx context.Context, res *Response) {
-		collect(ctx, c, res)
+		collect(ctx, c, res, 0)
 	})
 
 	// Resolve linked sitemaps.
 	c.OnXML("//sitemap/loc", func(ctx context.Context, e *XMLElement) {
-		enqueue(ctx, c, e.Text)
+		enqueue(ctx, c, e.Text, 0)
 	})
-
 	c.OnXML("//urlset/url/loc", func(ctx context.Context, e *XMLElement) {
-		enqueue(ctx, c, e.Text)
+		enqueue(ctx, c, e.Text, 0)
 	})
 
 	c.OnError(func(res *Response, err error) {
@@ -137,14 +141,18 @@ type Collector struct {
 }
 
 func (c *Collector) Enqueue(rctx context.Context, u string) error {
-	return c.enqueueFn(rctx, c, u)
+	return c.enqueueFn(rctx, c, u, 0)
+}
+
+func (c *Collector) EnqueueWithFlags(rctx context.Context, u string, flags uint8) error {
+	return c.enqueueFn(rctx, c, u, flags)
 }
 
 func (c *Collector) Visit(rctx context.Context, URL string) error {
-	return c.scrape(rctx, URL, "GET", 1, nil, nil, nil)
+	return c.scrape(rctx, URL, "GET", 1, nil, nil)
 }
 
-func (c *Collector) scrape(rctx context.Context, u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header) error {
+func (c *Collector) scrape(rctx context.Context, u, method string, depth int, requestData io.Reader, hdr http.Header) error {
 	parsedWhatwgURL, err := urlParser.Parse(u)
 	if err != nil {
 		return err
@@ -176,18 +184,14 @@ func (c *Collector) scrape(rctx context.Context, u, method string, depth int, re
 		return err
 	}
 	u = parsedURL.String()
-	return c.fetch(rctx, u, method, depth, requestData, ctx, hdr, req)
+	return c.fetch(rctx, u, method, depth, requestData, hdr, req)
 }
 
-func (c *Collector) fetch(rctx context.Context, u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header, req *http.Request) error {
-	if ctx == nil {
-		ctx = NewContext()
-	}
+func (c *Collector) fetch(rctx context.Context, u, method string, depth int, requestData io.Reader, hdr http.Header, req *http.Request) error {
 	request := &Request{
 		URL:       req.URL,
 		Headers:   &req.Header,
 		Host:      req.Host,
-		Ctx:       ctx,
 		Depth:     depth,
 		Method:    method,
 		Body:      requestData,
@@ -214,7 +218,7 @@ func (c *Collector) fetch(rctx context.Context, u, method string, depth int, req
 			request.URL = req.URL
 			request.Headers = &req.Header
 		}
-		c.handleOnResponseHeaders(&Response{Ctx: ctx, Request: request, StatusCode: statusCode, Headers: &headers})
+		c.handleOnResponseHeaders(&Response{Request: request, StatusCode: statusCode, Headers: &headers})
 		return !request.abort
 	}
 
@@ -222,11 +226,10 @@ func (c *Collector) fetch(rctx context.Context, u, method string, depth int, req
 	if proxyURL, ok := req.Context().Value(ProxyURLKey).(string); ok {
 		request.ProxyURL = proxyURL
 	}
-	if err := c.handleOnError(response, err, request, ctx); err != nil {
+	if err := c.handleOnError(response, err, request); err != nil {
 		return err
 	}
 
-	response.Ctx = ctx
 	response.Request = request
 
 	err = response.fixCharset(c.DetectCharset, request.ResponseCharacterEncoding)
@@ -238,12 +241,12 @@ func (c *Collector) fetch(rctx context.Context, u, method string, depth int, req
 
 	err = c.handleOnHTML(rctx, response)
 	if err != nil {
-		c.handleOnError(response, err, request, ctx)
+		c.handleOnError(response, err, request)
 	}
 
 	err = c.handleOnXML(rctx, response)
 	if err != nil {
-		c.handleOnError(response, err, request, ctx)
+		c.handleOnError(response, err, request)
 	}
 
 	c.handleOnScraped(rctx, response)

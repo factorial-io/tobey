@@ -33,8 +33,6 @@ type Response struct {
 	StatusCode int
 	// Body is the content of the Response
 	Body []byte
-	// Ctx is a context between a Request and a Response
-	Ctx *Context
 	// Request is the Request object of the response
 	Request *Request
 	// Headers contains the Response's HTTP headers

@@ -168,16 +168,17 @@ func VisitWorker(
 			span.End()
 			continue
 		}
-
-		progress.Update(ProgressUpdateMessagePackage{
-			jctx,
-			ProgressUpdateMessage{
-				PROGRESS_STAGE_NAME,
-				PROGRESS_STATE_CRAWLED,
-				job.Run,
-				job.URL,
-			},
-		})
+		if job.Flags&collector.FlagInternal == 0 {
+			progress.Update(ProgressUpdateMessagePackage{
+				jctx,
+				ProgressUpdateMessage{
+					PROGRESS_STAGE_NAME,
+					PROGRESS_STATE_CRAWLED,
+					job.Run,
+					job.URL,
+				},
+			})
+		}
 
 		jlogger.Info("Visited URL.", "took", time.Since(job.Created))
 		span.AddEvent("Visited URL.",
