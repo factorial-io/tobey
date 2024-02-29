@@ -29,23 +29,31 @@ func NewRobots(client *http.Client) *Robots {
 	}
 }
 
-func (r *Robots) Check(agent string, u *url.URL) (bool, error) {
-	robot, _ := r.get(u)
+func (r *Robots) Check(agent string, u string) (bool, error) {
+	robot, err := r.get(u)
+	if err != nil {
+		return false, err
+	}
+
+	p, err := url.Parse(u)
+	if err != nil {
+		return false, err
+	}
 
 	group := robot.FindGroup(agent)
 	if group == nil {
 		return true, nil
 	}
 
-	eu := u.EscapedPath()
-	if u.RawQuery != "" {
-		eu += "?" + u.Query().Encode()
+	eu := p.EscapedPath()
+	if p.RawQuery != "" {
+		eu += "?" + p.Query().Encode()
 	}
 	return group.Test(eu), nil
 }
 
 // Sitemaps returns available sitemap URLs for the given host.
-func (r *Robots) Sitemaps(u *url.URL) ([]string, error) {
+func (r *Robots) Sitemaps(u string) ([]string, error) {
 	robot, err := r.get(u)
 	if err != nil {
 		return nil, err
@@ -54,19 +62,24 @@ func (r *Robots) Sitemaps(u *url.URL) ([]string, error) {
 }
 
 // get ensures that the robots.txt file for the given host is fetched.
-func (r *Robots) get(u *url.URL) (*robotstxt.RobotsData, error) {
+func (r *Robots) get(u string) (*robotstxt.RobotsData, error) {
 	var robot *robotstxt.RobotsData
 
+	p, err := url.Parse(u)
+	if err != nil {
+		return robot, err
+	}
+
 	r.RLock()
-	robot, ok := r.data[u.Host]
+	robot, ok := r.data[p.Host]
 	r.RUnlock()
 
 	if ok {
 		return robot, nil
 	}
 
-	rurl := u.Scheme + "://" + u.Host + "/robots.txt"
-	slog.Debug("Fetching missing robots.txt file...", "url", rurl, "host", u.Host)
+	rurl := p.Scheme + "://" + p.Host + "/robots.txt"
+	slog.Debug("Fetching missing robots.txt file...", "url", rurl, "host", p.Host)
 	res, err := r.client.Get(rurl)
 	if err != nil {
 		return robot, err
@@ -79,7 +92,7 @@ func (r *Robots) get(u *url.URL) (*robotstxt.RobotsData, error) {
 	}
 
 	r.Lock()
-	r.data[u.Host] = robot
+	r.data[p.Host] = robot
 	r.Unlock()
 
 	return robot, nil

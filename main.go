@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"time"
 	"tobey/internal/collector"
@@ -166,6 +167,15 @@ func main() {
 			return
 		}
 
+		if ok := req.Validate(); !ok {
+			result := &APIError{
+				Message: "Invalid request.",
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(result)
+			return
+		}
+
 		var run string
 		if req.Run != "" {
 			v, err := uuid.Parse(req.Run)
@@ -207,7 +217,7 @@ func main() {
 				if req.SkipRobots {
 					return true, nil
 				}
-				return robots.Check(a, u)
+				return robots.Check(a, u.String())
 			},
 			// Need to use WithoutCancel, to avoid the crawl run to be cancelled once
 			// the HTTP request is done. The crawl run should proceed to be handled.
@@ -224,49 +234,28 @@ func main() {
 			runs.Clear(ctx, id)
 		})
 
-		var handle_urls []string
-		if req.URL == "" {
-			handle_urls = append(handle_urls, req.URL)
+		// Enqueue the URL(s) for crawling.
+		var urls []string
+		if req.URL != "" {
+			urls = append(urls, req.URL)
 		}
-		if req.URLS != nil {
-			handle_urls = append(handle_urls, req.URLS...)
+		if req.URLs != nil {
+			urls = append(urls, req.URLs...)
+		}
+		for _, u := range urls {
+			c.Enqueue(context.WithoutCancel(rctx), u)
 		}
 
 		if !req.SkipSitemap {
-			p, _ := url.Parse(req.URL)
-			sitemaps := make([]string, 0)
-
-			// Discover sitemaps for the host, if the robots.txt has no
-			// information about it, fall back to a well known location.
-			urls, err := robots.Sitemaps(p)
-			if err != nil {
-				slog.Error("Failed to fetch sitemap URLs.", "error", err)
-				sitemaps = append(sitemaps, fmt.Sprintf("%s://%s/sitemap.xml", p.Scheme, p.Hostname()))
-			} else if len(urls) > 0 {
-				sitemaps = urls
-			} else {
-				slog.Debug("No sitemap URLs found in robots.txt.")
-				sitemaps = append(sitemaps, fmt.Sprintf("%s://%s/sitemap.xml", p.Scheme, p.Hostname()))
+			for _, u := range discoverSitemaps(ctx, urls, robots) {
+				slog.Debug("Enqueueing sitemap for crawling.", "url", u)
+				c.Enqueue(context.WithoutCancel(rctx), u)
 			}
-			for _, url := range sitemaps {
-				slog.Debug("Enqueueing sitemap URL for crawling.", "url", url)
-				c.Enqueue(context.WithoutCancel(rctx), url)
-			}
-		}
-
-		for _, enqueue_url := range handle_urls {
-			_, err := url.ParseRequestURI(enqueue_url)
-			if err != nil {
-				slog.Error("Invalid url", enqueue_url)
-				continue
-			}
-			c.Enqueue(context.WithoutCancel(rctx), enqueue_url)
 		}
 
 		result := &APIResponse{
 			Run: run,
 		}
-
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(result)
 	})
@@ -333,4 +322,34 @@ func main() {
 	}
 
 	shutdown(ctx)
+}
+
+// Discover sitemaps for the hosts, if the robots.txt has no
+// information about it, fall back to a well known location.
+func discoverSitemaps(ctx context.Context, urls []string, robots *Robots) []string {
+	bases := make([]string, 0, len(urls))
+	for _, u := range urls {
+		p, _ := url.Parse(u)
+		base := fmt.Sprintf("%s://%s", p.Scheme, p.Hostname())
+
+		if slices.Index(bases, base) == -1 { // Ensure unique.
+			bases = append(bases, base)
+		}
+	}
+	sitemaps := make([]string, 0)
+
+	for _, base := range bases {
+		urls, err := robots.Sitemaps(base)
+
+		if err != nil {
+			slog.Error("Failed to fetch sitemap URLs, taking a well known location.", "error", err)
+			sitemaps = append(sitemaps, fmt.Sprintf("%s/sitemap.xml", base))
+		} else if len(urls) > 0 {
+			sitemaps = append(sitemaps, urls...)
+		} else {
+			slog.Debug("No sitemap URLs found in robots.txt, taking well known location.")
+			sitemaps = append(sitemaps, fmt.Sprintf("%s/sitemap.xml", base))
+		}
+	}
+	return sitemaps
 }

@@ -1,11 +1,17 @@
 package main
 
+import (
+	"net/url"
+
+	"github.com/google/uuid"
+)
+
 type APIRequest struct {
 	// We accept either a valid UUID as a string, or as an integer. If left
 	// empty, we'll generate one.
 	Run           string         `json:"run_uuid"`
 	URL           string         `json:"url"`
-	URLS          []string       `json:"urls"`
+	URLs          []string       `json:"urls"`
 	Domains       []string       `json:"domains"`
 	WebhookConfig *WebhookConfig `json:"webhook"`
 
@@ -14,6 +20,31 @@ type APIRequest struct {
 
 	// If true we'll not try to fetch the sitemap.xml file.
 	SkipSitemap bool `json:"skip_sitemap"`
+}
+
+func (req *APIRequest) Validate() bool {
+	if req.Run != "" {
+		_, err := uuid.Parse(req.Run)
+		if err != nil {
+			return false
+		}
+	}
+
+	if req.URL != "" {
+		_, err := url.ParseRequestURI(req.URL)
+		if err != nil {
+			return false
+		}
+	}
+	if req.URLs != nil {
+		for _, u := range req.URLs {
+			_, err := url.ParseRequestURI(u)
+			if err != nil {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 type APIResponse struct {

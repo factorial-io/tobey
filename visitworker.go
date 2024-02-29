@@ -110,7 +110,7 @@ func VisitWorker(
 					if job.CollectorConfig.SkipRobots {
 						return true, nil
 					}
-					return robots.Check(a, u)
+					return robots.Check(a, u.String())
 				},
 				getEnqueueFn(ctx, job.WebhookConfig, q, runs, progress),
 				getCollectFn(ctx, job.WebhookConfig, hooks),
