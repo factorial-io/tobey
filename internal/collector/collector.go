@@ -15,10 +15,10 @@ import (
 	whatwgUrl "github.com/nlnwa/whatwg-url/url"
 )
 
-type EnqueueFn func(context.Context, *Collector, string) error // Enqueues a scrape.
-type CollectFn func(context.Context, *Collector, *Response)    // Collects the result of a scrape.
+type EnqueueFn func(ctx context.Context, c *Collector, u string, isInternal bool) error // Enqueues a scrape.
+type CollectFn func(ctx context.Context, c *Collector, res *Response)                   // Collects the result of a scrape.
 
-type RobotCheckFn func(agent string, u *url.URL) (bool, error)
+type RobotCheckFn func(agent string, u string) (bool, error)
 
 var urlParser = whatwgUrl.NewParser(whatwgUrl.WithPercentEncodeSinglePercentSign())
 
@@ -61,10 +61,9 @@ func NewCollector(
 	// Unelegant, but this can be improved later.
 	backend.WithCheckRedirect(c.CheckRedirectFunc())
 
-	// c.robotsMap = make(map[string]*robotstxt.RobotsData)
 	//TODO check how to bubble
 	c.OnHTML("a[href]", func(ctx context.Context, e *HTMLElement) {
-		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")))
+		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")), false)
 	})
 
 	c.OnScraped(func(ctx context.Context, res *Response) {
@@ -73,11 +72,11 @@ func NewCollector(
 
 	// Resolve linked sitemaps.
 	c.OnXML("//sitemap/loc", func(ctx context.Context, e *XMLElement) {
-		enqueue(ctx, c, e.Text)
+		enqueue(ctx, c, e.Text, false)
 	})
 
 	c.OnXML("//urlset/url/loc", func(ctx context.Context, e *XMLElement) {
-		enqueue(ctx, c, e.Text)
+		enqueue(ctx, c, e.Text, false)
 	})
 
 	c.OnError(func(res *Response, err error) {
@@ -137,8 +136,8 @@ type Collector struct {
 	scrapedCallbacks         []ScrapedCallback
 }
 
-func (c *Collector) Enqueue(rctx context.Context, URL string) error {
-	return c.enqueueFn(rctx, c, URL)
+func (c *Collector) Enqueue(rctx context.Context, u string) error {
+	return c.enqueueFn(rctx, c, u, false)
 }
 
 func (c *Collector) Visit(rctx context.Context, URL string) error {
@@ -312,7 +311,7 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 		return false, ErrForbiddenDomain
 	}
 
-	ok, err := c.robotsCheckFn(c.UserAgent, p)
+	ok, err := c.robotsCheckFn(c.UserAgent, p.String())
 	if err != nil {
 		return false, err
 	}
