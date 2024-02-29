@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
@@ -106,11 +105,11 @@ func VisitWorker(
 				client,
 				job.CollectorConfig.Run,
 				job.CollectorConfig.AllowedDomains,
-				func(a string, u *url.URL) (bool, error) {
+				func(a string, u string) (bool, error) {
 					if job.CollectorConfig.SkipRobots {
 						return true, nil
 					}
-					return robots.Check(a, u.String())
+					return robots.Check(a, u)
 				},
 				getEnqueueFn(ctx, job.WebhookConfig, q, runs, progress),
 				getCollectFn(ctx, job.WebhookConfig, hooks),

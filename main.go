@@ -213,11 +213,11 @@ func main() {
 			client,
 			run,
 			allowedDomains,
-			func(a string, u *url.URL) (bool, error) {
+			func(a string, u string) (bool, error) {
 				if req.SkipRobots {
 					return true, nil
 				}
-				return robots.Check(a, u.String())
+				return robots.Check(a, u)
 			},
 			// Need to use WithoutCancel, to avoid the crawl run to be cancelled once
 			// the HTTP request is done. The crawl run should proceed to be handled.

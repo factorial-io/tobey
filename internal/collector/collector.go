@@ -15,8 +15,8 @@ import (
 	whatwgUrl "github.com/nlnwa/whatwg-url/url"
 )
 
-type EnqueueFn func(ctx context.Context, c *Collector, u string, isInternal bool) error // Enqueues a scrape.
-type CollectFn func(ctx context.Context, c *Collector, res *Response)                   // Collects the result of a scrape.
+type EnqueueFn func(ctx context.Context, c *Collector, u string) error // Enqueues a scrape.
+type CollectFn func(ctx context.Context, c *Collector, res *Response)  // Collects the result of a scrape.
 
 type RobotCheckFn func(agent string, u string) (bool, error)
 
@@ -63,7 +63,7 @@ func NewCollector(
 
 	//TODO check how to bubble
 	c.OnHTML("a[href]", func(ctx context.Context, e *HTMLElement) {
-		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")), false)
+		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")))
 	})
 
 	c.OnScraped(func(ctx context.Context, res *Response) {
@@ -72,11 +72,11 @@ func NewCollector(
 
 	// Resolve linked sitemaps.
 	c.OnXML("//sitemap/loc", func(ctx context.Context, e *XMLElement) {
-		enqueue(ctx, c, e.Text, false)
+		enqueue(ctx, c, e.Text)
 	})
 
 	c.OnXML("//urlset/url/loc", func(ctx context.Context, e *XMLElement) {
-		enqueue(ctx, c, e.Text, false)
+		enqueue(ctx, c, e.Text)
 	})
 
 	c.OnError(func(res *Response, err error) {
@@ -137,7 +137,7 @@ type Collector struct {
 }
 
 func (c *Collector) Enqueue(rctx context.Context, u string) error {
-	return c.enqueueFn(rctx, c, u, false)
+	return c.enqueueFn(rctx, c, u)
 }
 
 func (c *Collector) Visit(rctx context.Context, URL string) error {
