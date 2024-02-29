@@ -61,12 +61,6 @@ const (
 var (
 	redisconn    *redis.Client
 	rabbitmqconn *amqp.Connection
-
-	workQueue WorkQueue
-	runStore  RunStore
-
-	webhookDispatcher *WebhookDispatcher
-	progress          Progress
 )
 
 func configure() {
@@ -115,27 +109,27 @@ func main() {
 	redisconn = maybeRedis(ctx)
 	rabbitmqconn = maybeRabbitMQ(ctx)
 
-	runStore = CreateRunStore(redisconn)
+	runstore := CreateRunStore(redisconn)
 
-	workQueue = CreateWorkQueue(rabbitmqconn)
-	if err := workQueue.Open(); err != nil {
+	workqueue := CreateWorkQueue(rabbitmqconn)
+	if err := workqueue.Open(); err != nil {
 		panic(err)
 	}
 
 	// Create Webhook Handling
-	webhookQueue := make(chan WebhookPayloadPackage, GetEnvInt("TORBEY_WEBHOOK_PAYLOAD_LIMIT", 100))
+	webhookqueue := make(chan WebhookPayloadPackage, GetEnvInt("TORBEY_WEBHOOK_PAYLOAD_LIMIT", 100))
 	webhook := NewProcessWebhooksManager()
-	webhook.Start(ctx, webhookQueue)
+	webhook.Start(ctx, webhookqueue)
 
-	webhookDispatcher = NewWebhookDispatcher(webhookQueue)
+	webhookdis := NewWebhookDispatcher(webhookqueue)
+	progress := MustStartProgressFromEnv(ctx)
 
-	progress = MustStartProgressFromEnv(ctx)
 	limiter := CreateLimiter(ctx, redisconn, 1)
 	httpClient := CreateCrawlerHTTPClient()
 	cm := collector.NewManager(MaxParallelRuns)
 	robots := NewRobots(httpClient)
 
-	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter, robots)
+	visitWorkers := CreateVisitWorkersPool(ctx, NumVisitWorkers, cm, httpClient, limiter, robots, workqueue, runstore, progress, webhookdis)
 
 	apirouter := http.NewServeMux()
 
@@ -218,8 +212,8 @@ func main() {
 			},
 			// Need to use WithoutCancel, to avoid the crawl run to be cancelled once
 			// the HTTP request is done. The crawl run should proceed to be handled.
-			getEnqueueFn(context.WithoutCancel(rctx), req.WebhookConfig),
-			getCollectFn(context.WithoutCancel(rctx), req.WebhookConfig),
+			getEnqueueFn(context.WithoutCancel(rctx), req.WebhookConfig, workqueue, runstore, progress),
+			getCollectFn(context.WithoutCancel(rctx), req.WebhookConfig, webhookdis),
 		)
 
 		// Ensure CrawlerHTTPClient's UA and Collector's UA are the same.
@@ -228,7 +222,7 @@ func main() {
 		// Also provide local workers access to the collector, through the
 		// collectors manager.
 		cm.Add(c, func(id string) {
-			runStore.Clear(ctx, id)
+			runstore.Clear(ctx, id)
 		})
 
 		var handle_urls []string
@@ -326,8 +320,8 @@ func main() {
 	apiserver.Shutdown(context.Background())
 	hcserver.Shutdown(context.Background())
 
-	if workQueue != nil {
-		workQueue.Close()
+	if workqueue != nil {
+		workqueue.Close()
 	}
 	if progress != nil {
 		progress.Close()

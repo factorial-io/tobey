@@ -23,6 +23,10 @@ func CreateVisitWorkersPool(
 	httpClient *http.Client,
 	limiter LimiterAllowFn,
 	robots *Robots,
+	workqueue WorkQueue,
+	runstore RunStore,
+	progress Progress,
+	webhookdis *WebhookDispatcher,
 ) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
@@ -31,7 +35,7 @@ func CreateVisitWorkersPool(
 		wg.Add(1)
 
 		go func(id int) {
-			if err := VisitWorker(ctx, id, cm, httpClient, limiter, robots); err != nil {
+			if err := VisitWorker(ctx, id, cm, httpClient, limiter, robots, workqueue, runstore, progress, webhookdis); err != nil {
 				slog.Error("Visit worker exited with error.", "worker.id", id, "error", err)
 			} else {
 				slog.Debug("Visit worker exited cleanly.", "worker.id", id)
@@ -50,6 +54,10 @@ func VisitWorker(
 	httpClient *http.Client,
 	limiter LimiterAllowFn,
 	robots *Robots,
+	workqueue WorkQueue,
+	runstore RunStore,
+	progress Progress,
+	webhookdis *WebhookDispatcher,
 ) error {
 	wlogger := slog.With("worker.id", id)
 
@@ -57,7 +65,7 @@ func VisitWorker(
 		var job *VisitJob
 
 		wlogger.Debug("Waiting for job...")
-		jobs, errs := workQueue.ConsumeVisit(ctx)
+		jobs, errs := workqueue.ConsumeVisit(ctx)
 
 		select {
 		// This allows to stop a worker gracefully.
@@ -104,8 +112,8 @@ func VisitWorker(
 					}
 					return robots.Check(a, u)
 				},
-				getEnqueueFn(ctx, job.WebhookConfig),
-				getCollectFn(ctx, job.WebhookConfig),
+				getEnqueueFn(ctx, job.WebhookConfig, workqueue, runstore, progress),
+				getCollectFn(ctx, job.WebhookConfig, webhookdis),
 			)
 
 			// Ensure CrawlerHTTPClient's UA and Collector's UA are the same.
@@ -128,7 +136,7 @@ func VisitWorker(
 			if retryAfter > 0 {
 				jlogger.Debug("Delaying visit...", "delay", retryAfter)
 
-				if err := workQueue.DelayVisit(jctx, retryAfter, job.VisitMessage); err != nil {
+				if err := workqueue.DelayVisit(jctx, retryAfter, job.VisitMessage); err != nil {
 					jlogger.Error("Failed to schedule delayed message.")
 					span.AddEvent("Failed to schedule delayed message", trace.WithAttributes(
 						attribute.String("Url", job.URL),
