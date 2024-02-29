@@ -20,12 +20,12 @@ type CollectorConfig struct {
 // getEnqueueFn returns the enqueue function, that will enqueue a single URL to
 // be crawled. The enqueue function is called whenever a new URL is discovered
 // by that Collector, i.e. by looking at all links in a crawled page HTML.
-func getEnqueueFn(ctx context.Context, hconf *WebhookConfig, q WorkQueue, runs MetaStore, progress Progress) collector.EnqueueFn {
+func getEnqueueFn(hconf *WebhookConfig, q WorkQueue, runs MetaStore, progress Progress) collector.EnqueueFn {
 
 	// The returned function takes the run context.
-	return func(rctx context.Context, c *collector.Collector, url string) error {
+	return func(ctx context.Context, c *collector.Collector, url string) error {
 		logger := slog.With("run", c.Run, "url", url)
-		tctx, span := tracer.Start(rctx, "enqueue_element")
+		tctx, span := tracer.Start(ctx, "enqueue_element")
 		defer span.End()
 
 		span.SetAttributes(attribute.String("URL", url))
@@ -85,10 +85,10 @@ func getEnqueueFn(ctx context.Context, hconf *WebhookConfig, q WorkQueue, runs M
 // getCollectFn returns the collect function that is called once we have a
 // result. Uses the information provided in the original crawl request, i.e. the
 // WebhookConfig, that we have received via the queued message.
-func getCollectFn(ctx context.Context, hconf *WebhookConfig, hooks *WebhookDispatcher) collector.CollectFn {
+func getCollectFn(hconf *WebhookConfig, hooks *WebhookDispatcher) collector.CollectFn {
 
 	// The returned function takes the run context.
-	return func(rctx context.Context, c *collector.Collector, res *collector.Response) {
+	return func(ctx context.Context, c *collector.Collector, res *collector.Response) {
 		slog.Debug(
 			"Collect suceeded.",
 			"run", c.Run,
@@ -97,8 +97,7 @@ func getCollectFn(ctx context.Context, hconf *WebhookConfig, hooks *WebhookDispa
 			"response.status", res.StatusCode,
 		)
 		if hconf != nil && hconf.Endpoint != "" {
-			// Use the captured craw run context to send the webhook.
-			hooks.Send(rctx, hconf, res)
+			hooks.Send(ctx, hconf, res)
 		}
 	}
 }

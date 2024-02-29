@@ -219,10 +219,8 @@ func main() {
 				}
 				return robots.Check(a, u)
 			},
-			// Need to use WithoutCancel, to avoid the crawl run to be cancelled once
-			// the HTTP request is done. The crawl run should proceed to be handled.
-			getEnqueueFn(context.WithoutCancel(rctx), req.WebhookConfig, queue, runs, progress),
-			getCollectFn(context.WithoutCancel(rctx), req.WebhookConfig, hooks),
+			getEnqueueFn(req.WebhookConfig, queue, runs, progress),
+			getCollectFn(req.WebhookConfig, hooks),
 		)
 
 		// Ensure CrawlerHTTPClient's UA and Collector's UA are the same.

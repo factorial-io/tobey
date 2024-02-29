@@ -111,8 +111,8 @@ func VisitWorker(
 					}
 					return robots.Check(a, u)
 				},
-				getEnqueueFn(ctx, job.WebhookConfig, q, runs, progress),
-				getCollectFn(ctx, job.WebhookConfig, hooks),
+				getEnqueueFn(job.WebhookConfig, q, runs, progress),
+				getCollectFn(job.WebhookConfig, hooks),
 			)
 
 			// Ensure CrawlerHTTPClient's UA and Collector's UA are the same.
