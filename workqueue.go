@@ -17,7 +17,7 @@ type WorkQueue interface {
 	Open() error
 
 	// The following methods use the crawl run context.
-	PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error
+	PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, hconf *WebhookConfig) error
 	ConsumeVisit(ctx context.Context) (<-chan *VisitJob, <-chan error)
 	DelayVisit(ctx context.Context, delay time.Duration, j *VisitMessage) error
 
@@ -90,7 +90,7 @@ func (wq *MemoryWorkQueue) Open() error {
 	return nil
 }
 
-func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, hconf *WebhookConfig) error {
 	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
 
 	// Extract tracing information from context, to transport it over the
@@ -107,7 +107,7 @@ func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url strin
 			Run:             run,
 			URL:             url,
 			CollectorConfig: cconf,
-			WebhookConfig:   whconf,
+			WebhookConfig:   hconf,
 		},
 	}
 	return nil
@@ -226,7 +226,7 @@ func (wq *RabbitMQWorkQueue) Open() error {
 	return nil
 }
 
-func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, whconf *WebhookConfig) error {
+func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, hconf *WebhookConfig) error {
 	jmlctx, span := tracer.Start(ctx, "publish_url")
 	defer span.End()
 	msg := &VisitMessage{
@@ -235,7 +235,7 @@ func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run string, url str
 		Run:             run,
 		URL:             url,
 		CollectorConfig: cconf,
-		WebhookConfig:   whconf,
+		WebhookConfig:   hconf,
 	}
 
 	b, err := json.Marshal(msg)
