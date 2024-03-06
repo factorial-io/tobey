@@ -31,14 +31,17 @@ type WebhookPayloadPackage struct {
 
 // The messages that should go over the wire.
 type WebhookPayload struct {
-	Action string         `json:"action"`
-	Data   *WebhookConfig `json:"data"` // Pass through arbitrary data here.
+	Action string `json:"action"`
+	Run    string `json:"run_uuid"`
+
 	// TODO: Figure out if we want to use "Standard Webhook" and/or if
 	// we than want to nest all results data under Data as to prevent
 	// collisions with Action and other fields.
 	// TODO Talk about the interface variation
 	RequestURL   string `json:"request_url"`
 	ResponseBody []byte `json:"response_body"` // Will be base64 encoded once marshalled.
+
+	Data *WebhookConfig `json:"data"` // Pass through arbitrary data here.
 }
 
 var (
@@ -191,18 +194,19 @@ func NewWebhookDispatcher(webhookQueue chan WebhookPayloadPackage) *WebhookDispa
 	}
 }
 
-func (wd *WebhookDispatcher) Send(ctx context.Context, webhook *WebhookConfig, res *collector.Response) error {
+func (wd *WebhookDispatcher) Send(ctx context.Context, webhook *WebhookConfig, run string, res *collector.Response) error {
 	webhook_package := WebhookPayloadPackage{
 		ctx: ctx,
 		payload: WebhookPayload{
 			Action: "collector.response",
+			Run:    run,
+
+			RequestURL:   res.Request.URL.String(),
+			ResponseBody: res.Body[:],
 
 			// We pass through the data we received taking in the
 			// initial crawl request, verbatim.
 			Data: webhook,
-
-			RequestURL:   res.Request.URL.String(),
-			ResponseBody: res.Body[:],
 		},
 	}
 

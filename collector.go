@@ -103,7 +103,7 @@ func getCollectFn(hconf *WebhookConfig, hooks *WebhookDispatcher) collector.Coll
 		)
 		if flags&collector.FlagInternal == 0 {
 			if hconf != nil && hconf.Endpoint != "" {
-				hooks.Send(ctx, hconf, res)
+				hooks.Send(ctx, hconf, c.Run, res)
 			}
 		}
 	}
