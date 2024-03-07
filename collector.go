@@ -76,10 +76,8 @@ func getEnqueueFn(hconf *WebhookConfig, q WorkQueue, runs MetaStore, progress Pr
 		}
 
 		if err == nil {
-			if flags&collector.FlagInternal == 0 {
-				runs.SawURL(tctx, c.Run, url)
-				logger.Debug("URL marked as seen.", "total", runs.CountSeenURLs(ctx, c.Run))
-			}
+			runs.SawURL(tctx, c.Run, url)
+			logger.Debug("URL marked as seen.", "total", runs.CountSeenURLs(ctx, c.Run))
 		} else {
 			logger.Error("Error enqueuing visit.", "error", err)
 		}
