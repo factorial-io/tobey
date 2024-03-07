@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    service: tobey
+    environment: {{ environment }}
+    app: tobey-service
+    type: backend
+  name: tobey
+spec:
+  selector:
+    service_name: tobey
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
