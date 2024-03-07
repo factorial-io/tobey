@@ -80,13 +80,13 @@ func NewCollector(
 
 	// Resolve linked sitemaps.
 	c.OnXML("//sitemap/loc", func(ctx context.Context, e *XMLElement) {
-		err := enqueue(ctx, c, e.Text, 0)
+		err := enqueue(ctx, c, e.Text, FlagInternal)
 		if err != nil {
 			slog.Error(err.Error())
 		}
 	})
 	c.OnXML("//urlset/url/loc", func(ctx context.Context, e *XMLElement) {
-		err := enqueue(ctx, c, e.Text, 0)
+		err := enqueue(ctx, c, e.Text, FlagInternal)
 		if err != nil {
 			slog.Error(err.Error())
 		}
