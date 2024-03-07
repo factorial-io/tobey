@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"slices"
 	"strings"
 	"time"
 	"tobey/internal/collector"
@@ -321,34 +320,4 @@ func main() {
 	}
 
 	shutdown(ctx)
-}
-
-// Discover sitemaps for the hosts, if the robots.txt has no
-// information about it, fall back to a well known location.
-func discoverSitemaps(ctx context.Context, urls []string, robots *Robots) []string {
-	bases := make([]string, 0, len(urls))
-	for _, u := range urls {
-		p, _ := url.Parse(u)
-		base := fmt.Sprintf("%s://%s", p.Scheme, p.Hostname())
-
-		if slices.Index(bases, base) == -1 { // Ensure unique.
-			bases = append(bases, base)
-		}
-	}
-	sitemaps := make([]string, 0)
-
-	for _, base := range bases {
-		urls, err := robots.Sitemaps(base)
-
-		if err != nil {
-			slog.Error("Failed to fetch sitemap URLs, taking a well known location.", "error", err)
-			sitemaps = append(sitemaps, fmt.Sprintf("%s/sitemap.xml", base))
-		} else if len(urls) > 0 {
-			sitemaps = append(sitemaps, urls...)
-		} else {
-			slog.Debug("No sitemap URLs found in robots.txt, taking well known location.")
-			sitemaps = append(sitemaps, fmt.Sprintf("%s/sitemap.xml", base))
-		}
-	}
-	return sitemaps
 }

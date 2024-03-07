@@ -28,7 +28,7 @@ const (
 	PROGRESS_STATE_Cancelled             = "cancelled"
 	PROGRESS_STATE_Errored               = "errored"
 
-	PROGRESS_STAGE_NAME = "spider"
+	PROGRESS_STAGE_NAME = "crawler"
 
 	PROGRESS_ENDPOINTS_UPDATE     = "api/status/update"
 	PROGRESS_ENDPOINTS_TRANSITION = "api/status/transition"
