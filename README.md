@@ -22,6 +22,7 @@ RabbitMQ.
 - No further service dependencies, when operating as a single instance.
 - Detects and uses a sitemap and robots.txt automatically (can be disabled).
 - Per host rate limiting, even when multiple instances are used.
+- Full support for OpenTelemetry.
 
 ## Quickstart
 
@@ -203,10 +204,10 @@ This is how the payload will look like, and how it is received by the target:
 ```jsonc
 {
   "action": "tobey.result",
+  "run_uuid": 123,
   "data": { // Passed-through data.
     "magic_number": 12 
   },
-  "crawl": 123,            // ID of the crawl that triggered the download of this resource.
   "request": {/* ... */},  // Raw request submitted to download the resource.
   "response": {/* ... */}, // Raw response received when downloading the resource.
   // ... 
