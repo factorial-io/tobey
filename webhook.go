@@ -8,11 +8,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"tobey/internal/collector"
 
-	"github.com/cenkalti/backoff/v4"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -95,13 +93,7 @@ func (w ProcessWebhooksManager) startHandle(ctx context.Context, webhookQueue ch
 				continue
 			}
 
-			err := backoff.RetryNotify(func() error {
-				err := w.sendWebhook(ctx_fresh, result, result.Data.Endpoint, "")
-				return err
-			}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx), func(err error, t time.Duration) {
-				wlogger.Info("Retrying to send webhook in", "time", t, "error", err)
-			})
-
+			err := w.sendWebhook(ctx_fresh, result, result.Data.Endpoint, "")
 			if err != nil {
 				wlogger.Info("Sending webhook ultimately failed.", "error", err)
 			} else {

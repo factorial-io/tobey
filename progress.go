@@ -10,9 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -57,7 +55,8 @@ func MustStartProgressFromEnv(ctx context.Context) Progress {
 	if dsn := os.Getenv("TOBEY_PROGRESS_DSN"); dsn != "" {
 		slog.Info("Using progress service for updates.", "dsn", dsn)
 
-		queue := make(chan ProgressUpdateMessagePackage, GetEnvInt("TORBEY_PROGRESS_PAYLOAD_LIMIT", 100))
+		// TODO: Make this always non-blocking as otherwise it can block the whole application.
+		queue := make(chan ProgressUpdateMessagePackage, 1000)
 		progress_manager := NewProgressManager()
 		progress_manager.Start(ctx, queue)
 
@@ -110,13 +109,7 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 				return
 			}
 
-			err := backoff.RetryNotify(func() error {
-				err := w.sendProgressUpdate(ctx_fresh, result)
-				return err
-			}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx), func(err error, t time.Duration) {
-				wlogger.Info("Retrying to send progress.", "in", t, "error", err)
-			})
-
+			err := w.sendProgressUpdate(ctx_fresh, result)
 			if err != nil {
 				wlogger.Error("Sending progress ultimately failed.", "error", err)
 			} else {
