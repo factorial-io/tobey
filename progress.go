@@ -122,7 +122,9 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 }
 
 func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUpdateMessage) error {
-	logger := slog.With("Path", "progress::sendProgressUpdate")
+	logger := slog.With("Path", "progress::sendProgressUpdate", "url", msg.Url, "status", msg.Status, "run", msg.Run)
+	logger.Debug("Sending progress update...")
+
 	ctx_send_webhook, span := tracer.Start(ctx, "handle.progress.queue.send")
 	defer span.End()
 
