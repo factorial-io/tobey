@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    service_name: tobey
+    environment: {{ environment }}
+    app: tobey-deployment
+    type: backend
+  name: tobey
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      service_name: tobey
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      annotations:
+        lastScaffold: {{ scaffoldTimestamp }}
+      labels:
+        service_name: tobey
+        environment: {{ environment }}
+        app: tobey-pod
+        type: backend
+    spec:
+      containers:
+      - image: {{ tobey.image }}:{{ tobey.tag }}
+        imagePullPolicy: Always
+        name: tobey
+        ports:
+          - containerPort: 8080
+        envFrom:
+         - secretRef:
+             name: tobey-secret
+        livenessProbe:
+          httpGet:
+            path: /.lagoonhealthz
+            port: 8080
+          timeoutSeconds: 3
+        startupProbe:
+          httpGet:
+            path: /.lagoonhealthz
+            port: 8080
+          periodSeconds: 10
+          failureThreshold: 20
+      imagePullSecrets:
+        - name: {{ registryCredentials }}
+      restartPolicy: Always
+      serviceAccountName: ""

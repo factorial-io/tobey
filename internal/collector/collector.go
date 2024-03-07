@@ -68,7 +68,10 @@ func NewCollector(
 
 	//TODO check how to bubble
 	c.OnHTML("a[href]", func(ctx context.Context, e *HTMLElement) {
-		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")), 0)
+		err := enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")), 0)
+		if err != nil {
+			slog.Error(err.Error())
+		}
 	})
 
 	c.OnScraped(func(ctx context.Context, res *Response) {
@@ -77,10 +80,16 @@ func NewCollector(
 
 	// Resolve linked sitemaps.
 	c.OnXML("//sitemap/loc", func(ctx context.Context, e *XMLElement) {
-		enqueue(ctx, c, e.Text, 0)
+		err := enqueue(ctx, c, e.Text, 0)
+		if err != nil {
+			slog.Error(err.Error())
+		}
 	})
 	c.OnXML("//urlset/url/loc", func(ctx context.Context, e *XMLElement) {
-		enqueue(ctx, c, e.Text, 0)
+		err := enqueue(ctx, c, e.Text, 0)
+		if err != nil {
+			slog.Error(err.Error())
+		}
 	})
 
 	c.OnError(func(res *Response, err error) {
@@ -241,12 +250,16 @@ func (c *Collector) fetch(rctx context.Context, u, method string, depth int, req
 
 	err = c.handleOnHTML(rctx, response)
 	if err != nil {
-		c.handleOnError(response, err, request)
+		if err := c.handleOnError(response, err, request); err != nil {
+			slog.Error(err.Error())
+		}
 	}
 
 	err = c.handleOnXML(rctx, response)
 	if err != nil {
-		c.handleOnError(response, err, request)
+		if err := c.handleOnError(response, err, request); err != nil {
+			slog.Error(err.Error())
+		}
 	}
 
 	c.handleOnScraped(rctx, response)
