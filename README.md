@@ -50,7 +50,7 @@ variables are available:
 | `TOBEY_RABBITMQ_DSN` | empty | i.e. `amqp://guest:guest@rabbitmq:5672/` | DSN to reach a RabbitMQ instance. Only needed when operating multiple instances. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
 | `TOBEY_PROGRESS_DSN` | empty | i.e. `http://localhost:9020`  | DSN where to reach a progress service. When configured tobey will send progress updates there. |
-| `TOBEY_TELEMETRY` | empty | i.e. `metrics traces` | Space separated list of what kind of telemetry is emitted. |
+| `TELEMETRY` | empty | i.e. `metrics traces` | Space separated list of what kind of telemetry is emitted. |
 
 On top of these variables, the service's telemetry
 feature can be configured via the commonly known [OpenTelemetry environment

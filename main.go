@@ -65,7 +65,7 @@ func configure() {
 		slog.Info("Skipping cache.")
 	}
 
-	v := os.Getenv("TOBEY_TELEMETRY")
+	v := os.Getenv("TELEMETRY")
 	if strings.Contains(v, "tracing") {
 		UseTracing = true
 		slog.Info("Tracing enabled.")
