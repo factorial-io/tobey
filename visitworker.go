@@ -29,15 +29,15 @@ func CreateVisitWorkersPool(
 ) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
-	slog.Debug("Starting visit workers...", "num", num)
+	slog.Debug("Visitor: Starting workers...", "num", num)
 	for i := 0; i < num; i++ {
 		wg.Add(1)
 
 		go func(id int) {
 			if err := VisitWorker(ctx, id, colls, client, limiter, robots, q, runs, progress, hooks); err != nil {
-				slog.Error("Visit worker exited with error.", "worker.id", id, "error", err)
+				slog.Error("Visitor: Worker exited with error.", "worker.id", id, "error", err)
 			} else {
-				slog.Debug("Visit worker exited cleanly.", "worker.id", id)
+				slog.Debug("Visitor: Worker exited cleanly.", "worker.id", id)
 			}
 			wg.Done()
 		}(i)
@@ -63,17 +63,17 @@ func VisitWorker(
 	for {
 		var job *VisitJob
 
-		wlogger.Debug("Waiting for job...")
+		wlogger.Debug("Visitor: Waiting for job...")
 		jobs, errs := q.ConsumeVisit(ctx)
 
 		select {
 		// This allows to stop a worker gracefully.
 		case <-ctx.Done():
-			wlogger.Debug("Context cancelled, stopping worker.")
+			wlogger.Debug("Visitor: Context cancelled, stopping worker.")
 			return nil
 		case err := <-errs:
 			_, span := tracer.Start(ctx, "handle.visit.queue.worker.error")
-			wlogger.Error("Failed to consume from work queue.", "error", err)
+			wlogger.Error("Visitor: Failed to consume from queue.", "error", err)
 			span.RecordError(err)
 			span.End()
 
@@ -82,7 +82,7 @@ func VisitWorker(
 			job = j
 		}
 		jlogger := wlogger.With("run", job.Run, "url", job.URL, "job.id", job.ID)
-		jlogger.Debug("Received job.")
+		jlogger.Debug("Visitor: Received job.")
 
 		jctx, span := tracer.Start(job.Context, "process_visit_job")
 		span.SetAttributes(attribute.String("Url", job.URL))
@@ -120,11 +120,12 @@ func VisitWorker(
 		}
 
 		if !job.HasReservation {
-			jlogger.Debug("Job has no reservation.")
+			jlogger.Debug("Visitor: Job has no reservation.")
 
 			nowReserved, retryAfter, err := limiter(job.URL)
 			if err != nil {
-				slog.Error("Error while checking rate limiter.", "error", err)
+				slog.Error("Visitor: Error while checking rate limiter.", "error", err)
+
 				span.End()
 				return err
 			}
@@ -133,15 +134,15 @@ func VisitWorker(
 			job.HasReservation = nowReserved // Skip limiter next time.
 
 			if retryAfter > 0 {
-				jlogger.Debug("Delaying visit...", "delay", retryAfter)
+				jlogger.Debug("Visitor: Delaying visit...", "delay", retryAfter)
 
 				if err := q.DelayVisit(jctx, retryAfter, job.VisitMessage); err != nil {
-					jlogger.Error("Failed to schedule delayed message.")
+					jlogger.Error("Visitor: Failed to schedule delayed message.")
+
 					span.AddEvent("Failed to schedule delayed message", trace.WithAttributes(
 						attribute.String("Url", job.URL),
 					))
 
-					// TODO: Nack and requeue msg, so it isn't lost.
 					span.End()
 					continue
 				}
@@ -151,17 +152,19 @@ func VisitWorker(
 		}
 
 		if err := c.Visit(jctx, job.URL); err != nil {
-			jlogger.Error("Error visiting URL.", "error", err)
+			jlogger.Error("Visitor: Error visiting URL.", "error", err)
 
-			progress.Update(ProgressUpdateMessagePackage{
-				jctx,
-				ProgressUpdateMessage{
-					PROGRESS_STAGE_NAME,
-					PROGRESS_STATE_Errored,
-					job.Run,
-					job.URL,
-				},
-			})
+			if job.Flags&collector.FlagInternal == 0 {
+				progress.Update(ProgressUpdateMessagePackage{
+					jctx,
+					ProgressUpdateMessage{
+						PROGRESS_STAGE_NAME,
+						PROGRESS_STATE_Errored,
+						job.Run,
+						job.URL,
+					},
+				})
+			}
 			span.AddEvent("Error visiting URL", trace.WithAttributes(
 				attribute.String("Url", job.URL),
 			))
@@ -180,8 +183,8 @@ func VisitWorker(
 			})
 		}
 
-		jlogger.Info("Visited URL.", "took", time.Since(job.Created))
-		span.AddEvent("Visited URL.",
+		jlogger.Info("Visitor: Visited URL.", "took", time.Since(job.Created))
+		span.AddEvent("Visitor: Visited URL.",
 			trace.WithAttributes(
 				attribute.String("Url", job.URL),
 			))

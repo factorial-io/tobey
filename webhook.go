@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -41,6 +40,7 @@ type WebhookPayload struct {
 	RequestURL   string `json:"request_url"`
 	ResponseBody []byte `json:"response_body"` // Will be base64 encoded once marshalled.
 
+	// TODO: This should probably be just interface{}
 	Data *WebhookConfig `json:"data"` // Pass through arbitrary data here.
 }
 
@@ -66,7 +66,7 @@ func (w ProcessWebhooksManager) startHandle(ctx context.Context, webhookQueue ch
 	for {
 		select {
 		case <-ctx.Done():
-			wlogger.Debug("Close worker")
+			wlogger.Debug("Webhook Dispatcher: Context cancelled, stopping worker.")
 			// The context is over, stop processing results
 			return
 		case result_package, ok1 := <-webhookQueue:
@@ -89,7 +89,8 @@ func (w ProcessWebhooksManager) startHandle(ctx context.Context, webhookQueue ch
 			}
 
 			if result.RequestURL == "" {
-				wlogger.Error("url empty")
+				wlogger.Error("Webhook Dispatcher: Missing URL")
+
 				parentSpan.SetAttributes(attribute.Int("worker", pnumber))
 				parentSpan.RecordError(errors.New("URL is empty on page"))
 				parentSpan.End()
@@ -98,9 +99,9 @@ func (w ProcessWebhooksManager) startHandle(ctx context.Context, webhookQueue ch
 
 			err := w.sendWebhook(ctx_fresh, result, result.Data.Endpoint, "")
 			if err != nil {
-				wlogger.Info("Sending webhook ultimately failed.", "error", err)
+				wlogger.Info("Webhook Dispatcher: Sending webhook ultimately failed.", "error", err)
 			} else {
-				wlogger.Info("Webhook succesfully sent.", "url", result.RequestURL)
+				wlogger.Info("Webhook Dispatcher: Webhook succesfully sent.", "url", result.RequestURL)
 			}
 
 			parentSpan.End()
@@ -109,29 +110,28 @@ func (w ProcessWebhooksManager) startHandle(ctx context.Context, webhookQueue ch
 }
 
 func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data WebhookPayload, url string, webhookId string) error {
-	logger := slog.With("Path", "progress::sendProgressUpdate")
+	logger := slog.With("url", url, "endpoint", data.Data.Endpoint, "run", data.Run)
+	logger.Debug("Webhook Dispatcher: Sending webhook...")
 
 	ctx_send_webhook, span := tracer.Start(ctx, "handle.webhook.queue.send")
 	defer span.End()
 
-	// Marshal the data into JSON
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
-		logger.Error("json marshal failed")
 		span.SetStatus(codes.Error, "json marshal failed")
 		span.SetAttributes(attribute.String("data", "TODO"))
 		span.RecordError(err)
+
 		return err
 	}
 
-	// Prepare the webhook request
 	span.SetAttributes(attribute.String("webhook_url", url))
 	span.SetAttributes(attribute.String("request_url", data.RequestURL))
 	req, err := http.NewRequestWithContext(ctx_send_webhook, "POST", url, bytes.NewBuffer(jsonBytes))
 	if err != nil {
-		logger.Error("Cant create request")
 		span.SetStatus(codes.Error, "cant create new request")
 		span.RecordError(err)
+
 		return err
 	}
 
@@ -140,37 +140,26 @@ func (w *ProcessWebhooksManager) sendWebhook(ctx context.Context, data WebhookPa
 	// Send the webhook request
 	resp, err := w.client.Do(req)
 	if err != nil {
-		logger.Error("Cant do request")
 		span.SetStatus(codes.Error, "Request failed")
 		span.RecordError(err)
 		return err
 	}
+	defer resp.Body.Close()
 
-	defer func(Body io.ReadCloser) {
-		if err := Body.Close(); err != nil {
-			span.SetStatus(codes.Error, "operationThatCouldFail failed")
-			span.RecordError(err)
-			logger.Error("Error closing response body.", "error", err)
-		}
-	}(resp.Body)
 	span.SetAttributes(attribute.String("status", resp.Status))
-	// Determine the status based on the response code
-	status := "failed"
-	if resp.StatusCode == http.StatusOK {
-		status = "delivered"
-	}
 
-	logger.Debug("Current status changed.", "status", status)
+	if resp.StatusCode != http.StatusOK {
+		err := errors.New("webhook was not accepted")
 
-	if status == "failed" {
 		var body_bytes []byte
 		resp.Body.Read(body_bytes)
+
 		span.SetAttributes(attribute.String("Body", string(body_bytes[:])))
 		span.SetStatus(codes.Error, "operationThatCouldFail failed")
 		span.RecordError(err)
-		return errors.New(status)
-	}
 
+		return err
+	}
 	return nil
 }
 

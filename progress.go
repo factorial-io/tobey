@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -88,7 +87,7 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 	for {
 		select {
 		case <-ctx.Done():
-			wlogger.Debug("Close worker")
+			wlogger.Debug("Progress Dispatcher: Context cancelled, stopping worker.")
 			// The context is over, stop processing results
 			return
 		case result_package, ok1 := <-progressQueue:
@@ -111,9 +110,9 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 
 			err := w.sendProgressUpdate(ctx_fresh, result)
 			if err != nil {
-				wlogger.Error("Sending progress ultimately failed.", "error", err)
+				wlogger.Error("Progress Dispatcher: Sending update ultimately failed.", "error", err)
 			} else {
-				wlogger.Debug("Progress succesfully sent.", "url", result.Url)
+				wlogger.Debug("Progress Dispatcher: Update succesfully sent.", "url", result.Url)
 			}
 
 			parentSpan.End()
@@ -122,72 +121,59 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 }
 
 func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUpdateMessage) error {
-	logger := slog.With("Path", "progress::sendProgressUpdate", "url", msg.Url, "status", msg.Status, "run", msg.Run)
-	logger.Debug("Sending progress update...")
+	logger := slog.With("url", msg.Url, "status", msg.Status, "run", msg.Run)
+	logger.Debug("Progress Dispatcher: Sending progress update...")
 
 	ctx_send_webhook, span := tracer.Start(ctx, "handle.progress.queue.send")
 	defer span.End()
 
-	// Marshal the data into JSON
-	jsonBytes, err := json.Marshal(msg)
-	if err != nil {
-		logger.Error("Cant create request")
-		span.SetStatus(codes.Error, "json marshal failed")
-		span.SetAttributes(attribute.String("data", "TODO"))
-		span.RecordError(err)
-		return err
-	}
+	url := fmt.Sprintf("%v/%v", w.apiURL, PROGRESS_ENDPOINTS_UPDATE)
 
-	api_request_url := fmt.Sprintf("%v/%v", w.apiURL, PROGRESS_ENDPOINTS_UPDATE)
-	span.SetAttributes(attribute.String("API_URL", api_request_url))
+	span.SetAttributes(attribute.String("API_URL", url))
 	span.SetAttributes(attribute.String("url", msg.Url))
 	span.SetAttributes(attribute.String("status_update", msg.Status))
-	// Prepare the webhook request
-	req, err := http.NewRequestWithContext(ctx_send_webhook, "POST", api_request_url, bytes.NewBuffer(jsonBytes))
+
+	body, err := json.Marshal(msg)
 	if err != nil {
-		logger.Error("Cant create request")
-		span.SetStatus(codes.Error, "cant create new request")
+		span.SetStatus(codes.Error, "failed to marshal body")
+		span.SetAttributes(attribute.String("data", "TODO"))
 		span.RecordError(err)
+
 		return err
 	}
 
+	req, err := http.NewRequestWithContext(ctx_send_webhook, "POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		span.SetStatus(codes.Error, "failed to create request")
+		span.RecordError(err)
+
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Send the webhook request
 	resp, err := w.client.Do(req)
 	if err != nil {
-		logger.Error("Cant do request")
-		span.SetStatus(codes.Error, "Request failed")
+		span.SetStatus(codes.Error, "performing request failed")
 		span.RecordError(err)
+
 		return err
 	}
-
-	defer func(Body io.ReadCloser) {
-		if err := Body.Close(); err != nil {
-			span.SetStatus(codes.Error, "operationThatCouldFail failed")
-			span.RecordError(err)
-			logger.Error("Error closing response body.", "error", err)
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	span.SetAttributes(attribute.Int("StatusCode", resp.StatusCode))
-	// Determine the status based on the response code
-	status := "failed"
-	if resp.StatusCode == http.StatusAccepted {
-		status = "delivered"
-	}
 
-	logger.Debug("The current status changed.", "status", status)
+	if resp.StatusCode != http.StatusAccepted {
+		err := errors.New("status update was not accepted")
 
-	if status == "failed" {
 		var body_bytes []byte
 		resp.Body.Read(body_bytes)
-		span.SetAttributes(attribute.String("Body", string(body_bytes[:])))
-		span.SetStatus(codes.Error, "Wrong response code")
-		span.RecordError(errors.New(status))
-		return errors.New(status)
-	}
 
+		span.SetAttributes(attribute.String("Body", string(body_bytes[:])))
+		span.SetStatus(codes.Error, "update not accepted")
+		span.RecordError(err)
+
+		return err
+	}
 	return nil
 }
 
