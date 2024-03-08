@@ -66,30 +66,22 @@ func NewCollector(
 	// Unelegant, but this can be improved later.
 	backend.WithCheckRedirect(c.CheckRedirectFunc())
 
-	//TODO check how to bubble
 	c.OnHTML("a[href]", func(ctx context.Context, e *HTMLElement) {
-		err := enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")), 0)
-		if err != nil {
-			slog.Error(err.Error())
-		}
+		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")), FlagNone)
 	})
 
 	c.OnScraped(func(ctx context.Context, res *Response) {
-		collect(ctx, c, res, 0)
+		collect(ctx, c, res, FlagNone)
 	})
 
 	// Resolve linked sitemaps.
 	c.OnXML("//sitemap/loc", func(ctx context.Context, e *XMLElement) {
-		err := enqueue(ctx, c, e.Text, FlagInternal)
-		if err != nil {
-			slog.Error(err.Error())
-		}
+		slog.Info("Sitemaps: Found linked sitemap.", "url", e.Text)
+		enqueue(ctx, c, e.Text, FlagInternal)
 	})
 	c.OnXML("//urlset/url/loc", func(ctx context.Context, e *XMLElement) {
-		err := enqueue(ctx, c, e.Text, FlagNone)
-		if err != nil {
-			slog.Error(err.Error())
-		}
+		slog.Info("Sitemaps: Found URL in sitemap.", "url", e.Text)
+		enqueue(ctx, c, e.Text, FlagNone)
 	})
 
 	c.OnError(func(res *Response, err error) {
