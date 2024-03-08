@@ -86,7 +86,7 @@ func NewCollector(
 		}
 	})
 	c.OnXML("//urlset/url/loc", func(ctx context.Context, e *XMLElement) {
-		err := enqueue(ctx, c, e.Text, FlagInternal)
+		err := enqueue(ctx, c, e.Text, FlagNone)
 		if err != nil {
 			slog.Error(err.Error())
 		}

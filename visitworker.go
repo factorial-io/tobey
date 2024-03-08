@@ -81,7 +81,7 @@ func VisitWorker(
 		case j := <-jobs:
 			job = j
 		}
-		jlogger := wlogger.With("run", job.Run, "url", job.URL, "job.id", job.ID)
+		jlogger := wlogger.With("run", job.Run, "url", job.URL, "job.id", job.ID, "job.flags", job.Flags)
 		jlogger.Debug("Visitor: Received job.")
 
 		jctx, span := tracer.Start(job.Context, "process_visit_job")
@@ -171,6 +171,8 @@ func VisitWorker(
 			span.End()
 			continue
 		}
+		jlogger.Info("Visitor: Visited URL.", "took", time.Since(job.Created))
+
 		if job.Flags&collector.FlagInternal == 0 {
 			progress.Update(ProgressUpdateMessagePackage{
 				jctx,
@@ -182,8 +184,6 @@ func VisitWorker(
 				},
 			})
 		}
-
-		jlogger.Info("Visitor: Visited URL.", "took", time.Since(job.Created))
 		span.AddEvent("Visitor: Visited URL.",
 			trace.WithAttributes(
 				attribute.String("Url", job.URL),
