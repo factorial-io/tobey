@@ -85,7 +85,7 @@ func NewCollector(
 	})
 
 	c.OnError(func(res *Response, err error) {
-		slog.Info("Error while visiting URL.", "url", res.Request.URL.String(), "error", err, "response.status", res.StatusCode)
+		slog.Info("Collector: Error while visiting URL.", "url", res.Request.URL.String(), "error", err, "response.status", res.StatusCode)
 	})
 
 	return c

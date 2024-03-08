@@ -26,12 +26,12 @@ func discoverSitemaps(ctx context.Context, urls []string, robots *Robots) []stri
 		urls, err := robots.Sitemaps(base)
 
 		if err != nil {
-			slog.Error("Failed to fetch sitemap URLs, taking a well known location.", "error", err)
+			slog.Error("Sitemaps: Failed to fetch sitemap URLs, taking a well known location.", "error", err)
 			sitemaps = append(sitemaps, fmt.Sprintf("%s/sitemap.xml", base))
 		} else if len(urls) > 0 {
 			sitemaps = append(sitemaps, urls...)
 		} else {
-			slog.Debug("No sitemap URLs found in robots.txt, taking well known location.")
+			slog.Debug("Sitemaps: No sitemap URLs found in robots.txt, taking well known location.")
 			sitemaps = append(sitemaps, fmt.Sprintf("%s/sitemap.xml", base))
 		}
 	}
