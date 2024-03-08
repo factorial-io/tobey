@@ -30,6 +30,7 @@ var (
 	// SkipCache disables caching when true. It can be controlled via the TOBEY_SKIP_CACHE environment variable.
 	SkipCache = false
 
+	// These can be controlled via the TOBEY_TELEMETRY environment variable.
 	UseTracing = false
 	UseMetrics = false
 )
@@ -38,7 +39,7 @@ const (
 	// The port where the main HTTP server listens and the API is served.
 	ListenPort int = 8080
 
-	// The port where to ping for healtcheck.
+	// The port where to ping for healthcheck.
 	HealthcheckListenPort int = 10241
 
 	// NumVisitWorkers hard codes the number of workers we start at startup.
@@ -65,8 +66,8 @@ func configure() {
 		slog.Info("Skipping cache.")
 	}
 
-	v := os.Getenv("TELEMETRY")
-	if strings.Contains(v, "tracing") {
+	v := os.Getenv("TOBEY_TELEMETRY")
+	if strings.Contains(v, "traces") || strings.Contains(v, "tracing") {
 		UseTracing = true
 		slog.Info("Tracing enabled.")
 	}
