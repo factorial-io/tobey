@@ -87,20 +87,18 @@ type MemoryWorkQueue struct {
 }
 
 func (wq *MemoryWorkQueue) Open() error {
-	wq.pkgs = make(chan *visitPackage, 10000) // TODO: make sends non-blocking
+	wq.pkgs = make(chan *visitPackage, 10000)
 	return nil
 }
 
 func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, hconf *WebhookConfig, flags uint8) error {
-	// TODO: Use select in case we don't have a receiver yet (than this is blocking).
-
 	// Extract tracing information from context, to transport it over the
 	// channel, without using a Context.
 	propagator := otel.GetTextMapPropagator()
 	carrier := propagation.MapCarrier{}
 	propagator.Inject(ctx, carrier)
 
-	wq.pkgs <- &visitPackage{
+	pkg := &visitPackage{
 		Carrier: carrier,
 		Message: &VisitMessage{
 			ID:              uuid.New().ID(),
@@ -112,13 +110,19 @@ func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url strin
 			Flags:           flags,
 		},
 	}
+	select {
+	case wq.pkgs <- pkg:
+		slog.Debug("Work Queue: Message accepted.", "msg.id", pkg.Message.ID)
+	default:
+		slog.Warn("Work Queue: full, dropping message!", "msg", pkg.Message)
+	}
 	return nil
 }
 
 // DelayVisit republishes a message with given delay.
 func (wq *MemoryWorkQueue) DelayVisit(ctx context.Context, delay time.Duration, msg *VisitMessage) error {
 	go func() {
-		slog.Debug("Delaying message", "msg.id", msg.ID, "delay", delay.Seconds())
+		slog.Debug("Work Queue: Delaying message", "msg.id", msg.ID, "delay", delay.Seconds())
 
 		// Extract tracing information from context, to transport it over the
 		// channel, without using a Context.
@@ -127,11 +131,16 @@ func (wq *MemoryWorkQueue) DelayVisit(ctx context.Context, delay time.Duration, 
 		propagator.Inject(ctx, carrier)
 
 		time.Sleep(delay)
-		wq.pkgs <- &visitPackage{
+		pkg := &visitPackage{
 			Carrier: carrier,
 			Message: msg,
 		}
-		slog.Debug("Delayed message accepted.", "msg.id", msg.ID, "delay", delay.Seconds())
+		select {
+		case wq.pkgs <- pkg:
+			slog.Debug("Work Queue: Delayed message accepted.", "msg.id", pkg.Message.ID, "delay", delay.Seconds())
+		default:
+			slog.Warn("Work Queue: full, dropping delayed message!", "msg", pkg.Message)
+		}
 	}()
 	return nil
 }
@@ -143,13 +152,13 @@ func (wq *MemoryWorkQueue) ConsumeVisit(ctx context.Context) (<-chan *VisitJob, 
 	go func() {
 		select {
 		case <-ctx.Done():
-			slog.Debug("Consume context cancelled, closing channels.")
+			slog.Debug("Work Queue: Consume context cancelled, closing channels.")
 
 			close(reschan)
 			close(errchan)
 			return
 		case p := <-wq.pkgs:
-			slog.Debug("Received message, forwarding to results channel.", "msg.id", p.Message.ID)
+			slog.Debug("Work Queue: Received message, forwarding to results channel.", "msg.id", p.Message.ID)
 
 			// Initializes the context for the job. Than extract the tracing
 			// information from the carrier into the job's context.
@@ -160,7 +169,7 @@ func (wq *MemoryWorkQueue) ConsumeVisit(ctx context.Context) (<-chan *VisitJob, 
 				VisitMessage: p.Message,
 				Context:      jctx,
 			}
-			slog.Debug("Forwarded message to results channel.", "msg.id", p.Message.ID)
+			slog.Debug("Work Queue: Forwarded message to results channel.", "msg.id", p.Message.ID)
 		}
 	}()
 
