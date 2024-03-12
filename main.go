@@ -246,10 +246,14 @@ func main() {
 			urls = append(urls, req.URLs...)
 		}
 		for _, u := range urls {
-			c.Enqueue(context.WithoutCancel(reqctx), u)
+			if isProbablySitemap(u) {
+				c.EnqueueWithFlags(context.WithoutCancel(reqctx), u, collector.FlagInternal)
+			} else {
+				c.Enqueue(context.WithoutCancel(reqctx), u)
+			}
 		}
 
-		if !req.SkipSitemap {
+		if !req.SkipAutoSitemaps {
 			for _, u := range discoverSitemaps(ctx, urls, robots) {
 				slog.Debug("Sitemaps: Enqueueing sitemap for crawling.", "url", u)
 				c.EnqueueWithFlags(context.WithoutCancel(reqctx), u, collector.FlagInternal)

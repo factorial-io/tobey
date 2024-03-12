@@ -15,11 +15,13 @@ type APIRequest struct {
 	Domains       []string       `json:"domains"`
 	WebhookConfig *WebhookConfig `json:"webhook"`
 
-	// If true, we'll ignore robots.txt check on the host.
+	// If true, we'll bypass the robots.txt check, however we'll still
+	// download the file to look for sitemaps.
 	SkipRobots bool `json:"skip_robots"`
 
-	// If true we'll not try to fetch the sitemap.xml file.
-	SkipSitemap bool `json:"skip_sitemap"`
+	// If true we'll not use any sitemaps found automatically, only those that
+	// have been explicitly provided.
+	SkipAutoSitemaps bool `json:"skip_auto_sitemaps"`
 }
 
 func (req *APIRequest) Validate() bool {

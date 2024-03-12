@@ -6,7 +6,12 @@ import (
 	"log/slog"
 	"net/url"
 	"slices"
+	"strings"
 )
+
+func isProbablySitemap(url string) bool {
+	return strings.HasSuffix(url, "/sitemap.xml")
+}
 
 // Discover sitemaps for the hosts, if the robots.txt has no
 // information about it, fall back to a well known location.

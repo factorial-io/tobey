@@ -112,20 +112,43 @@ dispatched.
 }
 ```
 
-### Skipping auto discovery of well known resources
+### Bypassing robots.txt
 
-Tobey will by default automatically discover and use a sitemap if one is
-available to enhance the crawling process. The same applies to robots.txt.
-If this is discovered it will be used to check if a resource is allowed to be
-downloaded.
-
-You may disable this behavior by providing the `skip_robots` and/or the `skip_sitemap` key:
+When running certain tests you might want to bypass the robots.txt file. You can
+do so by providing the `skip_robots` key:
 
 ```jsonc
 {
   "url": "https://example.org",
-  "skip_robots": true,
-  "skip_sitemap": true
+  "skip_robots": true
+}
+```
+
+### Sitemaps
+
+Tobey will automatically discover and use a sitemap if one is available, either
+by looking at well known locations or by looking at the robots.txt.
+
+If you don't want the crawler to use sitemaps at all, you may disable this
+behavior by providing the `skip_auto_sitemaps` key:
+
+```jsonc
+{
+  "url": "https://example.org",
+  "skip_auto_sitemaps": true
+}
+```
+
+If you prefer to provide the sitemap URL yourself, you may do so by providing
+the URL under the `url` key algonside the entrypoint:
+
+```jsonc
+{
+  "urls": [
+    "https://factorial.io", 
+    "https://factorial.io/sitemap.xml"
+  ],
+  "skip_auto_sitemaps": true
 }
 ```
 
