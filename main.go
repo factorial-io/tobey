@@ -49,6 +49,10 @@ const (
 	// limits the maximum number of parrallel runs that we can perform.
 	MaxParallelRuns int = 128
 
+	// MaxRequestsPerSecond specifies the maximum number of requests per second
+	// that are exectuted against a single host.
+	MaxRequestsPerSecond int = 1
+
 	// CachePath is the absolute or relative path (to the working directory) where we store the cache.
 	CachePath = "./cache"
 
@@ -125,7 +129,7 @@ func main() {
 
 	progress := MustStartProgressFromEnv(ctx)
 
-	limiter := CreateLimiter(ctx, redisconn, 1)
+	limiter := CreateLimiter(ctx, redisconn, MaxRequestsPerSecond)
 	client := CreateCrawlerHTTPClient()
 	colls := collector.NewManager(MaxParallelRuns)
 	robots := NewRobots(client)
