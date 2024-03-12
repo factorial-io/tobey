@@ -16,33 +16,46 @@ import (
 // CreateCrawlerHTTPClient creates a new HTTP client configured and optimized for use
 // in crawling actions.
 func CreateCrawlerHTTPClient() *http.Client {
+	var t http.RoundTripper
+
+	//
+	// -> OtelTransport -> UserAgentTransport -> CachingTransport -> DefaultTransport
+	//
+
 	if SkipCache {
-		return &http.Client{
-			Timeout:   10 * time.Second,
-			Transport: &UserAgentTransport{},
-		}
+		t = http.DefaultTransport
+	} else {
+		cachedir, _ := filepath.Abs(CachePath)
+
+		tempdir := os.TempDir()
+		slog.Debug("Using temporary directory for atomic file operations.", "dir", tempdir)
+
+		cachedisk := diskv.New(diskv.Options{
+			BasePath:     cachedir,
+			TempDir:      tempdir,
+			CacheSizeMax: 1000 * 1024 * 1024, // 1GB
+		})
+		slog.Debug(
+			"Initializing caching HTTP client...",
+			"cache.dir", cachedir,
+			"cache.size", cachedisk.CacheSizeMax,
+		)
+		t = httpcache.NewTransport(diskcache.NewWithDiskv(cachedisk))
 	}
-	tempdir := os.TempDir()
-	slog.Debug("Using temporary directory for atomic file operations.", "dir", tempdir)
 
-	cachedir, _ := filepath.Abs(CachePath)
+	// Add User-Agent to the transport, these headers should be added
+	// before going through the caching transport.
+	t = &UserAgentTransport{Transport: t}
 
-	cachedisk := diskv.New(diskv.Options{
-		BasePath:     cachedir,
-		TempDir:      tempdir,
-		CacheSizeMax: 1000 * 1024 * 1024, // 1GB
-	})
-	slog.Debug(
-		"Initializing caching HTTP client...",
-		"cache.dir", cachedir,
-		"cache.size", cachedisk.CacheSizeMax,
-	)
+	// Any request independent if cached or not should be traced
+	// and have metrics collected.
+	if UseMetrics || UseTracing {
+		t = otelhttp.NewTransport(t)
+	}
 
 	return &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &UserAgentTransport{
-			Transport: otelhttp.NewTransport(httpcache.NewTransport(diskcache.NewWithDiskv(cachedisk))),
-		},
+		Timeout:   10 * time.Second,
+		Transport: t,
 	}
 }
 
