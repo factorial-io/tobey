@@ -134,7 +134,18 @@ func main() {
 	colls := collector.NewManager(MaxParallelRuns)
 	robots := NewRobots(client)
 
-	workers := CreateVisitWorkersPool(ctx, NumVisitWorkers, colls, client, limiter, robots, queue, runs, progress, hooks)
+	workers := CreateVisitWorkersPool(
+		ctx,
+		NumVisitWorkers,
+		colls,
+		client,
+		limiter,
+		robots,
+		queue,
+		runs,
+		progress,
+		hooks,
+	)
 
 	apirouter := http.NewServeMux()
 
