@@ -51,7 +51,7 @@ const (
 
 	// MaxRequestsPerSecond specifies the maximum number of requests per second
 	// that are exectuted against a single host.
-	MaxRequestsPerSecond int = 1
+	MaxRequestsPerSecond int = 2
 
 	// CachePath is the absolute or relative path (to the working directory) where we store the cache.
 	CachePath = "./cache"
