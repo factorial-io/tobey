@@ -17,7 +17,7 @@ import (
 
 func maybeRedis(ctx context.Context) (*redis.Client, error) {
 	rawdsn, ok := os.LookupEnv("TOBEY_REDIS_DSN")
-	if !ok {
+	if !ok || rawdsn == "" {
 		return nil, nil
 	}
 	slog.Debug("Connecting to Redis...", "dsn", rawdsn)
@@ -61,7 +61,7 @@ func maybeRedis(ctx context.Context) (*redis.Client, error) {
 
 func maybeRabbitMQ(ctx context.Context) (*amqp.Connection, error) {
 	dsn, ok := os.LookupEnv("TOBEY_RABBITMQ_DSN")
-	if !ok {
+	if !ok || dsn == "" {
 		return nil, nil
 	}
 	slog.Debug("Connecting to RabbitMQ...", "dsn", dsn)
