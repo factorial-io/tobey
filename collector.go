@@ -67,8 +67,8 @@ func getEnqueueFn(hconf *WebhookConfig, q WorkQueue, runs MetaStore, progress Pr
 			progress.Update(ProgressUpdateMessagePackage{
 				context.WithoutCancel(tctx),
 				ProgressUpdateMessage{
-					PROGRESS_STAGE_NAME,
-					PROGRESS_STATE_QUEUED_FOR_CRAWLING,
+					ProgressStage,
+					ProgressStateQueuedForCrawling,
 					c.Run,
 					url,
 				},

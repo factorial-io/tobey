@@ -150,6 +150,17 @@ func VisitWorker(
 				continue
 			}
 		}
+		if job.Flags&collector.FlagInternal == 0 {
+			progress.Update(ProgressUpdateMessagePackage{
+				jctx,
+				ProgressUpdateMessage{
+					ProgressStage,
+					ProgressStateCrawling,
+					job.Run,
+					job.URL,
+				},
+			})
+		}
 
 		if err := c.Visit(jctx, job.URL); err != nil {
 			jlogger.Error("Visitor: Error visiting URL.", "error", err)
@@ -158,8 +169,8 @@ func VisitWorker(
 				progress.Update(ProgressUpdateMessagePackage{
 					jctx,
 					ProgressUpdateMessage{
-						PROGRESS_STAGE_NAME,
-						PROGRESS_STATE_Errored,
+						ProgressStage,
+						ProgressStateErrored,
 						job.Run,
 						job.URL,
 					},
@@ -178,8 +189,8 @@ func VisitWorker(
 			progress.Update(ProgressUpdateMessagePackage{
 				jctx,
 				ProgressUpdateMessage{
-					PROGRESS_STAGE_NAME,
-					PROGRESS_STATE_Succeeded, 
+					ProgressStage,
+					ProgressStateSucceeded,
 					job.Run,
 					job.URL,
 				},

@@ -16,21 +16,18 @@ import (
 )
 
 const (
-	// TODO: These constants should follow the naming convention of the other constants.
-	PROGRESS_STATE_UKNOWN                = "unknown"
-	PROGRESS_STATE_QUEUED_FOR_CRAWLING   = "queued_for_crawling"
-	PROGRESS_STATE_CRAWLED               = "crawled"
-	PROGRESS_STATE_QUEUED_FOR_Processing = "queued_for_processing"
-	PROGRESS_STATE_Processing_Started    = "processing_started"
-	PROGRESS_STATE_Processed             = "processed"
-	PROGRESS_STATE_Succeeded             = "succeeded"
-	PROGRESS_STATE_Cancelled             = "cancelled"
-	PROGRESS_STATE_Errored               = "errored"
+	ProgressStage = "crawler"
 
-	PROGRESS_STAGE_NAME = "crawler"
+	ProgressEndpointUpdate     = "api/status/update"
+	ProgressEndpointTransition = "api/status/transition"
+)
 
-	PROGRESS_ENDPOINTS_UPDATE     = "api/status/update"
-	PROGRESS_ENDPOINTS_TRANSITION = "api/status/transition"
+// Constants to be used for indicating what state the progress is in.
+const (
+	ProgressStateQueuedForCrawling = "queued_for_crawling" // Used when an URL has been enqueued, see collector.Collector.EnqueueFn.
+	ProgressStateCrawling          = "crawling"            // Used when actively crawling an URL, i.e. right before collector.Collector.Visit.
+	ProgressStateSucceeded         = "succeeded"           // When crawling has been successful.
+	ProgressStateErrored           = "errored"
 )
 
 type ProgressUpdateMessagePackage struct {
@@ -127,7 +124,7 @@ func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUp
 	ctx_send_webhook, span := tracer.Start(ctx, "handle.progress.queue.send")
 	defer span.End()
 
-	url := fmt.Sprintf("%v/%v", w.apiURL, PROGRESS_ENDPOINTS_UPDATE)
+	url := fmt.Sprintf("%v/%v", w.apiURL, ProgressEndpointUpdate)
 
 	span.SetAttributes(attribute.String("API_URL", url))
 	span.SetAttributes(attribute.String("url", msg.Url))
