@@ -174,11 +174,12 @@ func VisitWorker(
 		jlogger.Info("Visitor: Visited URL.", "took", time.Since(job.Created))
 
 		if job.Flags&collector.FlagInternal == 0 {
+			// Until Laravel is properly connected, we setit to successful (PROGRESS_STATE_CRAWLED)
 			progress.Update(ProgressUpdateMessagePackage{
 				jctx,
 				ProgressUpdateMessage{
 					PROGRESS_STAGE_NAME,
-					PROGRESS_STATE_CRAWLED,
+					PROGRESS_STATE_Succeeded, 
 					job.Run,
 					job.URL,
 				},
