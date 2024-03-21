@@ -11,14 +11,11 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
-	"tobey/internal/collector"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	_ "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -51,16 +48,25 @@ const (
 	// limits the maximum number of parrallel runs that we can perform.
 	MaxParallelRuns int = 128
 
+	// RunTTL specifies the maximum time a run is kept in memory. After this
+	// time the run is evicted from memory and the cache. The cache may contain
+	// sensitve information, so we should not keep it around for too long.
+	RunTTL = 24 * time.Hour
+
 	// MaxRequestsPerSecond specifies the maximum number of requests per second
 	// that are exectuted against a single host.
 	MaxRequestsPerSecond int = 2
 
-	// CachePath is the absolute or relative path (to the working directory) where we store the cache.
-	CachePath = "./cache"
-
 	// UserAgent to be used with all HTTP request. The value is set to a
 	// backwards compatible one. Some sites allowwlist this specific user agent.
 	UserAgent = "WebsiteStandardsBot/1.0"
+)
+
+var (
+	// CachePath is the absolute or relative path (to the working directory) where we store the cache.
+	CachePath = "./cache"
+
+	CacheTempPath = os.TempDir()
 )
 
 func configure() {
@@ -115,7 +121,7 @@ func main() {
 		panic(err)
 	}
 
-	runs := CreateMetaStore(redisconn)
+	runs := NewRunManager(redisconn)
 
 	queue := CreateWorkQueue(rabbitmqconn)
 	if err := queue.Open(); err != nil {
@@ -132,19 +138,13 @@ func main() {
 	progress := MustStartProgressFromEnv(ctx)
 
 	limiter := CreateLimiter(ctx, redisconn, MaxRequestsPerSecond)
-	client := CreateCrawlerHTTPClient()
-	colls := collector.NewManager(MaxParallelRuns)
-	robots := NewRobots(client)
 
 	workers := CreateVisitWorkersPool(
 		ctx,
 		NumVisitWorkers,
-		colls,
-		client,
-		limiter,
-		robots,
-		queue,
 		runs,
+		limiter,
+		queue,
 		progress,
 		hooks,
 	)
@@ -194,87 +194,43 @@ func main() {
 			return
 		}
 
-		var run string
-		if req.Run != "" {
-			v, err := uuid.Parse(req.Run)
-			if err != nil {
-				slog.Error("Failed to parse given run as UUID.", "run", req.Run)
+		id, err := req.GetRun()
+		if err != nil {
+			slog.Error("Failed to parse given run as UUID.", "run", req.Run)
 
-				result := &APIError{
-					Message: fmt.Sprintf("Failed to parse given run (%s) as UUID or number.", req.Run),
-				}
-
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(result)
-				return
-			} else {
-				run = v.String()
+			result := &APIError{
+				Message: fmt.Sprintf("Failed to parse given run (%s) as UUID or number.", req.Run),
 			}
-		} else {
-			run = uuid.New().String()
+
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(result)
+			return
 		}
 
-		// Ensure at least the URL host is in allowed domains.
-		var allowedDomains []string
-		if req.Domains != nil {
-			allowedDomains = req.Domains
-		} else {
-			p, _ := url.Parse(req.URL)
-			allowedDomains = append(allowedDomains, p.Hostname())
-		}
+		run := &Run{
+			SerializableRun: SerializableRun{
+				ID: id,
 
-		// Cannot be already present for this run, as the run starts here and
-		// now. We don't NewEncoder to check the Manager for an existing one, or
-		// fear that we overwrite an existing one.
-		c := collector.NewCollector(
-			ctx,
-			client,
-			run,
-			allowedDomains,
-			func(a string, u string) (bool, error) {
-				if req.SkipRobots {
-					return true, nil
-				}
-				return robots.Check(a, u)
+				URLs: req.GetURLs(true),
+
+				AuthConfigs: req.GetAuthConfigs(),
+
+				AllowedDomains:       req.GetAllowedDomains(),
+				SkipRobots:           req.SkipRobots,
+				SkipSitemapDiscovery: req.SkipSitemapDiscovery,
+
+				WebhookConfig: req.WebhookConfig,
 			},
-			getEnqueueFn(req.WebhookConfig, queue, runs, progress),
-			getCollectFn(req.WebhookConfig, hooks),
-		)
-
-		// Ensure CrawlerHTTPClient's UA and Collector's UA are the same.
-		c.UserAgent = UserAgent
-
-		// Also provide local workers access to the collector, through the
-		// collectors manager.
-		colls.Add(c, func(id string) {
-			runs.Clear(ctx, id)
-		})
-
-		// Enqueue the URL(s) for crawling.
-		var urls []string
-		if req.URL != "" {
-			urls = append(urls, req.URL)
-		}
-		if req.URLs != nil {
-			urls = append(urls, req.URLs...)
-		}
-		for _, u := range urls {
-			if isProbablySitemap(u) {
-				c.EnqueueWithFlags(context.WithoutCancel(reqctx), u, collector.FlagInternal)
-			} else {
-				c.Enqueue(context.WithoutCancel(reqctx), u)
-			}
 		}
 
-		if !req.SkipSitemapDiscovery {
-			for _, u := range discoverSitemaps(ctx, urls, robots) {
-				slog.Debug("Sitemaps: Enqueueing sitemap for crawling.", "url", u)
-				c.EnqueueWithFlags(context.WithoutCancel(reqctx), u, collector.FlagInternal)
-			}
-		}
+		// Ensure we make the run configuration available in the store, before
+		// we start publishing to the work queue.
+		runs.Add(ctx, run)
+
+		run.Start(reqctx, queue, progress, hooks, req.GetURLs(true))
 
 		result := &APIResponse{
-			Run: run,
+			Run: run.ID,
 		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(result)

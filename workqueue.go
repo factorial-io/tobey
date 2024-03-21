@@ -19,7 +19,7 @@ type WorkQueue interface {
 	Open() error
 
 	// The following methods use the crawl run context.
-	PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, hconf *WebhookConfig, flags uint8) error
+	PublishURL(ctx context.Context, run string, url string, flags uint8) error
 	ConsumeVisit(ctx context.Context) (<-chan *VisitJob, <-chan error)
 	DelayVisit(ctx context.Context, delay time.Duration, j *VisitMessage) error
 
@@ -31,9 +31,6 @@ type VisitMessage struct {
 	Run string
 
 	URL string
-
-	CollectorConfig *CollectorConfig
-	WebhookConfig   *WebhookConfig
 
 	// Whether this visit has a valid reservation by a rate limiter.
 	HasReservation bool
@@ -93,7 +90,7 @@ func (wq *MemoryWorkQueue) Open() error {
 	return nil
 }
 
-func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, hconf *WebhookConfig, flags uint8) error {
+func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url string, flags uint8) error {
 	// Extract tracing information from context, to transport it over the
 	// channel, without using a Context.
 	propagator := otel.GetTextMapPropagator()
@@ -103,13 +100,11 @@ func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url strin
 	pkg := &visitPackage{
 		Carrier: carrier,
 		Message: &VisitMessage{
-			ID:              uuid.New().ID(),
-			Created:         time.Now(),
-			Run:             run,
-			URL:             url,
-			CollectorConfig: cconf,
-			WebhookConfig:   hconf,
-			Flags:           flags,
+			ID:      uuid.New().ID(),
+			Created: time.Now(),
+			Run:     run,
+			URL:     url,
+			Flags:   flags,
 		},
 	}
 	select {
@@ -239,17 +234,15 @@ func (wq *RabbitMQWorkQueue) Open() error {
 	return nil
 }
 
-func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run string, url string, cconf *CollectorConfig, hconf *WebhookConfig, flags uint8) error {
+func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run string, url string, flags uint8) error {
 	jmlctx, span := tracer.Start(ctx, "publish_url")
 	defer span.End()
 	msg := &VisitMessage{
-		ID:              uuid.New().ID(),
-		Created:         time.Now(),
-		Run:             run,
-		URL:             url,
-		CollectorConfig: cconf,
-		WebhookConfig:   hconf,
-		Flags:           flags,
+		ID:      uuid.New().ID(),
+		Created: time.Now(),
+		Run:     run,
+		URL:     url,
+		Flags:   flags,
 	}
 
 	b, err := json.Marshal(msg)

@@ -40,8 +40,6 @@ const ProxyURLKey key = iota
 func NewCollector(
 	ctx context.Context,
 	client *http.Client,
-	run string,
-	domains []string,
 	robots RobotCheckFn,
 	enqueue EnqueueFn,
 	collect CollectFn,
@@ -52,9 +50,6 @@ func NewCollector(
 	}
 
 	c := &Collector{
-		AllowedDomains: domains,
-		Run:            run,
-
 		enqueueFn: enqueue,
 		collectFn: collect,
 
@@ -95,9 +90,6 @@ func NewCollector(
 }
 
 type Collector struct {
-	// Run is the unique identifier of a collector.
-	Run string
-
 	// AllowedDomains is a domain allowlist.
 	AllowedDomains []string
 
@@ -300,7 +292,7 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 		// Ensure there is at least one domain in the allowlist. Do not treat an
 		// empty allowlist as a wildcard.
 		if c.AllowedDomains == nil || len(c.AllowedDomains) == 0 {
-			slog.Error("No domains have been added to the allowlist.", "run", c.Run)
+			slog.Error("No domains have been added to the allowlist.")
 			return false
 		}
 

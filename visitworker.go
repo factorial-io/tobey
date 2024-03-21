@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"net/http"
 	"sync"
 	"time"
 
@@ -20,12 +19,9 @@ import (
 func CreateVisitWorkersPool(
 	ctx context.Context,
 	num int,
-	colls *collector.Manager,
-	client *http.Client,
+	runs *RunManager,
 	limiter LimiterAllowFn,
-	robots *Robots,
 	q WorkQueue,
-	runs MetaStore,
 	progress Progress,
 	hooks *WebhookDispatcher,
 ) *sync.WaitGroup {
@@ -36,7 +32,7 @@ func CreateVisitWorkersPool(
 		wg.Add(1)
 
 		go func(id int) {
-			if err := VisitWorker(ctx, id, colls, client, limiter, robots, q, runs, progress, hooks); err != nil {
+			if err := VisitWorker(ctx, id, runs, limiter, q, progress, hooks); err != nil {
 				slog.Error("Visitor: Worker exited with error.", "worker.id", id, "error", err)
 			} else {
 				slog.Debug("Visitor: Worker exited cleanly.", "worker.id", id)
@@ -51,12 +47,9 @@ func CreateVisitWorkersPool(
 func VisitWorker(
 	ctx context.Context,
 	id int,
-	colls *collector.Manager,
-	client *http.Client,
+	runs *RunManager,
 	limiter LimiterAllowFn,
-	robots *Robots,
 	q WorkQueue,
-	runs MetaStore,
 	progress Progress,
 	hooks *WebhookDispatcher,
 ) error {
@@ -100,26 +93,8 @@ func VisitWorker(
 		// a VisitMessage that was put in the queue by another tobey instance, we don't
 		// yet have a collector available via the Manager. Please note that Collectors
 		// are not shared by the Manager across tobey instances.
-		c, ok := colls.Get(job.Run)
-		if !ok {
-			c = collector.NewCollector(
-				ctx, // Do not use the job's context here.
-				client,
-				job.CollectorConfig.Run,
-				job.CollectorConfig.AllowedDomains,
-				func(a string, u string) (bool, error) {
-					if job.CollectorConfig.SkipRobots {
-						return true, nil
-					}
-					return robots.Check(a, u)
-				},
-				getEnqueueFn(job.WebhookConfig, q, runs, progress),
-				getCollectFn(job.WebhookConfig, hooks),
-			)
-
-			// Ensure CrawlerHTTPClient's UA and Collector's UA are the same.
-			c.UserAgent = UserAgent
-		}
+		r, _ := runs.Get(ctx, job.Run)
+		c := r.GetCollector(ctx, q, progress, hooks)
 
 		if !job.HasReservation {
 			jlogger.Debug("Visitor: Job has no reservation.")

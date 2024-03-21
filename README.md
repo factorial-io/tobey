@@ -165,6 +165,29 @@ the URL under the `url` key algonside the entrypoint:
 }
 ```
 
+### Authentication
+
+When the resource you want to download requires authentication, you can provide
+the credentials for HTTP basic auth in the URL. The crawler will use these
+credientials for all resources under the same domain.
+
+```jsonc
+{
+  "url": "https://foo:secret@factorial.io"
+}
+```
+
+When you want to provide the credentials in a more structured way, you can do so
+by providing the `auth` key:
+
+```jsonc
+{
+  "url": "https://factorial.io"
+  "auth": [
+    { host: "factorial.io", method: "basic", username: "foo", password: "secret" }
+  ]
+```
+
 ### Prioritites (not implemented)
 
 tbd

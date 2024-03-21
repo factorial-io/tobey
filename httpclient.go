@@ -3,9 +3,9 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -15,35 +15,32 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
+type GetAuthHeaderFn func(ctx context.Context, host string) (string, bool)
+
 // CreateCrawlerHTTPClient creates a new HTTP client configured and optimized for use
 // in crawling actions.
-func CreateCrawlerHTTPClient() *http.Client {
+func CreateCrawlerHTTPClient(getAuthHeader GetAuthHeaderFn) *http.Client {
 	var t http.RoundTripper
 
 	//
-	// -> OtelTransport -> UserAgentTransport -> CachingTransport -> DefaultTransport
+	// -> OtelTransport -> AuthTransport -> UserAgentTransport -> CachingTransport -> DefaultTransport
 	//
 
 	if SkipCache {
 		t = http.DefaultTransport
 	} else {
 		cachedir, _ := filepath.Abs(CachePath)
-
-		tempdir := os.TempDir()
-		slog.Debug("Using temporary directory for atomic file operations.", "dir", tempdir)
+		tempdir, _ := filepath.Abs(CacheTempPath)
 
 		cachedisk := diskv.New(diskv.Options{
 			BasePath:     cachedir,
 			TempDir:      tempdir,
 			CacheSizeMax: 1000 * 1024 * 1024, // 1GB
 		})
-		slog.Debug(
-			"Initializing caching HTTP client...",
-			"cache.dir", cachedir,
-			"cache.size", cachedisk.CacheSizeMax,
-		)
 		t = httpcache.NewTransport(diskcache.NewWithDiskv(cachedisk))
 	}
+
+	t = &AuthTransport{Transport: t, getHeaderFn: getAuthHeader}
 
 	// Add User-Agent to the transport, these headers should be added
 	// before going through the caching transport.
@@ -59,6 +56,20 @@ func CreateCrawlerHTTPClient() *http.Client {
 		Timeout:   10 * time.Second,
 		Transport: t,
 	}
+}
+
+type AuthTransport struct {
+	Transport   http.RoundTripper
+	getHeaderFn GetAuthHeaderFn
+}
+
+func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	header, ok := t.getHeaderFn(req.Context(), req.Host)
+	if ok {
+		slog.Debug("Client: Adding Authorization header to request.", "host", req.Host)
+		req.Header.Add("Authorization", header)
+	}
+	return t.Transport.RoundTrip(req)
 }
 
 // UserAgentTransport is a simple http.RoundTripper that adds a User-Agent

@@ -11,6 +11,8 @@ import (
 	"github.com/temoto/robotstxt"
 )
 
+type RobotCheckFn func(agent string, u string) (bool, error)
+
 // Robots is a simple wrapper around robotstxt.RobotsData that caches the
 // robots.txt file for each host.
 //
