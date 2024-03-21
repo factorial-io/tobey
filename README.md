@@ -112,6 +112,20 @@ dispatched.
 }
 ```
 
+### Multiple URLs
+
+Multiple URLs either as entrypoints or for oneshot downloading work a well,
+using the `urls` key:
+
+```jsonc
+{
+  "urls": [
+    "https://factorial.io/blog", 
+    "https://factorial.io/values"
+  ]
+}
+```
+
 ### Bypassing robots.txt
 
 When running certain tests you might want to bypass the robots.txt file. You can
@@ -183,20 +197,6 @@ curl -X POST http://127.0.0.1:8080?oneshot # ...
 ```jsonc
 {
   "url": "https://factorial.io/values"
-}
-```
-
-### Multiple URLs (not implemented)
-
-Multiple URLs either as entrypoints or for oneshot downloading work a well,
-using the `urls` key:
-
-```jsonc
-{
-  "urls": [
-    "https://factorial.io/blog", 
-    "https://factorial.io/values"
-  ]
 }
 ```
 
