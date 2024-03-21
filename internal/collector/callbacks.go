@@ -1,5 +1,8 @@
-// Based on colly HTTP scraping framework, Copyright 2018 Adam Tauber,
-// originally licensed under the Apache License 2.0
+// Copyright 2018 Adam Tauber. All rights reserved.
+// Copyright 2024 Factorial GmbH. All rights reserved.
+//
+// Based on the colly HTTP scraping framework by Adam Tauber, originally
+// licensed under the Apache License 2.0 modified by Factorial GmbH.
 
 package collector
 

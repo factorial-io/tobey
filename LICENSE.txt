@@ -1,7 +1,7 @@
 This code base contains source code from Colly, it has been forked and modified
 for use in Tobey. Where not otherwise stated the unmodified portions of the
-Colly source code as found in the this and other directories are licensed under the
-following license:
+Colly source code as found in the directories are licensed under the following
+license:
 
                                  Apache License
                            Version 2.0, January 2004

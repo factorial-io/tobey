@@ -1,3 +1,5 @@
+// Copyright 2024 Factorial GmbH. All rights reserved.
+
 package main
 
 import (
