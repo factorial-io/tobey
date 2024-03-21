@@ -21,7 +21,7 @@ type APIRequest struct {
 
 	// If true we'll not use any sitemaps found automatically, only those that
 	// have been explicitly provided.
-	SkipAutoSitemaps bool `json:"skip_auto_sitemaps"`
+	SkipSitemapDiscovery bool `json:"skip_sitemap_discovery"`
 }
 
 func (req *APIRequest) Validate() bool {

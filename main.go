@@ -264,7 +264,7 @@ func main() {
 			}
 		}
 
-		if !req.SkipAutoSitemaps {
+		if !req.SkipSitemapDiscovery {
 			for _, u := range discoverSitemaps(ctx, urls, robots) {
 				slog.Debug("Sitemaps: Enqueueing sitemap for crawling.", "url", u)
 				c.EnqueueWithFlags(context.WithoutCancel(reqctx), u, collector.FlagInternal)

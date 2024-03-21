@@ -143,12 +143,12 @@ Tobey will automatically discover and use a sitemap if one is available, either
 by looking at well known locations or by looking at the robots.txt.
 
 If you don't want the crawler to use sitemaps at all, you may disable this
-behavior by providing the `skip_auto_sitemaps` key:
+behavior by providing the `skip_sitemap_discovery` key:
 
 ```jsonc
 {
   "url": "https://example.org",
-  "skip_auto_sitemaps": true
+  "skip_sitemap_discovery": true
 }
 ```
 
