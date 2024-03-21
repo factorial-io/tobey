@@ -50,12 +50,11 @@ variables are available:
 | `TOBEY_RABBITMQ_DSN` | empty | i.e. `amqp://guest:guest@rabbitmq:5672/` | DSN to reach a RabbitMQ instance. Only needed when operating multiple instances. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
 | `TOBEY_PROGRESS_DSN` | empty | i.e. `http://localhost:9020`  | DSN where to reach a progress service. When configured tobey will send progress updates there. |
-| `TELEMETRY` | empty | i.e. `metrics traces` | Space separated list of what kind of telemetry is emitted. |
+| `TOBEY_TELEMETRY` | empty | i.e. `metrics traces` | Space separated list of what kind of telemetry is emitted. |
 
 On top of these variables, the service's telemetry
-feature can be configured via the commonly known [OpenTelemetry environment
-variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-export
-er/).
+feature can be configured via the commonly known 
+[OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
 ## Submitting a Basic Crawl Request
 
@@ -226,13 +225,14 @@ This is how the payload will look like, and how it is received by the target:
 
 ```jsonc
 {
-  "action": "tobey.result",
-  "run_uuid": 123,
+  "action": "collector.response",
+  "run_uuid": "0033085c-685b-432a-9aa4-0aca59cc3e12",
+  // ... 
+  "request_url": "http://...", 
+  "response_body": "...", // Base64 encoded raw response body received when downloading the resource.
+  // ... 
   "data": { // Passed-through data.
     "magic_number": 12 
   },
-  "request": {/* ... */},  // Raw request submitted to download the resource.
-  "response": {/* ... */}, // Raw response received when downloading the resource.
-  // ... 
 }
 ```
