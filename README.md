@@ -35,7 +35,7 @@ go run .
 # In another terminal, submit a crawl request.
 curl -X POST http://127.0.0.1:8080 \
      -H 'Content-Type: application/json' \
-     -d '{"url": "https://www.factorial.io/"}'
+     -d '{"url": "https://www.example.org/"}'
 ```
 
 ## Configuration
@@ -119,8 +119,8 @@ using the `urls` key:
 ```jsonc
 {
   "urls": [
-    "https://factorial.io/blog", 
-    "https://factorial.io/values"
+    "https://example.org/blog", 
+    "https://example.org/values"
   ]
 }
 ```
@@ -158,8 +158,8 @@ the URL under the `url` key algonside the entrypoint:
 ```jsonc
 {
   "urls": [
-    "https://factorial.io", 
-    "https://factorial.io/sitemap.xml"
+    "https://example.org", 
+    "https://example.org/sitemap.xml"
   ],
   "skip_auto_sitemaps": true
 }
@@ -173,7 +173,7 @@ credientials for all resources under the same domain.
 
 ```jsonc
 {
-  "url": "https://foo:secret@factorial.io"
+  "url": "https://foo:secret@example.org"
 }
 ```
 
@@ -182,9 +182,9 @@ by providing the `auth` key:
 
 ```jsonc
 {
-  "url": "https://factorial.io"
+  "url": "https://example.org"
   "auth": [
-    { host: "factorial.io", method: "basic", username: "foo", password: "secret" }
+    { host: "example.org", method: "basic", username: "foo", password: "secret" }
   ]
 ```
 
@@ -218,7 +218,7 @@ curl -X POST http://127.0.0.1:8080?oneshot # ...
 
 ```jsonc
 {
-  "url": "https://factorial.io/values"
+  "url": "https://example.org/values"
 }
 ```
 
@@ -233,10 +233,10 @@ through additional information to the target of the webhook.
 ```jsonc
 {
   // ...
-  "url": "https://factorial.io",
+  "url": "https://example.org",
   // ...
   "webhook": {
-    "endpoint": "https://metatags.factorial.io/accept-webhook",
+    "endpoint": "https://metatags.example.org/accept-webhook",
     "data": { // Any additional data that you want the hook to receive.
       "magic_number": 12 
     }
