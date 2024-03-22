@@ -11,6 +11,10 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	AuthMethodBasic = "basic"
+)
+
 type AuthConfig struct {
 	Host   string `json:"host"`
 	Method string `json:"method"`
@@ -24,7 +28,7 @@ type AuthConfig struct {
 // authentication configuration.
 func (auth *AuthConfig) GetHeader() (string, bool) {
 	switch auth.Method {
-	case "basic":
+	case AuthMethodBasic:
 		token := fmt.Sprintf("%s:%s", auth.Username, auth.Password)
 		token = base64.StdEncoding.EncodeToString([]byte(token))
 

@@ -9,13 +9,18 @@ import (
 	"tobey/internal/collector"
 )
 
+// Run is a struct that represents a single run of the crawler. It contains
+// all the configuration for the run, like the URLs to start with, the auth
+// configurations, the allowed domains, etc. Runs are the main entities that
+// group and scope a lot of the crawler's logic.
+//
+// A Run can be executed from multiple crawlers at the same time.
 type Run struct {
 	SerializableRun
 
+	client *http.Client
+	store  RunStore // Used to get a live list of seen URLs.
 	robots *Robots
-
-	// Used to get a live list of seen URLs.
-	store RunStore
 }
 
 // SerializableRun is a serializable version of the Run struct. It is used to
@@ -41,20 +46,9 @@ type LiveRun struct {
 	Seen []string
 }
 
-func (r *Run) ConfigureStore(s RunStore) {
-	r.store = s
-}
-
-// ConfigureRobots configures a Robots instance for the Run, it ensures we retrieve
-// the robots.txt file with the same http.Client as we use for crawling. The
-// http.Client might be using custom headers for authentication. These are only
-// available to the Run.
-func (r *Run) ConfigureRobots() {
-	r.robots = NewRobots(r.GetClient())
-}
-
-func (r *Run) GetClient() *http.Client {
-	return CreateCrawlerHTTPClient(func(ctx context.Context, host string) (string, bool) {
+// ConfigureClient configures the http.Client for the Run.
+func (r *Run) ConfigureClient() {
+	r.client = CreateCrawlerHTTPClient(func(ctx context.Context, host string) (string, bool) {
 		for _, auth := range r.AuthConfigs {
 			if auth.Host == host {
 				return auth.GetHeader()
@@ -64,10 +58,24 @@ func (r *Run) GetClient() *http.Client {
 	})
 }
 
+// ConfigureStore must be called before calling into one of the methods that
+// access live data.
+func (r *Run) ConfigureStore(s RunStore) {
+	r.store = s
+}
+
+// ConfigureRobots configures a Robots instance for the Run, it ensures we retrieve
+// the robots.txt file with the same http.Client as we use for crawling. The
+// http.Client might be using custom headers for authentication. These are only
+// available to the Run.
+func (r *Run) ConfigureRobots() {
+	r.robots = NewRobots(r.client)
+}
+
 func (r *Run) GetCollector(ctx context.Context, q WorkQueue, p Progress, h *WebhookDispatcher) *collector.Collector {
 	c := collector.NewCollector(
 		ctx,
-		r.GetClient(),
+		r.client,
 		func(a string, u string) (bool, error) {
 			if r.SkipRobots {
 				return true, nil
@@ -84,6 +92,8 @@ func (r *Run) GetCollector(ctx context.Context, q WorkQueue, p Progress, h *Webh
 	return c
 }
 
+// Start starts the crawl with the given URLs. It will discover sitemaps and
+// enqueue the URLs. From there on more URLs will be discovered and enqueued.
 func (r *Run) Start(ctx context.Context, q WorkQueue, p Progress, h *WebhookDispatcher, urls []string) {
 	c := r.GetCollector(ctx, q, p, h)
 
