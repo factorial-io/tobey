@@ -113,12 +113,12 @@ func (s *RedisRunStore) Save(ctx context.Context, run *Run) error {
 func (s *RedisRunStore) Load(ctx context.Context, id string) (*Run, bool) {
 	var run *Run
 
-	reply := s.conn.Get(ctx, fmt.Sprintf("%s:static", run.ID))
+	reply := s.conn.Get(ctx, fmt.Sprintf("%s:static", id))
 	if err := reply.Err(); err != nil {
 		return nil, false
 	}
 
-	json.Unmarshal([]byte(reply.Val()), &run.SerializableRun)
+	json.Unmarshal([]byte(reply.Val()), &run)
 	return run, true
 }
 
