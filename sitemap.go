@@ -18,17 +18,22 @@ func isProbablySitemap(url string) bool {
 // Discover sitemaps for the hosts, if the robots.txt has no
 // information about it, fall back to a well known location.
 func discoverSitemaps(ctx context.Context, urls []string, robots *Robots) []string {
+
 	bases := make([]string, 0, len(urls))
 	for _, u := range urls {
-		p, _ := url.Parse(u)
+		p, err := url.Parse(u)
+		if err != nil {
+			slog.Warn("Sitemaps: Failed to parse URL, skipping.", "url", u, "error", err)
+			continue
+		}
 		base := fmt.Sprintf("%s://%s", p.Scheme, p.Hostname())
 
 		if slices.Index(bases, base) == -1 { // Ensure unique.
 			bases = append(bases, base)
 		}
 	}
-	sitemaps := make([]string, 0)
 
+	sitemaps := make([]string, 0)
 	for _, base := range bases {
 		urls, err := robots.Sitemaps(base)
 

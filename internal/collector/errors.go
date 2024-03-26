@@ -9,6 +9,8 @@ package collector
 import "errors"
 
 var (
+	ErrCheckInternal = errors.New("Internal check error")
+
 	// ErrForbiddenDomain is the error thrown if visiting
 	// a domain which is not allowed in AllowedDomains
 	ErrForbiddenDomain = errors.New("Forbidden domain")

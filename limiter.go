@@ -27,7 +27,11 @@ type LimiterAllowFn func(url string) (hasReservation bool, retryAfter time.Durat
 
 func CreateLimiter(ctx context.Context, redis *redis.Client, ratePerS int) LimiterAllowFn {
 	host := func(u string) string {
-		p, _ := url.Parse(u)
+		p, err := url.Parse(u)
+		if err != nil {
+			slog.Warn("Limiter: Failed to parse URL for host.", "url", u, "error", err)
+			return ""
+		}
 		return strings.TrimPrefix(p.Hostname(), "www.")
 	}
 

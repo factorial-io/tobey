@@ -286,7 +286,10 @@ func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Requ
 	}
 }
 func (c *Collector) IsVisitAllowed(in string) (bool, error) {
-	p, _ := url.Parse(in)
+	p, err := url.Parse(in)
+	if err != nil {
+		return false, ErrCheckInternal
+	}
 
 	checkDomain := func(u *url.URL) bool {
 		// Ensure there is at least one domain in the allowlist. Do not treat an
@@ -316,7 +319,7 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 
 	ok, err := c.robotsCheckFn(c.UserAgent, p.String())
 	if err != nil {
-		return false, err
+		return false, ErrCheckInternal
 	}
 	if !ok {
 		return false, ErrRobotsTxtBlocked

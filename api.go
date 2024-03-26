@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 
 	"github.com/google/uuid"
 )
@@ -88,7 +89,12 @@ func (req *APIRequest) GetURLs(clean bool) []string {
 		// use the information to authenticate the request. But we want to do this
 		// explicitly.
 		for i, u := range urls {
-			p, _ := url.Parse(u)
+			p, err := url.Parse(u)
+			if err != nil {
+				slog.Warn("Failed to parse URL while cleaning, skipping.", "url", u, "error", err)
+				slices.Delete(urls, i, i+1)
+				continue
+			}
 			p.User = nil
 			urls[i] = p.String()
 		}
@@ -102,8 +108,14 @@ func (req *APIRequest) GetAllowedDomains() []string {
 	if req.AllowedDomains != nil {
 		domains = req.AllowedDomains
 	} else {
-		p, _ := url.Parse(req.URL)
-		domains = append(domains, p.Hostname())
+		for _, u := range req.GetURLs(false) {
+			p, err := url.Parse(u)
+			if err != nil {
+				slog.Error("Failed to parse URL from request, not allowing that domain.", "url", u, "error", err)
+				continue
+			}
+			domains = append(domains, p.Hostname())
+		}
 	}
 	return domains
 }
@@ -116,8 +128,11 @@ func (req *APIRequest) GetAuthConfigs() []*AuthConfig {
 	}
 
 	for _, u := range req.GetURLs(false) {
-		p, _ := url.Parse(u)
-
+		p, err := url.Parse(u)
+		if err != nil {
+			slog.Warn("Failed to parse URL while building auth config, skipping.", "url", u, "error", err)
+			continue
+		}
 		if p.User != nil {
 			pass, _ := p.User.Password()
 
