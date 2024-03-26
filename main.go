@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,10 @@ var (
 	// These can be controlled via the TOBEY_TELEMETRY environment variable.
 	UseTracing = false
 	UseMetrics = false
+
+	// MaxRequestsPerSecond specifies the maximum number of requests per second
+	// that are exectuted against a single host. Can be controlled via the TOBEY_REQS_PER_S environment variable.
+	MaxRequestsPerSecond int = 2
 )
 
 const (
@@ -53,10 +58,6 @@ const (
 	// sensitve information, so we should not keep it around for too long.
 	RunTTL = 24 * time.Hour
 
-	// MaxRequestsPerSecond specifies the maximum number of requests per second
-	// that are exectuted against a single host.
-	MaxRequestsPerSecond int = 2
-
 	// UserAgent to be used with all HTTP request. The value is set to a
 	// backwards compatible one. Some sites allowwlist this specific user agent.
 	UserAgent = "WebsiteStandardsBot/1.0"
@@ -76,6 +77,16 @@ func configure() {
 	if os.Getenv("TOBEY_SKIP_CACHE") == "true" {
 		SkipCache = true
 		slog.Info("Skipping cache.")
+	}
+
+	if os.Getenv("TOBEY_REQS_PER_S") != "" {
+		n, err := strconv.Atoi(os.Getenv("TOBEY_REQS_PER_S"))
+		if err != nil {
+			panic(err)
+		} else {
+			MaxRequestsPerSecond = n
+			slog.Info("Setting MaxRequestsPerSecond.", "value", MaxRequestsPerSecond)
+		}
 	}
 
 	v := os.Getenv("TOBEY_TELEMETRY")
