@@ -86,7 +86,7 @@ type MemoryWorkQueue struct {
 }
 
 func (wq *MemoryWorkQueue) Open() error {
-	wq.pkgs = make(chan *visitPackage, 10000)
+	wq.pkgs = make(chan *visitPackage, 1_000_000)
 	return nil
 }
 
