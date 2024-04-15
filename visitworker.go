@@ -167,7 +167,19 @@ func VisitWorker(
 				jctx,
 				ProgressUpdateMessage{
 					ProgressStage,
-					ProgressStateCrawling,
+					"Crawled",
+					job.Run,
+					job.URL,
+				},
+			})
+		} else {
+			//Cancelled,
+			//Errored,
+			progress.Update(ProgressUpdateMessagePackage{
+				jctx,
+				ProgressUpdateMessage{
+					ProgressStage,
+					"Errored",
 					job.Run,
 					job.URL,
 				},
