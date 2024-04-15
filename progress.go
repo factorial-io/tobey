@@ -21,7 +21,7 @@ const (
 	ProgressStage = "crawler"
 
 	ProgressEndpointUpdate     = "api/status/update"
-	ProgressEndpointTransition = "api/status/transition"
+	ProgressEndpointTransition = "api/status/transition-to"
 )
 
 // Constants to be used for indicating what state the progress is in.
