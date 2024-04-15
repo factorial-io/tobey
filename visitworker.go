@@ -167,7 +167,7 @@ func VisitWorker(
 				jctx,
 				ProgressUpdateMessage{
 					ProgressStage,
-					ProgressStateSucceeded,
+					ProgressStateCrawling,
 					job.Run,
 					job.URL,
 				},
