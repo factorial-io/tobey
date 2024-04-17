@@ -26,6 +26,8 @@ type Robots struct {
 	data map[string]*robotstxt.RobotsData
 }
 
+// We copy the http.client here so that it is not the same as in the collector,
+// as the collector changes the state and prohibits redirects.
 func NewRobots(client *http.Client) *Robots {
 	return &Robots{
 		client: client,

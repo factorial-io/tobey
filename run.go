@@ -18,7 +18,6 @@ import (
 type Run struct {
 	SerializableRun
 
-	client *http.Client
 	store  RunStore // Used to get a live list of seen URLs.
 	robots *Robots
 }
@@ -46,9 +45,9 @@ type LiveRun struct {
 	Seen []string
 }
 
-// ConfigureClient configures the http.Client for the Run.
-func (r *Run) ConfigureClient() {
-	r.client = CreateCrawlerHTTPClient(func(ctx context.Context, host string) (string, bool) {
+// GetClient configures and returns the http.Client for the Run.
+func (r *Run) GetClient() *http.Client {
+	return CreateCrawlerHTTPClient(func(ctx context.Context, host string) (string, bool) {
 		for _, auth := range r.AuthConfigs {
 			if auth.Host == host {
 				return auth.GetHeader()
@@ -69,13 +68,15 @@ func (r *Run) ConfigureStore(s RunStore) {
 // http.Client might be using custom headers for authentication. These are only
 // available to the Run.
 func (r *Run) ConfigureRobots() {
-	r.robots = NewRobots(r.client)
+	r.robots = NewRobots(r.GetClient())
 }
 
 func (r *Run) GetCollector(ctx context.Context, q WorkQueue, p Progress, h *WebhookDispatcher) *collector.Collector {
 	c := collector.NewCollector(
 		ctx,
-		r.client,
+		// The collector.Collector will modify the http.Client passed to it, we
+		// must ensure that this Client isn't shared with i.e. the Robots instance.
+		r.GetClient(),
 		func(a string, u string) (bool, error) {
 			if r.SkipRobots {
 				return true, nil

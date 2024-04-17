@@ -264,30 +264,22 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 	return nil
 }
 
+// We do not allow redirects as this would lead to problems with tracking in the Progress Service.
+// As the request URL does not match the response URL in a redirect case.
 func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
-		if ok, err := c.IsVisitAllowed(req.URL.String()); !ok {
-			return fmt.Errorf("not following redirect to %q: %w", req.URL, err)
-		}
-
-		// Honor golangs default of maximum of 10 redirects
-		if len(via) >= 10 {
-			return http.ErrUseLastResponse
-		}
-
 		lastRequest := via[len(via)-1]
+		slog.Debug("Found and resolved redirect.", "to", req.URL, "from", lastRequest.URL)
 
-		// If domain has changed, remove the Authorization-header if it exists
-		if req.URL.Host != lastRequest.URL.Host {
-			req.Header.Del("Authorization")
-		}
-
+		c.EnqueueWithFlags(context.WithoutCancel(req.Context()), req.URL.String(), FlagNone)
 		return nil
 	}
 }
+
 func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 	p, err := url.Parse(in)
 	if err != nil {
+		slog.Error("url parse error", in, "")
 		return false, ErrCheckInternal
 	}
 
@@ -319,6 +311,7 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 
 	ok, err := c.robotsCheckFn(c.UserAgent, p.String())
 	if err != nil {
+		slog.Error("robots txt error", in, "")
 		return false, ErrCheckInternal
 	}
 	if !ok {
