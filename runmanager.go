@@ -26,7 +26,6 @@ func NewRunManager(redis *redis.Client) *RunManager {
 func (m *RunManager) Add(ctx context.Context, run *Run) bool {
 	m.store.Save(ctx, run)
 
-	run.ConfigureClient()
 	run.ConfigureStore(m.store)
 	run.ConfigureRobots()
 
@@ -42,7 +41,6 @@ func (m *RunManager) Get(ctx context.Context, id string) (*Run, bool) {
 			return nil, ok
 		}
 
-		run.ConfigureClient()
 		run.ConfigureStore(m.store)
 		run.ConfigureRobots()
 
