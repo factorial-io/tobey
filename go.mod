@@ -7,7 +7,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.32.1
 	github.com/antchfx/htmlquery v1.3.0
 	github.com/antchfx/xmlquery v1.3.18
-	github.com/cenkalti/backoff/v4 v4.2.1
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/go-redis/redis_rate/v10 v10.0.1
 	github.com/google/uuid v1.6.0
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
