@@ -28,7 +28,8 @@ const (
 const (
 	ProgressStateQueuedForCrawling = "queued_for_crawling" // Used when an URL has been enqueued, see collector.Collector.EnqueueFn.
 	ProgressStateCrawling          = "crawling"            // Used when actively crawling an URL, i.e. right before collector.Collector.Visit.
-	ProgressStateSucceeded         = "succeeded"           // When crawling has been successful.
+	ProgressStateCrawled           = "crawled"
+	ProgressStateSucceeded         = "succeeded" // When crawling has been successful.
 	ProgressStateErrored           = "errored"
 )
 
