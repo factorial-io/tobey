@@ -140,22 +140,32 @@ func VisitWorker(
 		}
 
 		if err := c.Visit(jctx, job.URL); err != nil {
-			jlogger.Error("Visitor: Error visiting URL.", "error", err)
+			// When a redirect is encountered, the visit errors out, but with an   .
+			// errors.errorString{"Found"} This is in facto no an actual error, but.
+			// just a skip                                                         .
+			var state string
+			if err.Error() == "Found" {
+				state = ProgressStateCancelled
+				jlogger.Info("Visitor: Skipped URL visit.")
+			} else {
+				state = ProgressStateErrored
 
+				jlogger.Error("Visitor: Error visiting URL.", "error", err)
+				span.AddEvent("Error visiting URL", trace.WithAttributes(
+					attribute.String("Url", job.URL),
+				))
+			}
 			if job.Flags&collector.FlagInternal == 0 {
 				progress.Update(ProgressUpdateMessagePackage{
 					jctx,
 					ProgressUpdateMessage{
 						ProgressStage,
-						ProgressStateErrored,
+						state,
 						job.Run,
 						job.URL,
 					},
 				})
 			}
-			span.AddEvent("Error visiting URL", trace.WithAttributes(
-				attribute.String("Url", job.URL),
-			))
 			span.End()
 			continue
 		}
@@ -167,16 +177,6 @@ func VisitWorker(
 				ProgressUpdateMessage{
 					ProgressStage,
 					ProgressStateCrawled,
-					job.Run,
-					job.URL,
-				},
-			})
-		} else {
-			progress.Update(ProgressUpdateMessagePackage{
-				jctx,
-				ProgressUpdateMessage{
-					ProgressStage,
-					ProgressStateErrored,
 					job.Run,
 					job.URL,
 				},

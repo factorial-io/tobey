@@ -31,6 +31,7 @@ const (
 	ProgressStateCrawled           = "crawled"
 	ProgressStateSucceeded         = "succeeded" // When crawling has been successful.
 	ProgressStateErrored           = "errored"
+	ProgressStateCancelled         = "cancelled"
 )
 
 type ProgressUpdateMessagePackage struct {
