@@ -269,10 +269,14 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
 		lastRequest := via[len(via)-1]
-		slog.Debug("Found and resolved redirect.", "to", req.URL, "from", lastRequest.URL)
+		slog.Debug("Found redirect", "to", req.URL, "from", lastRequest.URL)
 
+		// Enqueue the new redirect target URL, ensure when the HTTP request is
+		// cancelled, the queuing is not also cancelled.
 		c.EnqueueWithFlags(context.WithoutCancel(req.Context()), req.URL.String(), FlagNone)
-		return nil
+
+		// This URL was not processed, so we do not want to follow the redirect.
+		return http.ErrUseLastResponse
 	}
 }
 
