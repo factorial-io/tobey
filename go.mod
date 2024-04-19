@@ -5,7 +5,7 @@ go 1.22
 require (
 	github.com/PuerkitoBio/goquery v1.9.1
 	github.com/alicebob/miniredis/v2 v2.32.1
-	github.com/antchfx/htmlquery v1.3.0
+	github.com/antchfx/htmlquery v1.3.1
 	github.com/antchfx/xmlquery v1.4.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/go-redis/redis_rate/v10 v10.0.1
