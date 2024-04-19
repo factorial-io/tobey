@@ -6,7 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.9.1
 	github.com/alicebob/miniredis/v2 v2.32.1
 	github.com/antchfx/htmlquery v1.3.0
-	github.com/antchfx/xmlquery v1.3.18
+	github.com/antchfx/xmlquery v1.4.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/go-redis/redis_rate/v10 v10.0.1
 	github.com/google/uuid v1.6.0
@@ -37,7 +37,7 @@ require (
 require (
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
-	github.com/antchfx/xpath v1.2.4 // indirect
+	github.com/antchfx/xpath v1.3.0 // indirect
 	github.com/bits-and-blooms/bitset v1.5.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
