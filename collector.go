@@ -31,7 +31,7 @@ func getEnqueueFn(run *Run, q WorkQueue, progress Progress) collector.EnqueueFn 
 		// ensuring there will only (mostly) be one result for a page. There is a slight
 		// chance that two processes enter this function with the same run and url,
 		// before one of them is finished.
-		if ok, err := c.IsVisitAllowed(url); !ok {
+		if ok, err := c.IsVisitAllowed(url, flags); !ok {
 			if err == collector.ErrCheckInternal {
 				logger.Warn("Enqueue: Error checking if visit is allowed, not allowing visit.", "error", err)
 			}

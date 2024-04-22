@@ -98,9 +98,10 @@ allow the naked domain (and all its subdomains).
 
 ### Paths
 
-To skip resources with certain paths, you may provide a list of path segments to
-include or skip via the `paths` or `!paths` key. The path segments may appear
-anywhere in the full URL path.
+To skip resources with certain paths, you may provide a list of literal path
+segments to include or skip via the `paths` or `!paths` key. The path segments
+may appear anywhere in the full URL path. Alternatively to literal fragments
+you may also use regular expressions.
 
 ```jsonc
 {

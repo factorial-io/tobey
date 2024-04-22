@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	whatwgUrl "github.com/nlnwa/whatwg-url/url"
@@ -268,9 +269,6 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 	if c.MaxDepth > 0 && c.MaxDepth < depth {
 		return ErrMaxDepth
 	}
-	if ok, err := c.IsVisitAllowed(parsedURL.String()); !ok || err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -290,11 +288,16 @@ func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Requ
 	}
 }
 
-func (c *Collector) IsVisitAllowed(in string) (bool, error) {
+func (c *Collector) IsVisitAllowed(in string, flags uint8) (bool, error) {
 	p, err := url.Parse(in)
 	if err != nil {
 		slog.Error("url parse error", in, "")
 		return false, ErrCheckInternal
+	}
+
+	// Internal URLs are always allowed.
+	if flags&FlagInternal != 0 {
+		return true, nil
 	}
 
 	checkDomain := func(u *url.URL) bool {
@@ -326,20 +329,18 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 	// otherwise allow URLs with non-allowed domains if they have a well known
 	// file in the path.
 	checkPath := func(u *url.URL) bool {
-		// If any of the well known files are in the path, allow it, always.
-		for _, allow := range WellKnownFiles {
-			if strings.Contains(u.Path, allow) {
+		for _, wellKnown := range WellKnownFiles {
+			if strings.HasSuffix(u.Path, wellKnown) {
 				return true
 			}
 		}
-
 		for _, allow := range c.AllowPaths {
-			if !strings.Contains(u.Path, allow) {
+			if ok, err := regexp.MatchString(allow, u.Path); !ok || err != nil {
 				return false
 			}
 		}
 		for _, deny := range c.DenyPaths {
-			if strings.Contains(u.Path, deny) {
+			if ok, err := regexp.MatchString(deny, u.Path); ok || err != nil {
 				return false
 			}
 		}
