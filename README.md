@@ -74,10 +74,12 @@ extracting links for content of the webpages.
 
 ### Constraining Crawling
 
-When crawling a whole website tobey will only download resources from the
-host as provided in the URL, this is so we don't end up downloading the whole
-internet. You may additionally provide host domains that are an alias to the
-URLs domain that we will download from.
+#### Domains
+
+By default and when crawling a whole website tobey will only download resources
+from the host as provided in the URL, this is so we don't end up downloading the
+whole internet. You may additionally provide host domains that are an alias to
+the URLs domain that we will download from.
 
 Please note that it's enough to provide the "naked" version of the domain
 without the "www" subdomain. Providing "example.org" implies "www.example.org"
@@ -87,24 +89,33 @@ allow the naked domain (and all its subdomains).
 ```jsonc
 {
   "url": "https://example.org",
-  "domains": [
-    "example.org",
+  "domains": [ // Works as an allow list.
+    "example.org", // Only crawl on these domains...
     "example.com", // Entirely different domain, but same content.
   ]
 }
 ```
 
-To skip resources with certain path segmentens, you may provide a list of paths
-to skip via the `!paths` key:
+### Paths
+
+To skip resources with certain paths, you may provide a list of path segments to
+include or skip via the `paths` or `!paths` key. The path segments may appear
+anywhere in the full URL path.
 
 ```jsonc
 {
   "url": "https://example.org",
+  "paths": [
+    "/en/", // Only crawl resources under /en/.
+  ],
   "!paths": [
-    "/search/",
+    "/search/", // Do not crawl search resources.
   ]
 }
 ```
+
+As you can see positive and negative path constraints can be combined. With the options
+given above, `/en/about-us/` would be crawled, but not `/en/search/` and not `/blog/article`.
 
 ### Run Identifiers
 

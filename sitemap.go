@@ -12,7 +12,7 @@ import (
 )
 
 func isProbablySitemap(url string) bool {
-	return strings.HasSuffix(url, "/sitemap.xml")
+	return strings.HasSuffix(url, "/sitemap.xml") || strings.HasSuffix(url, "/sitemap_index.xml")
 }
 
 // Discover sitemaps for the hosts, if the robots.txt has no

@@ -48,8 +48,9 @@ type APIRequest struct {
 	URL  string   `json:"url"`
 	URLs []string `json:"urls"`
 
-	AllowedDomains []string `json:"domains"`
-	IgnorePaths    []string `json:"!paths"`
+	AllowDomains []string `json:"domains"`
+	AllowPaths   []string `json:"paths"`
+	DenyPaths    []string `json:"!paths"`
 
 	WebhookConfig *WebhookConfig `json:"webhook"`
 
@@ -103,11 +104,11 @@ func (req *APIRequest) GetURLs(clean bool) []string {
 	return urls
 }
 
-func (req *APIRequest) GetAllowedDomains() []string {
+func (req *APIRequest) GetAllowDomains() []string {
 	// Ensure at least the URL host is in allowed domains.
 	var domains []string
-	if req.AllowedDomains != nil {
-		domains = req.AllowedDomains
+	if req.AllowDomains != nil {
+		domains = req.AllowDomains
 	} else {
 		for _, u := range req.GetURLs(false) {
 			p, err := url.Parse(u)
@@ -121,11 +122,20 @@ func (req *APIRequest) GetAllowedDomains() []string {
 	return domains
 }
 
-func (req *APIRequest) GetIgnorePaths() []string {
+func (req *APIRequest) GetAllowPaths() []string {
 	var paths []string
 
-	if req.IgnorePaths != nil {
-		paths = req.IgnorePaths
+	if req.AllowPaths != nil {
+		paths = req.AllowPaths
+	}
+	return paths
+}
+
+func (req *APIRequest) GetDenyPaths() []string {
+	var paths []string
+
+	if req.DenyPaths != nil {
+		paths = req.DenyPaths
 	}
 	return paths
 }

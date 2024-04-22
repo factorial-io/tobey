@@ -25,8 +25,9 @@ const (
 
 type EnqueueFn func(ctx context.Context, c *Collector, u string, flags uint8) error // Enqueues a scrape.
 type CollectFn func(ctx context.Context, c *Collector, res *Response, flags uint8)  // Collects the result of a scrape.
+type RobotCheckFn func(agent string, u string) (bool, error)                        // Checks if a URL is allowed by robots.txt.
 
-type RobotCheckFn func(agent string, u string) (bool, error)
+var WellKnownFiles = []string{"robots.txt", "sitemap.xml", "sitemap_index.xml"}
 
 var urlParser = whatwgUrl.NewParser(whatwgUrl.WithPercentEncodeSinglePercentSign())
 
@@ -65,7 +66,15 @@ func NewCollector(
 	backend.WithCheckRedirect(c.CheckRedirectFunc())
 
 	c.OnHTML("a[href]", func(ctx context.Context, e *HTMLElement) {
-		enqueue(ctx, c, e.Request.AbsoluteURL(e.Attr("href")), FlagNone)
+		u, err := url.Parse(e.Request.AbsoluteURL(e.Attr("href")))
+		if err != nil {
+			return // Skip invalid URLs.
+		}
+		if !strings.HasPrefix(u.Scheme, "http") {
+			return
+		}
+		// We currently assume none internal / well known files are discovered via links.
+		enqueue(ctx, c, u.String(), FlagNone)
 	})
 
 	c.OnScraped(func(ctx context.Context, res *Response) {
@@ -90,8 +99,9 @@ func NewCollector(
 }
 
 type Collector struct {
-	AllowedDomains []string // AllowedDomains is a domain allowlist.
-	IgnorePaths    []string
+	AllowDomains []string // AllowedDomains is a domain allowlist.
+	AllowPaths   []string
+	DenyPaths    []string
 
 	// UserAgent is the User-Agent string used by HTTP requests
 	UserAgent string
@@ -290,7 +300,7 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 	checkDomain := func(u *url.URL) bool {
 		// Ensure there is at least one domain in the allowlist. Do not treat an
 		// empty allowlist as a wildcard.
-		if c.AllowedDomains == nil || len(c.AllowedDomains) == 0 {
+		if c.AllowDomains == nil || len(c.AllowDomains) == 0 {
 			slog.Error("No domains have been added to the allowlist.")
 			return false
 		}
@@ -298,7 +308,7 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 		naked := strings.TrimPrefix(p.Hostname(), "www.")
 		www := fmt.Sprintf("www.%s", naked)
 
-		for _, allowed := range c.AllowedDomains {
+		for _, allowed := range c.AllowDomains {
 			if allowed == naked {
 				return true
 			}
@@ -312,9 +322,24 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 		return false, ErrForbiddenDomain
 	}
 
+	// Order matters: checkPath must come after checkDomain, as we would
+	// otherwise allow URLs with non-allowed domains if they have a well known
+	// file in the path.
 	checkPath := func(u *url.URL) bool {
-		for _, ignore := range c.IgnorePaths {
-			if strings.Contains(u.Path, ignore) {
+		// If any of the well known files are in the path, allow it, always.
+		for _, allow := range WellKnownFiles {
+			if strings.Contains(u.Path, allow) {
+				return true
+			}
+		}
+
+		for _, allow := range c.AllowPaths {
+			if !strings.Contains(u.Path, allow) {
+				return false
+			}
+		}
+		for _, deny := range c.DenyPaths {
+			if strings.Contains(u.Path, deny) {
 				return false
 			}
 		}

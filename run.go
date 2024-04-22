@@ -32,8 +32,9 @@ type SerializableRun struct {
 
 	AuthConfigs []*AuthConfig
 
-	AllowedDomains []string
-	IgnorePaths    []string
+	AllowDomains []string
+	AllowPaths   []string
+	DenyPaths    []string
 
 	SkipRobots           bool
 	SkipSitemapDiscovery bool
@@ -90,8 +91,10 @@ func (r *Run) GetCollector(ctx context.Context, q WorkQueue, p Progress, h *Webh
 	)
 
 	c.UserAgent = UserAgent
-	c.AllowedDomains = r.AllowedDomains
-	c.IgnorePaths = r.IgnorePaths
+
+	c.AllowDomains = r.AllowDomains
+	c.AllowPaths = r.AllowPaths
+	c.DenyPaths = r.DenyPaths
 
 	return c
 }
