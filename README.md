@@ -94,6 +94,18 @@ allow the naked domain (and all its subdomains).
 }
 ```
 
+To skip resources with certain path segmentens, you may provide a list of paths
+to skip via the `!paths` key:
+
+```jsonc
+{
+  "url": "https://example.org",
+  "!paths": [
+    "/search/",
+  ]
+}
+```
+
 ### Run Identifiers
 
 Each time you submit a URL to be crawled, a "run" is internally created. Tobey

@@ -49,6 +49,7 @@ type APIRequest struct {
 	URLs []string `json:"urls"`
 
 	AllowedDomains []string `json:"domains"`
+	IgnorePaths    []string `json:"!paths"`
 
 	WebhookConfig *WebhookConfig `json:"webhook"`
 
@@ -118,6 +119,15 @@ func (req *APIRequest) GetAllowedDomains() []string {
 		}
 	}
 	return domains
+}
+
+func (req *APIRequest) GetIgnorePaths() []string {
+	var paths []string
+
+	if req.IgnorePaths != nil {
+		paths = req.IgnorePaths
+	}
+	return paths
 }
 
 func (req *APIRequest) GetAuthConfigs() []*AuthConfig {

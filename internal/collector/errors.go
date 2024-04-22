@@ -14,6 +14,8 @@ var (
 	// ErrForbiddenDomain is the error thrown if visiting
 	// a domain which is not allowed in AllowedDomains
 	ErrForbiddenDomain = errors.New("Forbidden domain")
+	ErrForbiddenPath   = errors.New("Forbidden path")
+
 	// ErrMissingURL is the error type for missing URL errors
 	ErrMissingURL = errors.New("Missing URL")
 	// ErrMaxDepth is the error type for exceeding max depth

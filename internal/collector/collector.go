@@ -90,8 +90,8 @@ func NewCollector(
 }
 
 type Collector struct {
-	// AllowedDomains is a domain allowlist.
-	AllowedDomains []string
+	AllowedDomains []string // AllowedDomains is a domain allowlist.
+	IgnorePaths    []string
 
 	// UserAgent is the User-Agent string used by HTTP requests
 	UserAgent string
@@ -308,9 +308,20 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 		}
 		return false
 	}
-
 	if !checkDomain(p) {
 		return false, ErrForbiddenDomain
+	}
+
+	checkPath := func(u *url.URL) bool {
+		for _, ignore := range c.IgnorePaths {
+			if strings.Contains(u.Path, ignore) {
+				return false
+			}
+		}
+		return true
+	}
+	if !checkPath(p) {
+		return false, ErrForbiddenPath
 	}
 
 	ok, err := c.robotsCheckFn(c.UserAgent, p.String())

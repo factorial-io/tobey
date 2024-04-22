@@ -226,7 +226,9 @@ func main() {
 
 				AuthConfigs: req.GetAuthConfigs(),
 
-				AllowedDomains:       req.GetAllowedDomains(),
+				AllowedDomains: req.GetAllowedDomains(),
+				IgnorePaths:    req.GetIgnorePaths(),
+
 				SkipRobots:           req.SkipRobots,
 				SkipSitemapDiscovery: req.SkipSitemapDiscovery,
 

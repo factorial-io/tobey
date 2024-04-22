@@ -33,9 +33,9 @@ func getEnqueueFn(run *Run, q WorkQueue, progress Progress) collector.EnqueueFn 
 		// before one of them is finished.
 		if ok, err := c.IsVisitAllowed(url); !ok {
 			if err == collector.ErrCheckInternal {
-				slog.Warn("Error checking if visit is allowed, not allowing visit.", "error", err)
+				logger.Warn("Enqueue: Error checking if visit is allowed, not allowing visit.", "error", err)
 			}
-			// slog.Debug("Not enqueuing visit, domain not allowed.", "run", c.Run, "url", url)
+			logger.Debug("Enqueue: Not enqueuing visit, visit not allowed.", "error", err)
 			return nil
 		}
 		if run.HasSeenURL(tctx, url) {
@@ -69,9 +69,9 @@ func getEnqueueFn(run *Run, q WorkQueue, progress Progress) collector.EnqueueFn 
 
 		if err == nil {
 			run.SawURL(tctx, url)
-			logger.Debug("URL marked as seen.")
+			logger.Debug("Enqueue: URL marked as seen.")
 		} else {
-			logger.Error("Error enqueuing visit.", "error", err)
+			logger.Error("Enqueue: Error enqueuing visit.", "error", err)
 		}
 		return err
 	}
