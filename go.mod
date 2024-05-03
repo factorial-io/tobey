@@ -3,7 +3,7 @@ module tobey
 go 1.22
 
 require (
-	github.com/PuerkitoBio/goquery v1.9.1
+	github.com/PuerkitoBio/goquery v1.9.2
 	github.com/alicebob/miniredis/v2 v2.32.1
 	github.com/antchfx/htmlquery v1.3.1
 	github.com/antchfx/xmlquery v1.4.0
