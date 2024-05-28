@@ -66,6 +66,8 @@ func NewCollector(
 	// Unelegant, but this can be improved later.
 	backend.WithCheckRedirect(c.CheckRedirectFunc())
 
+	// Callback that discovers link in HTMl documents and feeds the links
+	// back into the collector.
 	c.OnHTML("a[href]", func(ctx context.Context, e *HTMLElement) {
 		u, err := url.Parse(e.Request.AbsoluteURL(e.Attr("href")))
 		if err != nil {
