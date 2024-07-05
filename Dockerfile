@@ -10,7 +10,7 @@ COPY internal ./internal
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app
 
-FROM alpine:3.19 as runner
+FROM alpine:3.20 as runner
 
 COPY --from=builder /app /app
 
