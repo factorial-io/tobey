@@ -14,6 +14,8 @@ github.com/antchfx/htmlquery v1.3.0 h1:5I5yNFOVI+egyia5F2s/5Do2nFWxJz41Tr3DyfKD2
 github.com/antchfx/htmlquery v1.3.0/go.mod h1:zKPDVTMhfOmcwxheXUsx4rKJy8KEY/PU6eXr/2SebQ8=
 github.com/antchfx/htmlquery v1.3.1 h1:wm0LxjLMsZhRHfQKKZscDf2COyH4vDYA3wyH+qZ+Ylc=
 github.com/antchfx/htmlquery v1.3.1/go.mod h1:PTj+f1V2zksPlwNt7uVvZPsxpKNa7mlVliCRxLX6Nx8=
+github.com/antchfx/htmlquery v1.3.2 h1:85YdttVkR1rAY+Oiv/nKI4FCimID+NXhDn82kz3mEvs=
+github.com/antchfx/htmlquery v1.3.2/go.mod h1:1mbkcEgEarAokJiWhTfr4hR06w/q2ZZjnYLrDt6CTUk=
 github.com/antchfx/xmlquery v1.3.18 h1:FSQ3wMuphnPPGJOFhvc+cRQ2CT/rUj4cyQXkJcjOwz0=
 github.com/antchfx/xmlquery v1.3.18/go.mod h1:Afkq4JIeXut75taLSuI31ISJ/zeq+3jG7TunF7noreA=
 github.com/antchfx/xmlquery v1.4.0 h1:xg2HkfcRK2TeTbdb0m1jxCYnvsPaGY/oeZWTGqX/0hA=
