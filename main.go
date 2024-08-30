@@ -17,37 +17,40 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	_ "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 )
 
+// These variables can be controlled via environment variables.
 var (
 	// Debug enables or disables debug mode, this can be controlled
 	// via the environment variable TOBEY_DEBUG.
 	Debug = false
 
-	// SkipCache disables caching when true. It can be controlled via the TOBEY_SKIP_CACHE environment variable.
+	// SkipCache disables caching when true. It can be controlled via the
+	// TOBEY_SKIP_CACHE environment variable.
 	SkipCache = false
 
 	// These can be controlled via the TOBEY_TELEMETRY environment variable.
 	UseTracing = false
 	UseMetrics = false
+	UsePulse   = false // High Frequency Metrics can be enabled by adding "pulse".
 
-	// MaxRequestsPerSecond specifies the maximum number of requests per second
-	// that are exectuted against a single host. Can be controlled via the TOBEY_REQS_PER_S environment variable.
-	MaxRequestsPerSecond int = 2
+	// ListenHost is the host where the main HTTP server listens and the API is served,
+	// this can be controlled via the TOBEY_HOST environment variable. An empty
+	// string means "listen on all interfaces".
+	ListenHost string = ""
+
+	// The port where the main HTTP server listens and the API is served, this can
+	// be controlled via the TOBEY_PORT environment variable.
+	ListenPort int = 8080
 )
 
 const (
-	// The port where the main HTTP server listens and the API is served.
-	ListenPort int = 8080
-
-	// The port where to ping for healthcheck.
-	HealthcheckListenPort int = 10241
-
 	// NumVisitWorkers hard codes the number of workers we start at startup.
-	NumVisitWorkers int = 10
+	NumVisitWorkers int = 5
 
 	// MaxParallelRuns specifies how many collectors we keep in memory, and thus
 	// limits the maximum number of parrallel runs that we can perform.
@@ -58,16 +61,23 @@ const (
 	// sensitve information, so we should not keep it around for too long.
 	RunTTL = 24 * time.Hour
 
+	// HostTTL specifies the maximum time a host is kept in memory. After this
+	// time the host is evicted from memory and the cache. The TTL defaults to 365 days.
+	HostTTL = 365 * 24 * time.Hour
+
 	// UserAgent to be used with all HTTP request. The value is set to a
 	// backwards compatible one. Some sites allowwlist this specific user agent.
 	UserAgent = "WebsiteStandardsBot/1.0"
-)
 
-var (
-	// CachePath is the absolute or relative path (to the working directory) where we store the cache.
-	CachePath = "./cache"
+	// HTTPCachePath is the absolute or relative path (to the working
+	// directory) where we store the cache for HTTP responses.
+	HTTPCachePath = "./cache"
 
-	CacheTempPath = os.TempDir()
+	// The port where to ping for healthcheck.
+	HealthcheckListenPort int = 10241
+
+	// PulseEndpoint is the endpoint where we send the high frequency metrics.
+	PulseEndpoint = "http://localhost:8090"
 )
 
 func configure() {
@@ -79,16 +89,6 @@ func configure() {
 		slog.Info("Skipping cache.")
 	}
 
-	if os.Getenv("TOBEY_REQS_PER_S") != "" {
-		n, err := strconv.Atoi(os.Getenv("TOBEY_REQS_PER_S"))
-		if err != nil {
-			panic(err)
-		} else {
-			MaxRequestsPerSecond = n
-			slog.Info("Setting MaxRequestsPerSecond.", "value", MaxRequestsPerSecond)
-		}
-	}
-
 	v := os.Getenv("TOBEY_TELEMETRY")
 	if strings.Contains(v, "traces") || strings.Contains(v, "tracing") {
 		UseTracing = true
@@ -97,6 +97,21 @@ func configure() {
 	if strings.Contains(v, "metrics") {
 		UseMetrics = true
 		slog.Info("Metrics enabled.")
+	}
+	if strings.Contains(v, "pulse") {
+		UsePulse = true
+		slog.Info("High Frequency Metrics (Pulse) enabled.")
+	}
+
+	if v := os.Getenv("TOBEY_HOST"); v != "" {
+		ListenHost = v
+	}
+	if v := os.Getenv("TOBEY_PORT"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		ListenPort = p
 	}
 }
 
@@ -112,30 +127,34 @@ func main() {
 	// This sets up the main process context.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 
+	var err error
 	// Setup Opentelemetry
-	//todo add opentelemetry logging
-	shutdown, erro := setupOTelSDK(ctx)
-	if erro != nil {
-		panic("ahh")
+	// TODO: Add opentelemetry logging
+	shutdown, err := setupOTelSDK(ctx)
+	if err != nil {
+		panic(err)
 	}
-	err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
+	err = runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if UsePulse {
+		startPulse(ctx)
 	}
 
 	redisconn, err := maybeRedis(ctx)
 	if err != nil {
 		panic(err)
 	}
-	rabbitmqconn, err := maybeRabbitMQ(ctx)
-	if err != nil {
-		panic(err)
-	}
 
-	runs := NewRunManager(redisconn)
+	robots := NewRobots()
+	sitemaps := NewSitemaps(robots) // Sitemaps will use Robots to discover sitemaps.
 
-	queue := CreateWorkQueue(rabbitmqconn)
-	if err := queue.Open(); err != nil {
+	runs := NewRunManager(redisconn, robots, sitemaps)
+
+	queue := CreateWorkQueue(redisconn)
+	if err := queue.Open(ctx); err != nil {
 		panic(err)
 	}
 
@@ -148,13 +167,10 @@ func main() {
 
 	progress := MustStartProgressFromEnv(ctx)
 
-	limiter := CreateLimiter(ctx, redisconn, MaxRequestsPerSecond)
-
 	workers := CreateVisitWorkersPool(
 		ctx,
 		NumVisitWorkers,
 		runs,
-		limiter,
 		queue,
 		progress,
 		hooks,
@@ -241,7 +257,7 @@ func main() {
 		// we start publishing to the work queue.
 		runs.Add(ctx, run)
 
-		run.Start(reqctx, queue, progress, hooks, req.GetURLs(true))
+		go run.Start(reqctx, queue, progress, hooks, req.GetURLs(true))
 
 		result := &APIResponse{
 			Run: run.ID,
@@ -250,9 +266,13 @@ func main() {
 		json.NewEncoder(w).Encode(result)
 	})
 
-	slog.Info("Starting HTTP API server...", "port", ListenPort)
+	if UseMetrics {
+		apirouter.Handle("GET /metrics", promhttp.Handler())
+	}
+
+	slog.Info("Starting HTTP API server...", "host", ListenHost, "port", ListenPort)
 	apiserver := &http.Server{
-		Addr:    fmt.Sprintf(":%d", ListenPort),
+		Addr:    fmt.Sprintf("%s:%d", ListenHost, ListenPort),
 		Handler: otelhttp.NewHandler(apirouter, "get_new_request"),
 	}
 	go func() {
@@ -306,9 +326,6 @@ func main() {
 	}
 	if redisconn != nil {
 		redisconn.Close()
-	}
-	if rabbitmqconn != nil {
-		rabbitmqconn.Close()
 	}
 
 	shutdown(ctx)

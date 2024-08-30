@@ -4,25 +4,70 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	amqp "github.com/rabbitmq/amqp091-go"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
+	"github.com/redis/go-redis/v9"
 )
 
-type WorkQueue interface {
-	Open() error
+const (
+	// MinHostRPS specifies the minimum number of requests per
+	// second that are executed against a single host.
+	MinHostRPS float64 = 1
 
-	// The following methods use the crawl run context.
-	PublishURL(ctx context.Context, run string, url string, flags uint8) error
-	ConsumeVisit(ctx context.Context) (<-chan *VisitJob, <-chan error)
-	DelayVisit(ctx context.Context, delay time.Duration, j *VisitMessage) error
+	// MaxHostRPS specifies the maximum number of requests per
+	// second that are exectuted against a single host.
+	MaxHostRPS float64 = 50
+)
 
+// VisitWorkQueue appears to produceres and consumers as a single queue. Each
+// message in the work queue represents a job for a request to visit a single
+// URL and process the response.
+//
+// While producers publish a new VisitMessage immediately to the work queue,
+// consumers can only consume jobs at a certain rate. This rate is determined by
+// a per-host rate limiter. These rate limiters can be updated dynamically.
+type VisitWorkQueue interface {
+	// Open opens the work queue for use. It must be called before any other method.
+	Open(context.Context) error
+
+	// Publish creates a new VisitMessage for the given URL and enqueues the job to
+	// be retrieved later via Consume. The run ID must be specified in order to
+	// allow the consumer to find the right Collector to visit the URL.
+	Publish(ctx context.Context, run string, url string) error
+
+	// Republish is used to reschedule a job for later processing. This is useful
+	// if the job could not be processed due to a temporary error. The function
+	// should keep a count on how often a job is rescheduled.
+	Republish(ctx context.Context, job *VisitJob) error
+
+	// Consume is used by workers to retrieve a new VisitJob to process, reading from the
+	// returned channel will block until a job becomes available. Jobs are automatically acked
+	// when retrieved from the channel.
+	Consume(ctx context.Context) (<-chan *VisitJob, <-chan error)
+
+	// Pause pauses the consumption of jobs for a given host. This is useful if
+	// we see the host stopping to be available, for example when it is down
+	// for maintenance.
+	Pause(ctx context.Context, url string, d time.Duration) error
+
+	// TakeSample allows to inform the rate limiter how long it took to process a job and adjust
+	// accordingly. Seeing an increase in Latency might indicate we are overwhelming the
+	// target.
+	TakeSample(ctx context.Context, url string, statusCode int, err error, d time.Duration)
+
+	// UseRateLimitHeaders allows the implementation to use the information provided
+	// through rate limit headers to inform the rate limiter.
+	// See https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#checking-the-status-of-your-rate-limit
+	TakeRateLimitHeaders(ctx context.Context, url string, hdr *http.Header)
+
+	// Close allows the implementation to release opened resources. After Close
+	// the work queue must not be used anymore.
 	Close() error
 }
 
@@ -32,19 +77,9 @@ type VisitMessage struct {
 
 	URL string
 
-	// Whether this visit has a valid reservation by a rate limiter.
-	HasReservation bool
-
-	Flags   uint8
 	Created time.Time
-}
-
-// visitPackage is used by the in-memory implementation of the WorkQueue.
-// Implementations that have a built-in mechanism to transport headers do not
-// need to use this.
-type visitPackage struct {
-	Carrier propagation.MapCarrier
-	Message *VisitMessage
+	// The number of times this job has been retried to be enqueued.
+	Retries uint32
 }
 
 // VisitJob is similar to a http.Request, it exists only for a certain time. It
@@ -70,279 +105,34 @@ func (j *VisitJob) Validate() (bool, error) {
 	return true, nil
 }
 
-func CreateWorkQueue(rabbitmq *amqp.Connection) WorkQueue {
-	if rabbitmq != nil {
+func CreateWorkQueue(redis *redis.Client) VisitWorkQueue {
+	if redis != nil {
 		slog.Debug("Using distributed work queue...")
-		return &RabbitMQWorkQueue{conn: rabbitmq}
+		// TODO: Add support for redis work queue.
+		// return &RedisVisitWorkQueue{conn: redis}
+		return NewMemoryVisitWorkQueue()
 	} else {
 		slog.Debug("Using in-memory work queue...")
-		return &MemoryWorkQueue{}
+		return NewMemoryVisitWorkQueue()
 	}
 }
 
-type MemoryWorkQueue struct {
-	// TODO: MaxSize
-	pkgs chan *visitPackage
-}
-
-func (wq *MemoryWorkQueue) Open() error {
-	wq.pkgs = make(chan *visitPackage, 1_000_000)
-	return nil
-}
-
-func (wq *MemoryWorkQueue) PublishURL(ctx context.Context, run string, url string, flags uint8) error {
-	// Extract tracing information from context, to transport it over the
-	// channel, without using a Context.
-	propagator := otel.GetTextMapPropagator()
-	carrier := propagation.MapCarrier{}
-	propagator.Inject(ctx, carrier)
-
-	pkg := &visitPackage{
-		Carrier: carrier,
-		Message: &VisitMessage{
-			ID:      uuid.New().ID(),
-			Created: time.Now(),
-			Run:     run,
-			URL:     url,
-			Flags:   flags,
-		},
-	}
-	select {
-	case wq.pkgs <- pkg:
-		slog.Debug("Work Queue: Message accepted.", "msg.id", pkg.Message.ID)
-	default:
-		slog.Warn("Work Queue: full, dropping message!", "msg", pkg.Message)
-	}
-	return nil
-}
-
-// DelayVisit republishes a message with given delay.
-func (wq *MemoryWorkQueue) DelayVisit(ctx context.Context, delay time.Duration, msg *VisitMessage) error {
-	go func() {
-		slog.Debug("Work Queue: Delaying message", "msg.id", msg.ID, "delay", delay.Seconds())
-
-		// Extract tracing information from context, to transport it over the
-		// channel, without using a Context.
-		propagator := otel.GetTextMapPropagator()
-		carrier := propagation.MapCarrier{}
-		propagator.Inject(ctx, carrier)
-
-		time.Sleep(delay)
-		pkg := &visitPackage{
-			Carrier: carrier,
-			Message: msg,
-		}
-		select {
-		case wq.pkgs <- pkg:
-			slog.Debug("Work Queue: Delayed message accepted.", "msg.id", pkg.Message.ID, "delay", delay.Seconds())
-		default:
-			slog.Warn("Work Queue: full, dropping delayed message!", "msg", pkg.Message)
-		}
-	}()
-	return nil
-}
-
-func (wq *MemoryWorkQueue) ConsumeVisit(ctx context.Context) (<-chan *VisitJob, <-chan error) {
-	reschan := make(chan *VisitJob)
-	errchan := make(chan error)
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			slog.Debug("Work Queue: Consume context cancelled, closing channels.")
-
-			close(reschan)
-			close(errchan)
-			return
-		case p := <-wq.pkgs:
-			slog.Debug("Work Queue: Received message, forwarding to results channel.", "msg.id", p.Message.ID)
-
-			// Initializes the context for the job. Than extract the tracing
-			// information from the carrier into the job's context.
-			jctx := context.Background()
-			jctx = otel.GetTextMapPropagator().Extract(jctx, p.Carrier)
-
-			reschan <- &VisitJob{
-				VisitMessage: p.Message,
-				Context:      jctx,
-			}
-			slog.Debug("Work Queue: Forwarded message to results channel.", "msg.id", p.Message.ID)
-		}
-	}()
-
-	return reschan, errchan
-}
-
-func (wq *MemoryWorkQueue) Close() error {
-	close(wq.pkgs)
-	return nil
-}
-
-type RabbitMQWorkQueue struct {
-	conn    *amqp.Connection
-	channel *amqp.Channel
-	queue   amqp.Queue
-	receive <-chan amqp.Delivery
-}
-
-// Open declares both sides (producer and consumer) of the work queue.
-func (wq *RabbitMQWorkQueue) Open() error {
-	ch, err := wq.conn.Channel()
+// guessHost heuristically identifies a host for the given URL. The function
+// doesn't return the host name directly, as it might not exist, but an ID.
+//
+// It does by by ignoring a www. prefix, leading to www.example.org and
+// example.org being considered the same host. It also ignores the port number,
+// so example.org:8080 and example.org:9090 are considered the same host as
+// well.
+//
+// Why FNV? https://softwareengineering.stackexchange.com/questions/49550
+func guessHost(u string) uint32 {
+	p, err := url.Parse(u)
 	if err != nil {
-		return err
+		return 0
 	}
-	wq.channel = ch
+	h := fnv.New32a()
 
-	q, err := ch.QueueDeclare(
-		"tobey.urls", // name
-		true,         // durable TODO: check meaning
-		false,        // delete when unused
-		false,        // exclusive TODO: check meaning
-		false,        // no-wait TODO: check meaning
-		nil,          // arguments
-	)
-	if err != nil {
-		return err
-	}
-	wq.queue = q
-
-	// This utilizes the delayed_message plugin.
-	ch.ExchangeDeclare("tobey.default", "x-delayed-message", true, false, false, false, amqp.Table{
-		"x-delayed-type": "direct",
-	})
-
-	// Bind queue to delayed exchange.
-	err = ch.QueueBind(wq.queue.Name, wq.queue.Name, "tobey.default", false, nil)
-	if err != nil {
-		return err
-	}
-
-	receive, err := wq.channel.Consume(
-		wq.queue.Name, // queue
-		"",            // consumer
-		true,          // auto-ack
-		false,         // exclusive
-		false,         // no-local
-		false,         // no-wait
-		nil,           // args
-	)
-	if err != nil {
-		return err
-	}
-	wq.receive = receive
-
-	return nil
-}
-
-func (wq *RabbitMQWorkQueue) PublishURL(ctx context.Context, run string, url string, flags uint8) error {
-	jmlctx, span := tracer.Start(ctx, "publish_url")
-	defer span.End()
-	msg := &VisitMessage{
-		ID:      uuid.New().ID(),
-		Created: time.Now(),
-		Run:     run,
-		URL:     url,
-		Flags:   flags,
-	}
-
-	b, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	table := make(amqp.Table)
-
-	// Add tracing information into the RabbitMQ headers, so that
-	// the consumer of the message can continue the trace.
-	otel.GetTextMapPropagator().Inject(jmlctx, MapCarrierRabbitmq(table))
-
-	return wq.channel.Publish(
-		"tobey.default", // exchange
-		wq.queue.Name,   // routing key
-		false,           // mandatory TODO: check meaning
-		false,           // immediate TODO: check meaning
-		amqp.Publishing{
-			Headers:      table,
-			DeliveryMode: amqp.Persistent, // TODO: check meaning
-			ContentType:  "application/json",
-			Body:         b,
-		},
-	)
-}
-
-// DelayVisit republishes a message with given delay.
-// Relies on: https://blog.rabbitmq.com/posts/2015/04/scheduling-messages-with-rabbitmq/
-func (wq *RabbitMQWorkQueue) DelayVisit(ctx context.Context, delay time.Duration, msg *VisitMessage) error {
-	slog.Debug("Delaying message", "msg.id", msg.ID, "delay", delay.Seconds())
-
-	b, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	table := make(amqp.Table)
-	table["x-delay"] = delay.Milliseconds()
-
-	// Extract tracing information from context into headers. The tracing information
-	// should already be present in the context of the caller.
-	otel.GetTextMapPropagator().Inject(ctx, MapCarrierRabbitmq(table))
-
-	return wq.channel.Publish(
-		"tobey.default", // exchange
-		wq.queue.Name,   // routing key
-		false,           // mandatory TODO: check meaning
-		false,           // immediate TODO: check meaning
-		amqp.Publishing{
-			DeliveryMode: amqp.Persistent, // TODO: check meaning
-			ContentType:  "application/json",
-			Body:         b,
-			Headers:      table,
-		},
-	)
-}
-
-func (wq *RabbitMQWorkQueue) ConsumeVisit(ctx context.Context) (<-chan *VisitJob, <-chan error) {
-	reschan := make(chan *VisitJob)
-	errchan := make(chan error)
-
-	go func() {
-		var msg *VisitMessage
-		var rawmsg amqp.Delivery
-
-		select {
-		case v := <-wq.receive: // Blocks until we have at least one message.
-			rawmsg = v
-		case <-ctx.Done(): // The worker's context.
-			close(reschan)
-			close(errchan)
-			return // Exit if the context is cancelled.
-		}
-
-		if err := json.Unmarshal(rawmsg.Body, &msg); err != nil {
-			errchan <- err
-		} else {
-			// Initializes the context for the job. Than extract the tracing
-			// information from the RabbitMQ headers into the job's context.
-			jctx := otel.GetTextMapPropagator().Extract(context.Background(), MapCarrierRabbitmq(rawmsg.Headers))
-
-			reschan <- &VisitJob{
-				VisitMessage: msg,
-				Context:      jctx,
-			}
-		}
-	}()
-
-	return reschan, errchan
-}
-
-func (wq *RabbitMQWorkQueue) Close() error {
-	var lasterr error
-
-	if err := wq.channel.Close(); err != nil {
-		lasterr = err
-	}
-	if err := wq.conn.Close(); err != nil {
-		lasterr = err
-	}
-	return lasterr
+	h.Write([]byte(strings.TrimLeft(p.Hostname(), "www.")))
+	return h.Sum32()
 }

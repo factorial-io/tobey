@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -68,7 +69,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	prop := newPropagator()
 	otel.SetTextMapPropagator(prop)
 
-	if UseTracing {
+	if UseTracing && os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != "" {
 		// Set up trace provider.
 		tracerProvider, erro := newTraceProvider(ctx)
 		if erro != nil {
@@ -80,7 +81,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		otel.SetTracerProvider(tracerProvider)
 	}
 
-	if UseMetrics {
+	if UseMetrics && os.Getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") != "" {
 		// Set up meter provider.
 		meterProvider, erra := newMeterProvider(ctx)
 		if erra != nil {

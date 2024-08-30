@@ -1,0 +1,35 @@
+# A docker compose file that sets up a Tobey instance that is instrumented and
+# exposes metrics to Prometheus via /metrics endpoint. The metrics are then
+# scraped by prometheus. Grafana is used to visualize the metrics scraped by
+# Prometheus.
+
+services:
+  tobey:
+    ports:
+      - "8080:8080"
+    build:
+      context: .
+    environment:
+      - TOBEY_TELEMETRY=metrics
+    volumes:
+      - tobey-cache:/cache
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  tobey-cache:
+  grafana-data:

@@ -1,0 +1,6 @@
+scrape_configs:
+- job_name: tobey
+  scrape_interval: 1s
+  static_configs:
+  - targets:
+    - tobey:8080

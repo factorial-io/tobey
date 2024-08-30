@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"compress/gzip"
 )
@@ -26,6 +27,8 @@ func (h *HTTPBackend) WithCheckRedirect(fn checkRedirectFunc) {
 }
 
 func (h *HTTPBackend) Do(request *http.Request, bodySize int, checkHeadersFunc checkHeadersFunc) (*Response, error) {
+	start := time.Now()
+
 	res, err := h.Client.Do(request)
 	if err != nil {
 		return nil, err
@@ -62,5 +65,6 @@ func (h *HTTPBackend) Do(request *http.Request, bodySize int, checkHeadersFunc c
 		StatusCode: res.StatusCode,
 		Body:       body,
 		Headers:    &res.Header,
+		Took:       time.Since(start),
 	}, nil
 }

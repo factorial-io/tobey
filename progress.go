@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	ProgressStage = "crawler"
+	ProgressDefaultStage = "crawler"
 
 	ProgressEndpointUpdate     = "api/status/update"
 	ProgressEndpointTransition = "api/status/transition-to"
@@ -34,6 +34,25 @@ const (
 	ProgressStateCancelled         = "cancelled"
 )
 
+type Progressor struct {
+	manager Progress
+
+	Run string
+	URL string
+}
+
+func (p *Progressor) Update(ctx context.Context, status string) error {
+	return p.manager.Update(ProgressUpdateMessagePackage{
+		ctx: ctx,
+		payload: ProgressUpdateMessage{
+			Stage:  ProgressDefaultStage,
+			Status: status,
+			Run:    p.Run,
+			URL:    p.URL,
+		},
+	})
+}
+
 type ProgressUpdateMessagePackage struct {
 	ctx     context.Context
 	payload ProgressUpdateMessage
@@ -43,7 +62,7 @@ type ProgressUpdateMessage struct {
 	Stage  string `json:"stage"`
 	Status string `json:"status"`   // only constanz allowed
 	Run    string `json:"run_uuid"` // uuid of the run
-	Url    string `json:"url"`
+	URL    string `json:"url"`
 }
 
 type ProgressManager struct {
@@ -79,6 +98,7 @@ func NewProgressManager() *ProgressManager {
 type Progress interface {
 	Update(update_message ProgressUpdateMessagePackage) error
 	Close() error
+	With(run string, url string) *Progressor
 }
 
 func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan ProgressUpdateMessagePackage, pnumber int) {
@@ -113,7 +133,7 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 			if err != nil {
 				wlogger.Error("Progress Dispatcher: Sending update ultimately failed.", "error", err)
 			} else {
-				wlogger.Debug("Progress Dispatcher: Update succesfully sent.", "url", result.Url)
+				wlogger.Debug("Progress Dispatcher: Update succesfully sent.", "url", result.URL)
 			}
 
 			parentSpan.End()
@@ -122,7 +142,7 @@ func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan Pr
 }
 
 func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUpdateMessage) error {
-	logger := slog.With("url", msg.Url, "status", msg.Status, "run", msg.Run)
+	logger := slog.With("url", msg.URL, "status", msg.Status, "run", msg.Run)
 	logger.Debug("Progress Dispatcher: Sending progress update...")
 
 	ctx_send_webhook, span := tracer.Start(ctx, "handle.progress.queue.send")
@@ -131,7 +151,7 @@ func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUp
 	url := fmt.Sprintf("%v/%v", w.apiURL, ProgressEndpointUpdate)
 
 	span.SetAttributes(attribute.String("API_URL", url))
-	span.SetAttributes(attribute.String("url", msg.Url))
+	span.SetAttributes(attribute.String("url", msg.URL))
 	span.SetAttributes(attribute.String("status_update", msg.Status))
 
 	body, err := json.Marshal(msg)
@@ -199,6 +219,14 @@ func (p *NoopProgress) Close() error {
 	return nil
 }
 
+func (p *NoopProgress) With(run string, url string) *Progressor {
+	return &Progressor{
+		manager: p,
+		Run:     run,
+		URL:     url,
+	}
+}
+
 type BaseProgress struct {
 	progressQueue chan ProgressUpdateMessagePackage
 }
@@ -206,6 +234,14 @@ type BaseProgress struct {
 func (p *BaseProgress) Update(update_message ProgressUpdateMessagePackage) error {
 	p.progressQueue <- update_message
 	return nil
+}
+
+func (p *BaseProgress) With(run string, url string) *Progressor {
+	return &Progressor{
+		manager: p,
+		Run:     run,
+		URL:     url,
+	}
 }
 
 func (p *BaseProgress) Close() error {

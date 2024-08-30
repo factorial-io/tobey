@@ -10,7 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func TestRedisRunStoreLoad(t *testing.T) {
+func TestRedisStoreLoadRun(t *testing.T) {
 	ctx := context.Background()
 
 	server := miniredis.RunT(t)
@@ -21,14 +21,14 @@ func TestRedisRunStoreLoad(t *testing.T) {
 	})
 	defer conn.Close()
 
-	s := &RedisRunStore{conn}
+	s := &RedisStore{conn}
 
-	s.Save(ctx, &Run{
+	s.SaveRun(ctx, &Run{
 		SerializableRun: SerializableRun{
 			ID: "1",
 		},
 	})
-	run, ok := s.Load(ctx, "1")
+	run, ok := s.LoadRun(ctx, "1")
 	if !ok {
 		t.Fatal("run not found")
 	}

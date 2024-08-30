@@ -6,7 +6,9 @@
 
 package collector
 
-import "errors"
+import (
+	"errors"
+)
 
 var (
 	ErrCheckInternal = errors.New("Internal check error")

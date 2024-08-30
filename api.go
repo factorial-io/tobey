@@ -3,6 +3,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"log/slog"
@@ -17,7 +18,7 @@ const (
 )
 
 type AuthConfig struct {
-	Host   string `json:"host"`
+	Host   *Host  `json:"host"`
 	Method string `json:"method"`
 
 	// If method is "basic"
@@ -27,17 +28,28 @@ type AuthConfig struct {
 
 // GetHeader returns the value of the Authorization header for the given
 // authentication configuration.
-func (auth *AuthConfig) GetHeader() (string, bool) {
-	switch auth.Method {
+func (ac *AuthConfig) GetHeader() (string, bool) {
+	switch ac.Method {
 	case AuthMethodBasic:
-		token := fmt.Sprintf("%s:%s", auth.Username, auth.Password)
+		token := fmt.Sprintf("%s:%s", ac.Username, ac.Password)
 		token = base64.StdEncoding.EncodeToString([]byte(token))
 
 		return fmt.Sprintf("Basic %s", token), true
 	default:
-		slog.Warn("Unknown auth method.", "method", auth.Method)
+		slog.Warn("Unknown auth method.", "method", ac.Method)
 		return "", false
 	}
+}
+
+// Hash returns a hash of the authentication configuration. This is used to
+// uniquely identify the configuration.
+func (ac *AuthConfig) Hash() []byte {
+	return sha256.New().Sum([]byte(fmt.Sprintf("%#v", ac)))
+}
+
+// Matches checks if this AuthConfig should be used for the given Host.
+func (ac *AuthConfig) Matches(h *Host) bool {
+	return h.Name == ac.Host.Name && h.Port == ac.Host.Port
 }
 
 type APIRequest struct {
@@ -158,7 +170,7 @@ func (req *APIRequest) GetAuthConfigs() []*AuthConfig {
 
 			config := &AuthConfig{
 				Method:   "basic",
-				Host:     p.Hostname(),
+				Host:     NewHostFromURL(p),
 				Username: p.User.Username(),
 				Password: pass,
 			}

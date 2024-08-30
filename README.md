@@ -10,8 +10,7 @@ crawled.
 The service vertical scaling can be controlled by the number of workers used for
 crawling. The service is horizontally scalable by adding more instances on nodes
 in a cluster. In horizontal scaling, any instances can receive crawl requests,
-for easy load balancing. The instances will coordinate with each other via a
-RabbitMQ.
+for easy load balancing. The instances will coordinate with each other via Redis.
 
 ## Features
 
@@ -24,9 +23,40 @@ RabbitMQ.
 - Per host rate limiting, even when multiple instances are used.
 - Full support for OpenTelemetry.
 
-## Quickstart
+## Constraints
 
-To quickly try out the service, ensure you have Go installed. And run the following commands:
+- Also Tobey can be configured - on a per run basis - to crawl websites behind
+  HTTP basic auth, **it does not support fetching personalized content**. It is
+  expected that the website is generally publicly available, and that the content
+  is the same for all users. When HTTP basic auth is used by the website it must
+  only be so in order to prevent early access.
+
+## Architecture
+
+- The service optimizes for throughput per host. The rate limit and the requests
+  a host can handle in timely fashion is what mainly limits the throughput. In
+  order to maximize throughput we have to use the rate limit to its fullest. We
+  will also have to find out the maximum rate limit per host, for that we must be
+  able to adjust the rate limit per host dynamically.
+- Runs are transient and they get evicted both from local memory and the store after a certain time, or whenever we hit a fixed limit.
+- The instance must provide enough local memory and store so information about hosts that we access during runs can be kept and stored.
+- However it can be assumed the number of hosts is sufficiently large enough, that we wouldn't be able
+  to keep a go routine which will hold a consumer for each host persistently. Go
+  routines are cheap, but hard to keep alive, when they interact with external
+  resources.
+- For the same reason a worker process per host isn't suitable, also one worker per host wouldn't be enough. With a pool of workers
+  that could also handle many requests to a host at the same time we're better set up.
+- We cannot pre-caclulate the delay when processing each incoming request is ok. As the rate-limit per host is dynamic and can change at any time, i.e.
+  when the host returns headers that allow us to adjust the rate limit. We want to do this as one of the main goals is throughput per host.
+- Although the semantic correct way would be to have everything be scoped to a Run, i.e. Robots, Sitemap, etc. we will not do this. This approach
+  would (a) lead to a deep object graph (Run -> Host -> Robots, Sitemap, etc.) in which Run becomes kind of an god object and (b) it make hard
+  to share safe information between runs and prevent us from using a global cache.
+- Information about the host's rate limiting state is not directly stored in the HostStore and passed to the work queue, instead the work queue will use the HostStore. The work queue hides 
+  the dynamic adaption to the rate limit. Nobody else needs to know about it.
+- Retrieved sitemaps and robot control files are not stored in the HostStore but in a global cache of the HTTP client. 
+  Independent of the of the expiry set for a robot control file, it will be cached in-memory for a certain time, as we have
+  to check it for every request to a host. This adds another layer of caching. When changing the 
+  robot control file, the cache can be invalidated by sending the XXX signal to all instances of tobey.
 
 ```sh
 # In the first terminal start the service.
@@ -47,7 +77,6 @@ variables are available:
 |----------------|----------------|------------------|----------------------------------|
 | `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
 | `TOBEY_SKIP_CACHE` | `false` | `true`, `false`  | Controls caching access. |
-| `TOBEY_RABBITMQ_DSN` | empty | i.e. `amqp://guest:guest@rabbitmq:5672/` | DSN to reach a RabbitMQ instance. Only needed when operating multiple instances. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
 | `TOBEY_PROGRESS_DSN` | empty | i.e. `http://localhost:9020`  | DSN where to reach a progress service. When configured tobey will send progress updates there. |
 | `TOBEY_REQS_PER_S` | 2 | i.e. `4`  | Maximum number of allowed requests per second per host.  |
