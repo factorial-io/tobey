@@ -23,40 +23,7 @@ for easy load balancing. The instances will coordinate with each other via Redis
 - Per host rate limiting, even when multiple instances are used.
 - Full support for OpenTelemetry.
 
-## Constraints
-
-- Also Tobey can be configured - on a per run basis - to crawl websites behind
-  HTTP basic auth, **it does not support fetching personalized content**. It is
-  expected that the website is generally publicly available, and that the content
-  is the same for all users. When HTTP basic auth is used by the website it must
-  only be so in order to prevent early access.
-
-## Architecture
-
-- The service optimizes for throughput per host. The rate limit and the requests
-  a host can handle in timely fashion is what mainly limits the throughput. In
-  order to maximize throughput we have to use the rate limit to its fullest. We
-  will also have to find out the maximum rate limit per host, for that we must be
-  able to adjust the rate limit per host dynamically.
-- Runs are transient and they get evicted both from local memory and the store after a certain time, or whenever we hit a fixed limit.
-- The instance must provide enough local memory and store so information about hosts that we access during runs can be kept and stored.
-- However it can be assumed the number of hosts is sufficiently large enough, that we wouldn't be able
-  to keep a go routine which will hold a consumer for each host persistently. Go
-  routines are cheap, but hard to keep alive, when they interact with external
-  resources.
-- For the same reason a worker process per host isn't suitable, also one worker per host wouldn't be enough. With a pool of workers
-  that could also handle many requests to a host at the same time we're better set up.
-- We cannot pre-caclulate the delay when processing each incoming request is ok. As the rate-limit per host is dynamic and can change at any time, i.e.
-  when the host returns headers that allow us to adjust the rate limit. We want to do this as one of the main goals is throughput per host.
-- Although the semantic correct way would be to have everything be scoped to a Run, i.e. Robots, Sitemap, etc. we will not do this. This approach
-  would (a) lead to a deep object graph (Run -> Host -> Robots, Sitemap, etc.) in which Run becomes kind of an god object and (b) it make hard
-  to share safe information between runs and prevent us from using a global cache.
-- Information about the host's rate limiting state is not directly stored in the HostStore and passed to the work queue, instead the work queue will use the HostStore. The work queue hides 
-  the dynamic adaption to the rate limit. Nobody else needs to know about it.
-- Retrieved sitemaps and robot control files are not stored in the HostStore but in a global cache of the HTTP client. 
-  Independent of the of the expiry set for a robot control file, it will be cached in-memory for a certain time, as we have
-  to check it for every request to a host. This adds another layer of caching. When changing the 
-  robot control file, the cache can be invalidated by sending the XXX signal to all instances of tobey.
+## Running Tobey
 
 ```sh
 # In the first terminal start the service.
@@ -67,6 +34,49 @@ curl -X POST http://127.0.0.1:8080 \
      -H 'Content-Type: application/json' \
      -d '{"url": "https://www.example.org/"}'
 ```
+
+
+## Architecture
+
+The Tobey Crawler architecture optimizes throughput per host by dynamically
+managing rate limits, ensuring that requests to each host are processed as
+efficiently as possible. The crawler does not impose static rate limits;
+instead, it adapts to each host's capabilities, adjusting the rate limit in real
+time based on feedback from headers or other factors. 
+
+This dynamic adjustment is essential because maximizing throughput requires
+using the host’s capacity without overloading it. To manage these rate limits
+effectively, Tobey employs a rate-limited work queue that abstracts away the
+complexities of dynamic rate limiting from other parts of the system. The goal
+is to focus on maintaining a steady flow of requests without overwhelming
+individual hosts.
+
+The crawler is designed to handle a large potentially infinite number of hosts,
+which presents challenges for managing resources like memory and concurrency.
+Keeping a persistent worker process or goroutine for each host would be
+inefficient and resource-intensive, particularly since external interactions
+can make it difficult to keep them alive. Instead, Tobey uses a pool of workers
+that can process multiple requests per host concurrently, balancing the workload
+across different hosts.
+
+Caching is a critical part of the architecture. The crawler uses a global cache,
+for HTTP responses. Access to sitemaps and robot control files are also cached.
+While these files have expiration times, the crawler maintains an in-memory
+cache to quickly validate requests without constantly retrieving them. The cache
+is designed to be updated or invalidated as necessary, and a signal can be sent
+across all Tobey instances to ensure the latest robot control files are used,
+keeping the system responsive and compliant. This layered caching strategy,
+along with the dynamic rate limit adjustment, ensures that Tobey maintains high
+efficiency and adaptability during its crawling operations.
+
+## Trade-offs
+
+Also Tobey can be configured - on a per run basis - to crawl websites behind
+HTTP basic auth, **it does not support fetching personalized content**. It is
+expected that the website is generally publicly available, and that the content
+is the same for all users. When HTTP basic auth is used by the website it must
+only be so in order to prevent early access.
+
 
 ## Configuration
 
