@@ -242,40 +242,6 @@ by providing the `auth` key:
   ]
 ```
 
-### Prioritites (not implemented)
-
-tbd
-
-### Sample Size (not implemented)
-
-When a sample size is given, and its threshold of crawled pages has been reached
-the crawl request will stop fetching more pages. Please note that slightly more pages
-than the sample size might be returned.
-
-```jsonc
-{
-  "url": "https://example.org",
-  "sample_size": 10
-}
-```
-
-### Oneshot Mode (not implemented)
-
-By default the URLs submitted are considered entrypoints, you can change this
-behavior by providing the query parameter `oneshot`. This will only download the
-resource as found under the URL and nothing more. Of course multiple URLs (see
-below) are usable here as well.
-
-```sh
-curl -X POST http://127.0.0.1:8080?oneshot # ...
-```
-
-```jsonc
-{
-  "url": "https://example.org/values"
-}
-```
-
 ### Using Webhook to state where results should go
 
 [Webhooks](https://mailchimp.com/en/marketing-glossary/webhook) are a technique to notify other services about a result, once its ready.
