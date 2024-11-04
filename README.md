@@ -44,8 +44,7 @@ efficiently as possible. The crawler does not impose static rate limits;
 instead, it adapts to each host's capabilities, adjusting the rate limit in real
 time based on feedback from headers or other factors. 
 
-This dynamic adjustment is essential because maximizing throughput requires
-using the host’s capacity without overloading it. To manage these rate limits
+This dynamic adjustment is essential. To manage these rate limits
 effectively, Tobey employs a rate-limited work queue that abstracts away the
 complexities of dynamic rate limiting from other parts of the system. The goal
 is to focus on maintaining a steady flow of requests without overwhelming
