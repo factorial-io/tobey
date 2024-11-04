@@ -130,17 +130,18 @@ func main() {
 
 	// This sets up the main process context.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-
 	var err error
-	// Setup Opentelemetry
-	// TODO: Add opentelemetry logging
-	shutdown, err := setupOTelSDK(ctx)
+
+	shutdownOtel, err := StartOTel(ctx)
 	if err != nil {
 		panic(err)
 	}
-	err = runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
-	if err != nil {
-		log.Fatal(err)
+
+	if UseMetrics {
+		err = runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	if UsePulse {
@@ -326,5 +327,5 @@ func main() {
 		redisconn.Close()
 	}
 
-	shutdown(ctx)
+	shutdownOtel(ctx)
 }
