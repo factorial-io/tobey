@@ -3,7 +3,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package ctrlq
 
 import (
 	"context"
@@ -53,7 +53,9 @@ func (wq *MemoryVisitWorkQueue) Open(ctx context.Context) error {
 		return true
 	})
 
-	startJobPromoter(ctx, wq.dqueue, snap, wq.shouldRecalc)
+	go func() {
+		promoteLoop(ctx, wq.dqueue, snap, wq.shouldRecalc)
+	}()
 	return nil
 }
 

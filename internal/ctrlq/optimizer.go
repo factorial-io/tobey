@@ -3,7 +3,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package ctrlq
 
 // The rate limit optimizer takes samples and optimizer the rate limit, keeping
 // it as low as possible to maximize throughput without overhelming a host.
@@ -14,6 +14,16 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+)
+
+const (
+	// MinHostRPS specifies the minimum number of requests per
+	// second that are executed against a single host.
+	MinHostRPS float64 = 1
+
+	// MaxHostRPS specifies the maximum number of requests per
+	// second that are exectuted against a single host.
+	MaxHostRPS float64 = 50
 )
 
 // newRateLimitByHeaders returns a new rate limit according to rate limiting headers. It ensures

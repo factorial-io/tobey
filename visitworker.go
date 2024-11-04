@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"tobey/internal/ctrlq"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -30,7 +31,7 @@ func CreateVisitWorkersPool(
 	ctx context.Context,
 	num int,
 	runs *RunManager,
-	q VisitWorkQueue,
+	q ctrlq.VisitWorkQueue,
 	progress Progress,
 	hooks *WebhookDispatcher,
 ) *sync.WaitGroup {
@@ -57,7 +58,7 @@ func VisitWorker(
 	ctx context.Context,
 	id int,
 	runs *RunManager,
-	q VisitWorkQueue,
+	q ctrlq.VisitWorkQueue,
 	progress Progress,
 	hooks *WebhookDispatcher,
 ) error {
@@ -66,7 +67,7 @@ func VisitWorker(
 
 	jobs, errs := q.Consume(ctx)
 	for {
-		var job *VisitJob
+		var job *ctrlq.VisitJob
 
 		wlogger.Debug("Visitor: Waiting for job...")
 		select {

@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"tobey/internal/ctrlq"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -156,7 +157,7 @@ func main() {
 
 	runs := NewRunManager(redisconn, robots, sitemaps)
 
-	queue := CreateWorkQueue(redisconn)
+	queue := ctrlq.CreateWorkQueue(redisconn)
 	if err := queue.Open(ctx); err != nil {
 		panic(err)
 	}

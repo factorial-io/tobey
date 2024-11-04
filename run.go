@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"tobey/internal/collector"
+	"tobey/internal/ctrlq"
 
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -78,11 +79,11 @@ func (r *Run) getAuthFn() GetAuthFn {
 	}
 }
 
-func (r *Run) GetCollector(ctx context.Context, q VisitWorkQueue, p Progress, h *WebhookDispatcher) *collector.Collector {
+func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progress, h *WebhookDispatcher) *collector.Collector {
 	// getEnqueueFn returns the enqueue function, that will enqueue a single URL to
 	// be crawled. The enqueue function is called whenever a new URL is discovered
 	// by that Collector, i.e. by looking at all links in a crawled page HTML.
-	getEnqueueFn := func(run *Run, q VisitWorkQueue, progress Progress) collector.EnqueueFn {
+	getEnqueueFn := func(run *Run, q ctrlq.VisitWorkQueue, progress Progress) collector.EnqueueFn {
 
 		// The returned function takes the run context.
 		return func(ctx context.Context, c *collector.Collector, url string) error {
@@ -185,7 +186,7 @@ func (r *Run) GetCollector(ctx context.Context, q VisitWorkQueue, p Progress, h 
 
 // Start starts the crawl with the given URLs. It will discover sitemaps and
 // enqueue the URLs. From there on more URLs will be discovered and enqueued.
-func (r *Run) Start(ctx context.Context, q VisitWorkQueue, p Progress, h *WebhookDispatcher, urls []string) {
+func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, p Progress, h *WebhookDispatcher, urls []string) {
 	c := r.GetCollector(ctx, q, p, h)
 
 	// Decide where the initial URLs should go, users may provide sitemaps and
