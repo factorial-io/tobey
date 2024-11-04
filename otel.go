@@ -22,6 +22,10 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
+var (
+	tracer = otel.Tracer("tobey")
+)
+
 // Transformer for Opentelemetry
 
 // medium for propagated key-value pairs.

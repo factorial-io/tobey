@@ -162,13 +162,7 @@ func main() {
 		panic(err)
 	}
 
-	// Create Webhook Handling, TODO: this should always be non-blocking, as otherwise
-	// our visit workers will stand still.
-	hooksqueue := make(chan WebhookPayloadPackage, 1000)
-	hooksmgr := NewProcessWebhooksManager()
-	hooksmgr.Start(ctx, hooksqueue)
-	hooks := NewWebhookDispatcher(hooksqueue)
-
+	hooks := NewWebhookDispatcher(ctx)
 	progress := MustStartProgressFromEnv(ctx)
 
 	workers := CreateVisitWorkersPool(
