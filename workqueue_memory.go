@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -16,88 +17,66 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
-	xrate "golang.org/x/time/rate"
 )
 
 // The maximum number of messages that can exists in the in-memory work queue.
 const MemoryWorkQueueBufferSize = 1_000_000
 
-// visitMemoryPackage is used by the in-memory implementation of the WorkQueue.
-// Implementations that have a built-in mechanism to transport headers do not
-// need to use this.
-type visitMemoryPackage struct {
-	Carrier propagation.MapCarrier
-	Message *VisitMessage
-}
-
-type hostMemoryVisitWorkQueue struct {
-	ID   uint32
-	Name string // For debugging purposes only.
-
-	Queue chan *visitMemoryPackage
-
-	Limiter        *xrate.Limiter
-	HasReservation bool
-	IsAdaptive     bool
-	PausedUntil    time.Time
-}
-
 func NewMemoryVisitWorkQueue() *MemoryVisitWorkQueue {
 	return &MemoryVisitWorkQueue{
-		dqueue:       make(chan *visitMemoryPackage, MemoryWorkQueueBufferSize),
-		hqueues:      make(map[uint32]*hostMemoryVisitWorkQueue),
-		shoudlRecalc: make(chan bool),
+		dqueue:       make(chan *VisitMessage, MemoryWorkQueueBufferSize),
+		shouldRecalc: make(chan bool),
 	}
 }
 
 type MemoryVisitWorkQueue struct {
-	mu sync.RWMutex
-
 	// This where consumers read from.
-	dqueue chan *visitMemoryPackage
+	dqueue chan *VisitMessage
 
 	// This is where message get published too. Key ist the hostname including
 	// the port. It's okay to mix enqueue visits with and without authentication
 	// for the same host.
-	hqueues map[uint32]*hostMemoryVisitWorkQueue
+	hqueues sync.Map // map[uint32]*ControlledQueue
 
-	// shoudlRecalc is checked by the promoter to see if it should recalculate.
+	// shouldRecalc is checked by the promoter to see if it should recalculate.
 	// It is an unbuffered channel. If sending is blocked, this means there is
 	// a pending notification. As one notification is enough, to trigger the
 	// recalculation, a failed send can be ignored.
-	shoudlRecalc chan bool
+	shouldRecalc chan bool
 }
 
 func (wq *MemoryVisitWorkQueue) Open(ctx context.Context) error {
-	wq.startPromoter(ctx)
+	snap := make(map[uint32]*ControlledQueue)
+
+	wq.hqueues.Range(func(key any, value any) bool {
+		snap[key.(uint32)] = value.(*ControlledQueue)
+		return true
+	})
+
+	startJobPromoter(ctx, wq.dqueue, snap, wq.shouldRecalc)
 	return nil
 }
 
-func (wq *MemoryVisitWorkQueue) lazyHostQueue(u string) *hostMemoryVisitWorkQueue {
+func (wq *MemoryVisitWorkQueue) lazyHostQueue(u string) *ControlledQueue {
 	p, _ := url.Parse(u)
 	key := guessHost(u)
 
-	if _, ok := wq.hqueues[key]; !ok {
-		wq.mu.Lock()
-		wq.hqueues[key] = &hostMemoryVisitWorkQueue{
-			ID:             key,
-			Name:           strings.TrimLeft(p.Hostname(), "www."),
-			PausedUntil:    time.Time{},
-			HasReservation: false,
-			IsAdaptive:     true,
-			Queue:          make(chan *visitMemoryPackage, MemoryWorkQueueBufferSize),
-			Limiter:        xrate.NewLimiter(xrate.Limit(MinHostRPS), 1),
-		}
-		wq.mu.Unlock()
+	if _, ok := wq.hqueues.Load(key); !ok {
+		wq.hqueues.Store(key, &ControlledQueue{
+			ID:         key,
+			Name:       strings.TrimLeft(p.Hostname(), "www."),
+			IsAdaptive: true,
+			Queue:      make(chan *VisitMessage, MemoryWorkQueueBufferSize),
+			Limiter:    NewMemoryLimiter(),
+		})
 	}
 
-	wq.mu.RLock()
-	defer wq.mu.RUnlock()
-	return wq.hqueues[key]
+	v, _ := wq.hqueues.Load(key)
+	return v.(*ControlledQueue)
 }
 
 func (wq *MemoryVisitWorkQueue) Publish(ctx context.Context, run string, url string) error {
-	defer wq.shouldRecalc() // Notify promoter that a new message is available.
+	defer wq.triggerRecalc() // Notify promoter that a new message is available.
 
 	hq := wq.lazyHostQueue(url)
 
@@ -107,28 +86,25 @@ func (wq *MemoryVisitWorkQueue) Publish(ctx context.Context, run string, url str
 	carrier := propagation.MapCarrier{}
 	propagator.Inject(ctx, carrier)
 
-	pkg := &visitMemoryPackage{
+	msg := &VisitMessage{
+		ID:      uuid.New().ID(),
+		Run:     run,
+		URL:     url,
+		Created: time.Now(),
 		Carrier: carrier,
-		Message: &VisitMessage{
-			ID:      uuid.New().ID(),
-			Run:     run,
-			URL:     url,
-			Created: time.Now(),
-		},
 	}
 
 	select {
-	case hq.Queue <- pkg:
-		slog.Debug("Work Queue: Message successfully published.", "msg.id", pkg.Message.ID)
+	case hq.Queue <- msg:
+		slog.Debug("Work Queue: Message successfully published.", "msg.id", msg.ID)
 	default:
-		slog.Warn("Work Queue: full, not publishing message!", "msg", pkg.Message)
+		slog.Warn("Work Queue: full, not publishing message!", "msg", msg)
 	}
 	return nil
 }
 
 func (wq *MemoryVisitWorkQueue) Republish(ctx context.Context, job *VisitJob) error {
-	defer wq.shouldRecalc()
-
+	defer wq.triggerRecalc()
 	hq := wq.lazyHostQueue(job.URL)
 
 	// Extract tracing information from context, to transport it over the
@@ -137,22 +113,20 @@ func (wq *MemoryVisitWorkQueue) Republish(ctx context.Context, job *VisitJob) er
 	carrier := propagation.MapCarrier{}
 	propagator.Inject(job.Context, carrier)
 
-	pkg := &visitMemoryPackage{
+	msg := &VisitMessage{
+		ID:      job.ID,
+		Run:     job.Run,
+		URL:     job.URL,
+		Created: job.Created,
+		Retries: job.Retries + 1,
 		Carrier: carrier,
-		Message: &VisitMessage{
-			ID:      job.ID,
-			Run:     job.Run,
-			URL:     job.URL,
-			Created: job.Created,
-			Retries: job.Retries + 1,
-		},
 	}
 
 	select {
-	case hq.Queue <- pkg:
-		slog.Debug("Work Queue: Message successfully rescheduled.", "msg.id", pkg.Message.ID)
+	case hq.Queue <- msg:
+		slog.Debug("Work Queue: Message successfully rescheduled.", "msg.id", msg.ID)
 	default:
-		slog.Warn("Work Queue: full, not rescheduling message!", "msg", pkg.Message)
+		slog.Warn("Work Queue: full, not rescheduling message!", "msg", msg)
 	}
 	return nil
 }
@@ -172,16 +146,16 @@ func (wq *MemoryVisitWorkQueue) Consume(ctx context.Context) (<-chan *VisitJob, 
 				close(reschan)
 				close(errchan)
 				return
-			case p := <-wq.dqueue:
+			case msg := <-wq.dqueue:
 				// slog.Debug("Work Queue: Received message, forwarding to results channel.", "msg.id", p.Message.ID)
 
 				// Initializes the context for the job. Than extract the tracing
 				// information from the carrier into the job's context.
 				jctx := context.Background()
-				jctx = otel.GetTextMapPropagator().Extract(jctx, p.Carrier)
+				jctx = otel.GetTextMapPropagator().Extract(jctx, msg.Carrier)
 
 				reschan <- &VisitJob{
-					VisitMessage: p.Message,
+					VisitMessage: msg,
 					Context:      jctx,
 				}
 				// slog.Debug("Work Queue: Forwarded message to results channel.", "msg.id", p.Message.ID)
@@ -193,22 +167,17 @@ func (wq *MemoryVisitWorkQueue) Consume(ctx context.Context) (<-chan *VisitJob, 
 }
 
 func (wq *MemoryVisitWorkQueue) Pause(ctx context.Context, url string, d time.Duration) error {
-	t := time.Now().Add(d)
-	hq := wq.lazyHostQueue(url)
-
-	if hq.PausedUntil.IsZero() || !hq.PausedUntil.After(t) { // Pause can only increase.
-		hq.PausedUntil = t
-	}
+	wq.lazyHostQueue(url).Pause(d)
 	return nil
 }
 
-// shoudlRecalc is checked by the promoter to see if it should recalculate.
+// shouldRecalc is checked by the promoter to see if it should recalculate.
 // It is an unbuffered channel. If sending is blocked, this means there is
 // a pending notification. As one notification is enough, to trigger the
 // recalculation, a failed send can be ignored.
-func (wq *MemoryVisitWorkQueue) shouldRecalc() {
+func (wq *MemoryVisitWorkQueue) triggerRecalc() {
 	select {
-	case wq.shoudlRecalc <- true:
+	case wq.shouldRecalc <- true:
 	default:
 		// A notification is already pending, no need to send another.
 	}
@@ -217,8 +186,42 @@ func (wq *MemoryVisitWorkQueue) shouldRecalc() {
 func (wq *MemoryVisitWorkQueue) Close() error {
 	close(wq.dqueue)
 
-	for _, hq := range wq.hqueues {
-		close(hq.Queue)
-	}
+	wq.hqueues.Range(func(k any, v any) bool {
+		close(v.(*ControlledQueue).Queue)
+		return true
+	})
 	return nil
+}
+
+func (wq *MemoryVisitWorkQueue) TakeRateLimitHeaders(ctx context.Context, url string, hdr *http.Header) {
+	hq := wq.lazyHostQueue(url)
+
+	if !hq.IsAdaptive {
+		return
+	}
+	changed, desired := newRateLimitByHeaders(hq.Limiter.GetLimit(), hdr)
+	if !changed {
+		return
+	}
+
+	hq.Limiter.SetLimit(desired)
+	slog.Debug("Work Queue: Rate limit fine tuned.", "host", hq.Name, "desired", desired)
+}
+
+// TakeSample implements an algorithm to adjust the rate limiter, to ensure maximum througput within the bounds
+// set by the rate limiter, while not overwhelming the target. The algorithm will adjust the rate limiter
+// but not go below MinRequestsPerSecondPerHost and not above MaxRequestsPerSecondPerHost.
+func (wq *MemoryVisitWorkQueue) TakeSample(ctx context.Context, url string, statusCode int, err error, d time.Duration) {
+	hq := wq.lazyHostQueue(url)
+
+	if !hq.IsAdaptive {
+		return
+	}
+	changed, desired := newRateLimitByLatency(hq.Limiter.GetLimit(), statusCode, err, d)
+	if !changed {
+		return
+	}
+
+	hq.Limiter.SetLimit(desired)
+	slog.Debug("Work Queue: Rate limit fine tuned.", "host", hq.Name, "desired", desired)
 }

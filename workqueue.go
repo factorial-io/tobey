@@ -8,14 +8,17 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 const (
@@ -81,8 +84,13 @@ type VisitMessage struct {
 	URL string
 
 	Created time.Time
+
 	// The number of times this job has been retried to be enqueued.
 	Retries uint32
+
+	// The carrier is used to pass tracing information from the job publisher to
+	// the job consumer. It is used to pass the TraceID and SpanID.
+	Carrier propagation.MapCarrier
 }
 
 // VisitJob is similar to a http.Request, it exists only for a certain time. It
@@ -118,6 +126,53 @@ func CreateWorkQueue(redis *redis.Client) VisitWorkQueue {
 		slog.Debug("Using in-memory work queue...")
 		return NewMemoryVisitWorkQueue()
 	}
+}
+
+// ControlledQueue is a wrapped queue that is flow controllable, by
+// pausing and resuming. It also has a rate limiter attached to it.
+type ControlledQueue struct {
+	ID   uint32
+	Name string // For debugging purposes only.
+
+	Queue chan *VisitMessage
+
+	Limiter Limiter
+
+	// Holds an Unix timestamp, instead of a time.Time so
+	// that we can operate on this without locks.
+	pausedUntil atomic.Int64
+
+	IsAdaptive bool
+}
+
+func (cq *ControlledQueue) String() string {
+	_, until := cq.IsPaused()
+	return fmt.Sprintf("ControlledQueue(%d, %s, %d, %s, %s)", cq.ID, cq.Name, len(cq.Queue), until, cq.Limiter.HoldsReservation())
+}
+
+func (cq *ControlledQueue) IsPaused() (bool, time.Time) {
+	now := time.Now().Unix()
+	until := cq.pausedUntil.Load()
+
+	if until == 0 {
+		return false, time.Time{}
+	}
+	return now < until, time.Unix(until, 0)
+}
+
+func (cq *ControlledQueue) Pause(d time.Duration) time.Time {
+	v := time.Now().Add(d).Unix()
+	o := cq.pausedUntil.Load()
+
+	if o == 0 || v > o { // Pause can only increase.
+		cq.pausedUntil.Store(v)
+		return time.Unix(v, 0)
+	}
+	return time.Unix(o, 0)
+}
+
+func (cq *ControlledQueue) Unpause() {
+	cq.pausedUntil.Store(0)
 }
 
 // guessHost heuristically identifies a host for the given URL. The function

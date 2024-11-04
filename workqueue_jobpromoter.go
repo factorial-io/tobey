@@ -15,10 +15,10 @@ import (
 	"time"
 )
 
-// startPromoter starts a the promoter goroutine that shovels message from host
+// startJobPromoter starts a the promoter goroutine that shovels message from host
 // queue into the default queue. The promoter is responsible for load balancing
 // the host queues.
-func (wq *MemoryVisitWorkQueue) startPromoter(ctx context.Context) {
+func startJobPromoter(ctx context.Context, dqueue chan *VisitMessage, hqueues map[uint32]*ControlledQueue, shouldRecalc chan bool) {
 	go func() {
 		slog.Debug("Work Queue: Starting promoter...")
 
@@ -29,7 +29,7 @@ func (wq *MemoryVisitWorkQueue) startPromoter(ctx context.Context) {
 		for {
 		immediatecalc:
 			// slog.Debug("Work Queue: Calculating immediate queue candidates.")
-			immediate, shortestPauseUntil := wq.calcImmediateHostQueueCandidates()
+			immediate, shortestPauseUntil := calcImmediateHostQueueCandidates(hqueues)
 
 			// Check how long we have to wait until we can recalc immidiate candidates.
 			if len(immediate) == 0 {
@@ -50,7 +50,7 @@ func (wq *MemoryVisitWorkQueue) startPromoter(ctx context.Context) {
 				case <-time.After(delay):
 					// slog.Debug("Work Queue: Pause time passed.")
 					goto immediatecalc
-				case <-wq.shoudlRecalc:
+				case <-shouldRecalc:
 					slog.Debug("Work Queue: Got notification to re-calc immediate queue candidates.")
 					goto immediatecalc
 				case <-ctx.Done():
@@ -65,36 +65,38 @@ func (wq *MemoryVisitWorkQueue) startPromoter(ctx context.Context) {
 			slog.Debug("Work Queue: Final immediate queue candidates calculated.", "count", len(immediate))
 
 			n := atomic.AddUint32(&next, 1)
-
 			key := immediate[(int(n)-1)%len(immediate)]
-			hq, _ := wq.hqueues[key]
 
+			hq, _ := hqueues[key]
 			// FIXME: The host queue might haven gone poof in the meantime, we should
 			//        check if the host queue is still there.
 
-			slog.Debug("Work Queue: Querying host queue for messages.", "queue.name", hq.Name)
-			select {
-			case pkg := <-hq.Queue:
-				// Now promote the pkg to the default queue.
-				select {
-				case wq.dqueue <- pkg:
-					slog.Debug("Work Queue: Message promoted.", "msg.id", pkg.Message.ID)
-
-					wq.mu.Lock()
-					wq.hqueues[hq.ID].HasReservation = false
-					wq.mu.Unlock()
-				default:
-					slog.Warn("Work Queue: full, dropping to-be-promoted message!", "msg", pkg.Message)
-				}
-			default:
-				// The channel may became empty in the meantime, we've checked at top of the loop.
-				// slog.Debug("Work Queue: Host queue empty, nothing to promote.", "queue.name", hq.Hostname)
-			case <-ctx.Done():
-				slog.Debug("Work Queue: Context cancelled, stopping promoter.")
-				return
+			if promote(ctx, hq.Queue, dqueue) {
+				hq.Limiter.ReleaseReservation()
 			}
 		}
 	}()
+}
+
+// promote promotes a message from one channel to another. The function returns
+// true when the message was successfully promoted, false otherwise. The
+// function will not block on an empty source channel or on an overful target
+// channel, even when these are not buffered.
+func promote[V any](ctx context.Context, a <-chan V, b chan<- V) bool {
+	select {
+	case msg := <-a:
+		select {
+		case b <- msg:
+			return true
+		default:
+			return false
+		}
+	case <-ctx.Done():
+		return false
+	default:
+		return false
+	}
+	return false
 }
 
 // calcImmediateHostQueueCandidates calculates which host queues are candidates
@@ -105,13 +107,10 @@ func (wq *MemoryVisitWorkQueue) startPromoter(ctx context.Context) {
 // queue is paused (non only the candidates). When no candidate is found, the
 // callee should wait at least for that time and than try and call this function
 // again.
-func (wq *MemoryVisitWorkQueue) calcImmediateHostQueueCandidates() ([]uint32, time.Time) {
+func calcImmediateHostQueueCandidates(hqueues map[uint32]*ControlledQueue) ([]uint32, time.Time) {
 	// Host queue candidates that can be queried immediately.
-	immediate := make([]uint32, 0, len(wq.hqueues))
+	immediate := make([]uint32, 0, len(hqueues))
 	var shortestPauseUntil time.Time
-
-	wq.mu.Lock()
-	defer wq.mu.Unlock()
 
 	// First calculate which host queues are candidates for immediate
 	// querying. This is to unnecesarily hitting the rate limiter for
@@ -121,9 +120,9 @@ func (wq *MemoryVisitWorkQueue) calcImmediateHostQueueCandidates() ([]uint32, ti
 	// FIXME: It might be less expensive to first check for the PausedUntil
 	//        time and then check the length of the queue, depending on the
 	//        underlying implementation of the work queue.
-	for k, hq := range wq.hqueues {
+	for _, hq := range hqueues {
 		hlogger := slog.With("queue.name", hq.Name)
-		hlogger.Debug("Work Queue: Checking if is candidate.", "len", len(hq.Queue), "now", time.Now(), "pausedUntil", hq.PausedUntil)
+		hlogger.Debug("Work Queue: Checking if is candidate.", "Queue", hq.String())
 
 		if len(hq.Queue) == 0 {
 			// This host queue is empty, no message to process for that queue,
@@ -132,64 +131,41 @@ func (wq *MemoryVisitWorkQueue) calcImmediateHostQueueCandidates() ([]uint32, ti
 		}
 		// hlogger.Debug("Work Queue: Host queue has messages to process.")
 
-		if hq.PausedUntil.IsZero() {
-			// This host queue was never paused before.
-			// hlogger.Debug("Work Queue: Host queue is not paused.")
-		} else {
-			if time.Now().Before(hq.PausedUntil) {
-				// This host queue is *still* paused.
-				// hlogger.Debug("Work Queue: Host queue is paused.")
-
-				// Check if this host queue is paused shorter thant the shortest
-				// pause we've seen so far.
-				if shortestPauseUntil.IsZero() || hq.PausedUntil.Before(shortestPauseUntil) {
-					shortestPauseUntil = hq.PausedUntil
-				}
-
-				// As this host queue is still paused we don't include
-				// it in the imediate list. Continue to check if the
-				// next host queue is paused or not.
-				continue
-			} else {
-				// hlogger.Debug("Work Queue: Host queue is not paused anymore.")
-
-				// This host queue is not paused anymore, include it in
-				// the list. While not technically necessary, we reset
-				// the pause until time to zero, for the sake of tidiness.
-				wq.hqueues[k].PausedUntil = time.Time{}
+		if paused, until := hq.IsPaused(); paused {
+			// Check if this host queue is paused shorter then the shortest
+			// pause we've seen so far.
+			if shortestPauseUntil.IsZero() || until.Before(shortestPauseUntil) {
+				shortestPauseUntil = until
 			}
+
+			// As this host queue is still paused we don't include
+			// it in the imediate list. Continue to check if the
+			// next host queue is paused or not.
+			continue
 		}
 
 		// If we get here, the current host queue was either never
 		// paused, or it is now unpaused. This means we can try to get a
 		// token from the rate limiter, if we haven't already.
-		if !hq.HasReservation {
+		if !hq.Limiter.HoldsReservation() {
 			// hlogger.Debug("Work Queue: Host queue needs a reservation, checking rate limiter.")
-			res := hq.Limiter.Reserve()
-			if !res.OK() {
+			ok, delay := hq.Limiter.Reserve()
+			if !ok {
 				hlogger.Warn("Work Queue: Rate limiter cannot provide reservation in max wait time.")
 				continue
 			}
 
-			if res.Delay() > 0 {
-				hlogger.Debug("Work Queue: Host queue is rate limited, pausing the queue.", "delay", res.Delay())
+			if delay > 0 {
+				hlogger.Debug("Work Queue: Host queue is rate limited, pausing the queue.", "delay", delay)
 
 				// Pause the tube for a while, the limiter wants us to retry later.
-				wq.hqueues[k].PausedUntil = time.Now().Add(res.Delay())
+				until := hq.Pause(delay)
 
-				if shortestPauseUntil.IsZero() || wq.hqueues[k].PausedUntil.Before(shortestPauseUntil) {
-					shortestPauseUntil = wq.hqueues[k].PausedUntil
+				if shortestPauseUntil.IsZero() || until.Before(shortestPauseUntil) {
+					shortestPauseUntil = until
 				}
-
-				wq.hqueues[k].HasReservation = true
 				continue
-			} else {
-				// Got a token from the limiter, we may act immediately.
-				// hlogger.Debug("Work Queue: Host queue is not rate limited, recording as candidate :)")
-				wq.hqueues[k].HasReservation = true
 			}
-		} else {
-			// hlogger.Debug("Work Queue: Host already has a reservation.")
 		}
 		immediate = append(immediate, hq.ID)
 	}

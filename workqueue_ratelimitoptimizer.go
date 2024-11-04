@@ -11,38 +11,30 @@ package main
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
-
-	xrate "golang.org/x/time/rate"
 )
 
-func (wq *MemoryVisitWorkQueue) TakeRateLimitHeaders(ctx context.Context, url string, hdr *http.Header) {
-	hq := wq.lazyHostQueue(url)
-
+// newRateLimitByHeaders returns a new rate limit according to rate limiting headers. It ensures
+// that the new rate limit is at least MinHostRPS.
+func newRateLimitByHeaders(cur float64, hdr *http.Header) (bool, float64) {
 	if v := hdr.Get("X-RateLimit-Limit"); v != "" {
-		cur := float64(hq.Limiter.Limit())
-
 		parsed, _ := strconv.Atoi(v)
 		desired := max(float64(parsed/60/60), MinHostRPS) // Convert to per second, is per hour.
 
-		if int(desired) != int(cur) {
-			slog.Debug("Work Queue: Rate limit updated.", "host", hq.Name, "now", desired, "change", desired-cur)
-			hq.Limiter.SetLimit(xrate.Limit(desired))
-		}
-		hq.IsAdaptive = false
+		return int(desired) != int(cur), desired
 	}
+	return false, 0
 }
 
-// TakeSample implements an algorithm to adjust the rate limiter, to ensure maximum througput within the bounds
-// set by the rate limiter, while not overwhelming the target. The algorithm will adjust the rate limiter
-// but not go below MinRequestsPerSecondPerHost and not above MaxRequestsPerSecondPerHost.
-func (wq *MemoryVisitWorkQueue) TakeSample(ctx context.Context, url string, statusCode int, err error, d time.Duration) {
-	hq := wq.lazyHostQueue(url)
-
-	cur := float64(hq.Limiter.Limit())
+// newRateLimitByLatency returns a new rate limit according to the latency of
+// a request/response and status / error. It implements an algorithm to adjust
+// the rate limiter, to ensure maximum througput within the bounds set by the
+// rate limiter, while not overwhelming the target. The algorithm will adjust
+// the rate limiter but not go below MinRequestsPerSecondPerHost and not above
+// MaxRequestsPerSecondPerHost.
+func newRateLimitByLatency(cur float64, statusCode int, err error, d time.Duration) (bool, float64) {
 	var desired float64
 
 	// If we have a status code that the target is already overwhelmed, we don't
@@ -53,7 +45,7 @@ func (wq *MemoryVisitWorkQueue) TakeSample(ctx context.Context, url string, stat
 	case statusCode == 429:
 		fallthrough
 	case statusCode == 503:
-		return
+		return false, 0
 	case statusCode == 500 || errors.Is(err, context.DeadlineExceeded):
 		// The server is starting to behave badly. We should slow down.
 		// Half the rate limit, capped at MinRequestsPerSecondPerHost.
@@ -63,15 +55,11 @@ func (wq *MemoryVisitWorkQueue) TakeSample(ctx context.Context, url string, stat
 			desired = cur / 2
 		}
 
-		if int(desired) != int(cur) && hq.IsAdaptive {
-			slog.Debug("Work Queue: Lowering pressure on host.", "host", hq.Name, "now", desired, "change", desired-cur)
-			hq.Limiter.SetLimit(xrate.Limit(desired))
-		}
-		return
+		return int(desired) != int(cur), desired
 	}
 
 	if d == 0 {
-		return
+		return false, 0
 	}
 
 	// The higher the latency comes close to 1s the more we want to decrease the
@@ -81,8 +69,5 @@ func (wq *MemoryVisitWorkQueue) TakeSample(ctx context.Context, url string, stat
 	latency := min(1, d.Seconds()) // Everything above 1s is considered slow.
 	desired = MaxHostRPS*(1-latency) + MinHostRPS*latency
 
-	if int(desired) != int(cur) && hq.IsAdaptive {
-		slog.Debug("Work Queue: Rate limit fine tuned.", "host", hq.Name, "now", desired, "change", desired-cur)
-		hq.Limiter.SetLimit(xrate.Limit(desired))
-	}
+	return int(desired) != int(cur), desired
 }
