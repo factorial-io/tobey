@@ -250,9 +250,14 @@ by providing the `auth` key:
   ]
 ```
 
-### Using Webhook to state where results should go
+### Output Methods
 
-[Webhooks](https://mailchimp.com/en/marketing-glossary/webhook) are a technique to notify other services about a result, once its ready.
+Tobey currently supports one output method. 
+
+#### Using Webhook to state where results should go
+
+With this output method tobey doesn't store any results by itself. It instead forwards
+the results to a configured webhook endpoint. [Webhooks](https://mailchimp.com/en/marketing-glossary/webhook) are a technique to notify other services about a result, once its ready.
 
 Once the crawlwer has results for a resource, it will deliver them to a webhook,
 if one is configured via the `webhook` key. Using the `data` key you can pass
