@@ -134,7 +134,9 @@ func VisitWorker(
 			jlogger.Info("Visitor: Visited URL.", "took.lifetime", time.Since(job.Created), "took.fetch", res.Took)
 			span.AddEvent("Visitor: Visited URL.", t)
 
-			hooks.Send(jctx, r.WebhookConfig, r.ID, res)
+			if r.WebhookConfig != nil {
+				hooks.Send(jctx, r.WebhookConfig, r.ID, res)
+			}
 
 			span.End()
 			continue
