@@ -320,9 +320,6 @@ func main() {
 	if queue != nil {
 		queue.Close()
 	}
-	if progress != nil {
-		progress.Close()
-	}
 	if redisconn != nil {
 		redisconn.Close()
 	}

@@ -9,22 +9,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-)
-
-const (
-	ProgressDefaultStage = "crawler"
-
-	ProgressEndpointUpdate     = "api/status/update"
-	ProgressEndpointTransition = "api/status/transition-to"
 )
 
 // Constants to be used for indicating what state the progress is in.
@@ -37,217 +24,118 @@ const (
 	ProgressStateCancelled         = "cancelled"
 )
 
+func MustStartProgressFromEnv(ctx context.Context) ProgressDispatcher {
+	if dsn := os.Getenv("TOBEY_PROGRESS_DSN"); dsn != "" {
+		slog.Info("Using progress service for updates.", "dsn", dsn)
+		return &FactorialProgressServiceDispatcher{
+			client: CreateRetryingHTTPClient(NoAuthFn),
+		}
+	} else {
+		slog.Debug("Not sharing progress updates.")
+		return &NoopProgressDispatcher{}
+	}
+}
+
+type ProgressDispatcher interface {
+	With(run string, url string) *Progressor
+	Call(ctx context.Context, msg ProgressUpdate) error // Usually only called by the Progressor.
+}
+
 type Progressor struct {
-	manager Progress
+	dispatcher ProgressDispatcher
 
-	Run string
-	URL string
+	stage string
+	Run   string
+	URL   string
 }
 
-func (p *Progressor) Update(ctx context.Context, status string) error {
-	return p.manager.Update(ProgressUpdateMessagePackage{
-		ctx: ctx,
-		payload: ProgressUpdateMessage{
-			Stage:  ProgressDefaultStage,
-			Status: status,
-			Run:    p.Run,
-			URL:    p.URL,
-		},
-	})
-}
-
-type ProgressUpdateMessagePackage struct {
-	ctx     context.Context
-	payload ProgressUpdateMessage
-}
-
-type ProgressUpdateMessage struct {
+type ProgressUpdate struct {
 	Stage  string `json:"stage"`
-	Status string `json:"status"`   // only constanz allowed
+	Status string `json:"status"`   // only constants allowed
 	Run    string `json:"run_uuid"` // uuid of the run
 	URL    string `json:"url"`
 }
 
-type ProgressManager struct {
-	apiURL string
+func (p *Progressor) Update(ctx context.Context, status string) error {
+	return p.dispatcher.Call(ctx, ProgressUpdate{
+		Stage:  p.stage,
+		Run:    p.Run,
+		URL:    p.URL,
+		Status: status,
+	})
+}
+
+type NoopProgressDispatcher struct {
+}
+
+func (p *NoopProgressDispatcher) With(run string, url string) *Progressor {
+	return &Progressor{dispatcher: p}
+}
+
+func (p *NoopProgressDispatcher) Call(ctx context.Context, pu ProgressUpdate) error {
+	return nil
+}
+
+const (
+	// The progress service has the concept of stages, which are used to group
+	// progress updates. The default stage is "crawler".
+	FactorialProgressServiceDefaultStage = "crawler"
+	FactorialProgressEndpointUpdate      = "api/status/update"
+	// FactorialProgressEndpointTransition  = "api/status/transition-to" // Not yet implemented.
+)
+
+// FactorialProgressServiceDispatcher is a dispatcher for the Factorial progress service.
+type FactorialProgressServiceDispatcher struct {
 	client *http.Client
 }
 
-func MustStartProgressFromEnv(ctx context.Context) Progress {
-	if dsn := os.Getenv("TOBEY_PROGRESS_DSN"); dsn != "" {
-		slog.Info("Using progress service for updates.", "dsn", dsn)
-
-		// TODO: Make this always non-blocking as otherwise it can block the whole application.
-		queue := make(chan ProgressUpdateMessagePackage, 1000)
-		progress_manager := NewProgressManager()
-		progress_manager.Start(ctx, queue)
-
-		return &BaseProgress{
-			queue,
-		}
-	} else {
-		slog.Debug("Not sharing progress updates.")
-		return &NoopProgress{}
+func (p *FactorialProgressServiceDispatcher) With(run string, url string) *Progressor {
+	return &Progressor{
+		dispatcher: p,
+		stage:      FactorialProgressServiceDefaultStage,
+		Run:        run,
+		URL:        url,
 	}
 }
 
-func NewProgressManager() *ProgressManager {
-	return &ProgressManager{
-		GetEnvString("TOBEY_PROGRESS_DSN", "http://progress:9020"),
-		&http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
-	}
-}
+// Call sends the progress update over the wire, it implements a fire and forget approach.
+func (p *FactorialProgressServiceDispatcher) Call(ctx context.Context, pu ProgressUpdate) error {
+	logger := slog.With("run", pu.Run, "url", pu.URL)
+	logger.Debug("Progress Dispatcher: Sending update...")
 
-type Progress interface {
-	Update(update_message ProgressUpdateMessagePackage) error
-	Close() error
-	With(run string, url string) *Progressor
-}
-
-func (w *ProgressManager) startHandle(ctx context.Context, progressQueue chan ProgressUpdateMessagePackage, pnumber int) {
-	wlogger := slog.With("worker.id", pnumber)
-
-	// todo handle empty buffered queue
-	for {
-		select {
-		case <-ctx.Done():
-			wlogger.Debug("Progress Dispatcher: Context cancelled, stopping worker.")
-			// The context is over, stop processing results
-			return
-		case result_package, ok1 := <-progressQueue:
-
-			// This context is dynamic because of the different items.
-			if result_package.ctx == nil {
-				result_package.ctx = context.Background()
-			}
-			// Start the tracing
-			ctx_fresh, parentSpan := tracer.Start(result_package.ctx, "handle.progress.queue.worker")
-			result := result_package.payload
-
-			parentSpan.SetAttributes(attribute.Int("worker", pnumber))
-			if !ok1 {
-				parentSpan.SetAttributes(attribute.Int("worker", pnumber))
-				parentSpan.RecordError(errors.New("channel is closed"))
-				parentSpan.End()
-				return
-			}
-
-			err := w.sendProgressUpdate(ctx_fresh, result)
-			if err != nil {
-				wlogger.Error("Progress Dispatcher: Sending update ultimately failed.", "error", err)
-			} else {
-				wlogger.Debug("Progress Dispatcher: Update succesfully sent.", "url", result.URL)
-			}
-
-			parentSpan.End()
-		}
-	}
-}
-
-func (w *ProgressManager) sendProgressUpdate(ctx context.Context, msg ProgressUpdateMessage) error {
-	logger := slog.With("url", msg.URL, "status", msg.Status, "run", msg.Run)
-	logger.Debug("Progress Dispatcher: Sending progress update...")
-
-	ctx_send_webhook, span := tracer.Start(ctx, "handle.progress.queue.send")
+	ctx, span := tracer.Start(ctx, "output.progress.send")
 	defer span.End()
 
-	url := fmt.Sprintf("%v/%v", w.apiURL, ProgressEndpointUpdate)
-
-	span.SetAttributes(attribute.String("API_URL", url))
-	span.SetAttributes(attribute.String("url", msg.URL))
-	span.SetAttributes(attribute.String("status_update", msg.Status))
-
-	body, err := json.Marshal(msg)
+	payload := pu
+	body, err := json.Marshal(payload)
 	if err != nil {
-		span.SetStatus(codes.Error, "failed to marshal body")
-		span.SetAttributes(attribute.String("data", "TODO"))
 		span.RecordError(err)
-
 		return err
 	}
+	buf := bytes.NewBuffer(body)
 
-	req, err := http.NewRequestWithContext(ctx_send_webhook, "POST", url, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", FactorialProgressEndpointUpdate, buf)
 	if err != nil {
-		span.SetStatus(codes.Error, "failed to create request")
 		span.RecordError(err)
-
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := w.client.Do(req)
-	if err != nil {
-		span.SetStatus(codes.Error, "performing request failed")
-		span.RecordError(err)
+	go func() {
+		res, err := p.client.Do(req)
+		defer res.Body.Close()
 
-		return err
-	}
-	defer resp.Body.Close()
-
-	span.SetAttributes(attribute.Int("StatusCode", resp.StatusCode))
-
-	if resp.StatusCode != http.StatusAccepted {
-		err := errors.New("status update was not accepted")
-
-		var body_bytes []byte
-		resp.Body.Read(body_bytes)
-
-		span.SetAttributes(attribute.String("Body", string(body_bytes[:])))
-		span.SetStatus(codes.Error, "update not accepted")
-		span.RecordError(err)
-
-		return err
-	}
-	return nil
-}
-
-func (w *ProgressManager) Start(ctx context.Context, progressQueue chan ProgressUpdateMessagePackage) {
-	//todo add recovery
-	go func(ctx context.Context, progressQueue chan ProgressUpdateMessagePackage) {
-		count := GetEnvInt("TOBEY_PROGRESS_WORKER", 4)
-		for i := 0; i < count; i++ {
-			go w.startHandle(ctx, progressQueue, i)
+		if err != nil {
+			logger.Error("Progress Dispatcher: Failed to send progress.", "error", err)
+			span.RecordError(err)
+			return
 		}
-	}(ctx, progressQueue)
-}
+		if res.StatusCode != http.StatusOK {
+			logger.Error("Progress Dispatcher: Progress was not accepted.", "status", res.Status)
+			span.RecordError(err)
+			return
+		}
+	}()
 
-type NoopProgress struct {
-}
-
-func (p *NoopProgress) Update(update_message ProgressUpdateMessagePackage) error {
-	return nil
-}
-
-func (p *NoopProgress) Close() error {
-	return nil
-}
-
-func (p *NoopProgress) With(run string, url string) *Progressor {
-	return &Progressor{
-		manager: p,
-		Run:     run,
-		URL:     url,
-	}
-}
-
-type BaseProgress struct {
-	progressQueue chan ProgressUpdateMessagePackage
-}
-
-func (p *BaseProgress) Update(update_message ProgressUpdateMessagePackage) error {
-	p.progressQueue <- update_message
-	return nil
-}
-
-func (p *BaseProgress) With(run string, url string) *Progressor {
-	return &Progressor{
-		manager: p,
-		Run:     run,
-		URL:     url,
-	}
-}
-
-func (p *BaseProgress) Close() error {
-	close(p.progressQueue)
 	return nil
 }
