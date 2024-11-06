@@ -43,7 +43,7 @@ type WebhookDispatcher struct {
 	client *http.Client
 }
 
-// Send sends a webhook to the given endpoint. It returns immediately, and is not blocking.
+// Send sends a webhook to the given endpoint. It returns immediately, and is not blocking. It implements a fire and forget approach.
 func (wd *WebhookDispatcher) Send(ctx context.Context, webhook *WebhookConfig, run string, res *collector.Response) error {
 	logger := slog.With("endpoint", webhook.Endpoint, "run", run)
 	logger.Debug("Webhook Dispatcher: Sending webhook...")
@@ -82,12 +82,12 @@ func (wd *WebhookDispatcher) Send(ctx context.Context, webhook *WebhookConfig, r
 		defer res.Body.Close()
 
 		if err != nil {
-			logger.Error("Failed to send webhook.", "error", err)
+			logger.Error("Webhook Dispatcher: Failed to send webhook.", "error", err)
 			span.RecordError(err)
 			return
 		}
 		if res.StatusCode != http.StatusOK {
-			logger.Error("Webhook was not accepted.", "status", res.Status)
+			logger.Error("Webhook Dispatcher: Webhook was not accepted.", "status", res.Status)
 			span.RecordError(err)
 			return
 		}
