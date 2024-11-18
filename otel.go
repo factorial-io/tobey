@@ -7,11 +7,11 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/mariuswilms/tears"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -52,25 +52,8 @@ func (c MapCarrierRabbitmq) Keys() []string {
 
 // StartOTel bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func StartOTel(ctx context.Context) (shutdown func(context.Context) error, err error) {
-	var shutdownFuncs []func(context.Context) error
-
-	// shutdown calls cleanup functions registered via shutdownFuncs.
-	// The errors from the calls are joined.
-	// Each registered cleanup will be invoked once.
-	shutdown = func(ctx context.Context) error {
-		var err error
-		for _, fn := range shutdownFuncs {
-			err = errors.Join(err, fn(ctx))
-		}
-		shutdownFuncs = nil
-		return err
-	}
-
-	// handleErr calls shutdown for cleanup and makes sure that all errors are returned.
-	handleErr := func(inErr error) {
-		err = errors.Join(inErr, shutdown(ctx))
-	}
+func StartOTel(ctx context.Context) (tears.DownFn, error) {
+	tear, down := tears.New()
 
 	// Set up propagator.
 	prop := newPropagator()
@@ -80,11 +63,10 @@ func StartOTel(ctx context.Context) (shutdown func(context.Context) error, err e
 		// Set up trace provider.
 		tracerProvider, erro := newTraceProvider(ctx)
 		if erro != nil {
-			handleErr(err)
-			return
+			return down, erro
 		}
 
-		shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
+		tear(tracerProvider.Shutdown)
 		otel.SetTracerProvider(tracerProvider)
 	}
 
@@ -92,17 +74,13 @@ func StartOTel(ctx context.Context) (shutdown func(context.Context) error, err e
 		// Set up meter provider.
 		meterProvider, erra := newMeterProvider(ctx)
 		if erra != nil {
-			handleErr(erra)
-			return
+			return down, erra
 		}
-		shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
+		tear(meterProvider.Shutdown)
 		otel.SetMeterProvider(meterProvider)
 	}
 
-	// TODO do some research
-	//otel.SetLogger(logger.GetBaseLogger().Logger)
-
-	return
+	return down, nil
 }
 
 func newPropagator() propagation.TextMapPropagator {

@@ -21,6 +21,7 @@ import (
 	"time"
 	"tobey/internal/ctrlq"
 
+	"github.com/mariuswilms/tears"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	_ "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -121,6 +122,8 @@ func configure() {
 
 func main() {
 	slog.Info("Tobey starting...")
+	tear, down := tears.New()
+
 	configure()
 
 	if Debug {
@@ -131,11 +134,13 @@ func main() {
 	// This sets up the main process context.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	var err error
+	tear(stop)
 
 	shutdownOtel, err := StartOTel(ctx)
 	if err != nil {
 		panic(err)
 	}
+	tear(shutdownOtel).End()
 
 	if UseMetrics {
 		err = runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
@@ -152,6 +157,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	if redisconn != nil {
+		tear(redisconn.Close)
+	}
 
 	robots := NewRobots()
 	sitemaps := NewSitemaps(robots) // Sitemaps will use Robots to discover sitemaps.
@@ -161,6 +169,9 @@ func main() {
 	queue := ctrlq.CreateWorkQueue(redisconn)
 	if err := queue.Open(ctx); err != nil {
 		panic(err)
+	}
+	if queue != nil {
+		tear(queue.Close)
 	}
 
 	hooks := NewWebhookDispatcher(ctx)
@@ -174,6 +185,7 @@ func main() {
 		progress,
 		hooks,
 	)
+	tear(workers.Wait)
 
 	apirouter := http.NewServeMux()
 
@@ -280,6 +292,7 @@ func main() {
 		}
 		slog.Info("Stopped serving new API HTTP connections.")
 	}()
+	tear(apiserver.Shutdown)
 
 	slog.Info("Starting HTTP Healthcheck server...", "port", HealthcheckListenPort)
 	hcrouter := http.NewServeMux()
@@ -304,25 +317,10 @@ func main() {
 		}
 		slog.Info("Stopped serving new Healthcheck HTTP connections.")
 	}()
+	tear(hcserver.Shutdown)
 
 	<-ctx.Done()
+
 	slog.Info("Exiting...")
-	stop() // Exit everything that took the context.
-
-	slog.Debug("Cleaning up...")
-
-	workers.Wait()
-	slog.Debug("All visit workers stopped.")
-
-	apiserver.Shutdown(context.Background())
-	hcserver.Shutdown(context.Background())
-
-	if queue != nil {
-		queue.Close()
-	}
-	if redisconn != nil {
-		redisconn.Close()
-	}
-
-	shutdownOtel(ctx)
+	down(context.Background())
 }
