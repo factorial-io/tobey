@@ -33,7 +33,7 @@ func CreateVisitWorkersPool(
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
 	progress ProgressDispatcher,
-	hooks *WebhookDispatcher,
+	rs ResultStore,
 ) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
@@ -42,7 +42,7 @@ func CreateVisitWorkersPool(
 		wg.Add(1)
 
 		go func(id int) {
-			if err := VisitWorker(ctx, id, runs, q, progress, hooks); err != nil {
+			if err := VisitWorker(ctx, id, runs, q, progress, rs); err != nil {
 				slog.Error("Visitor: Worker exited with error.", "worker.id", id, "error", err)
 			} else {
 				slog.Debug("Visitor: Worker exited cleanly.", "worker.id", id)
@@ -60,7 +60,7 @@ func VisitWorker(
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
 	progress ProgressDispatcher,
-	hooks *WebhookDispatcher,
+	rs ResultStore,
 ) error {
 	wlogger := slog.With("worker.id", id)
 	wlogger.Debug("Visitor: Starting...")
@@ -108,7 +108,7 @@ func VisitWorker(
 		// yet have a collector available via the Manager. Please note that Collectors
 		// are not shared by the Manager across tobey instances.
 		r, _ := runs.Get(ctx, job.Run)
-		c := r.GetCollector(ctx, q, progress, hooks)
+		c := r.GetCollector(ctx, q, progress, rs)
 
 		p.Update(jctx, ProgressStateCrawling)
 
@@ -135,7 +135,7 @@ func VisitWorker(
 			span.AddEvent("Visitor: Visited URL.", t)
 
 			if r.WebhookConfig != nil {
-				hooks.Send(jctx, r.WebhookConfig, r.ID, res)
+				rs.Save(jctx, r.WebhookConfig, r.ID, res)
 			}
 
 			span.End()

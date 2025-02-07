@@ -47,7 +47,7 @@ type SerializableRun struct {
 	SkipRobots           bool
 	SkipSitemapDiscovery bool
 
-	WebhookConfig *WebhookConfig
+	WebhookConfig *WebhookResultStoreConfig
 }
 
 // LiveRun is a live version of the Run struct. It contains data that should not
@@ -79,7 +79,7 @@ func (r *Run) getAuthFn() GetAuthFn {
 	}
 }
 
-func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressDispatcher, h *WebhookDispatcher) *collector.Collector {
+func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressDispatcher, rs ResultStore) *collector.Collector {
 	// getEnqueueFn returns the enqueue function, that will enqueue a single URL to
 	// be crawled. The enqueue function is called whenever a new URL is discovered
 	// by that Collector, i.e. by looking at all links in a crawled page HTML.
@@ -137,19 +137,19 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 	// getCollectFn returns the collect function that is called once we have a
 	// result. Uses the information provided in the original crawl request, i.e. the
 	// WebhookConfig, that we have received via the queued message.
-	getCollectFn := func(run *Run, hooks *WebhookDispatcher) collector.CollectFn {
+	getCollectFn := func(run *Run, rs ResultStore) collector.CollectFn {
 
 		// The returned function takes the run context.
 		return func(ctx context.Context, c *collector.Collector, res *collector.Response) {
 			slog.Debug(
-				"Collect suceeded.",
+				"Collect succeeded.",
 				"run", run.ID,
 				"url", res.Request.URL,
 				"response.body.length", len(res.Body),
 				"response.status", res.StatusCode,
 			)
 			if run.WebhookConfig != nil && run.WebhookConfig.Endpoint != "" {
-				hooks.Send(ctx, run.WebhookConfig, run.ID, res)
+				rs.Save(ctx, run.WebhookConfig, run.ID, res)
 			}
 		}
 	}
@@ -166,7 +166,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 			return r.robots.Check(u, r.getAuthFn(), a)
 		},
 		getEnqueueFn(r, q, p),
-		getCollectFn(r, h),
+		getCollectFn(r, rs),
 	)
 
 	// TODO: We should be able to pass these into the NewCollector constructor.
@@ -180,8 +180,8 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 
 // Start starts the crawl with the given URLs. It will discover sitemaps and
 // enqueue the URLs. From there on more URLs will be discovered and enqueued.
-func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressDispatcher, h *WebhookDispatcher, urls []string) {
-	c := r.GetCollector(ctx, q, p, h)
+func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressDispatcher, rs ResultStore, urls []string) {
+	c := r.GetCollector(ctx, q, p, rs)
 
 	// Decide where the initial URLs should go, users may provide sitemaps and
 	// just URLs to web pages.

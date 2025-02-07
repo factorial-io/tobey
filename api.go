@@ -67,7 +67,7 @@ type APIRequest struct {
 	AllowPaths   []string `json:"paths"`
 	DenyPaths    []string `json:"!paths"`
 
-	WebhookConfig *WebhookConfig `json:"webhook"`
+	WebhookResultStoreConfig *WebhookResultStoreConfig `json:"webhook"`
 
 	// If true, we'll bypass the robots.txt check, however we'll still
 	// download the file to look for sitemaps.
@@ -205,8 +205,8 @@ func (req *APIRequest) Validate() bool {
 			}
 		}
 	}
-	if req.WebhookConfig != nil {
-		if req.WebhookConfig.Endpoint == "" {
+	if req.WebhookResultStoreConfig != nil {
+		if req.WebhookResultStoreConfig.Endpoint == "" {
 			return false
 		}
 	}

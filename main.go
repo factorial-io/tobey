@@ -79,7 +79,7 @@ const (
 	HTTPCachePath = "./cache"
 
 	// The port where to ping for healthcheck.
-	HealthcheckListenPort int = 10241
+	HealthcheckListenPort = 10241
 
 	// PulseEndpoint is the endpoint where we send the high frequency metrics.
 	PulseEndpoint = "http://localhost:8090"
@@ -174,8 +174,12 @@ func main() {
 		tear(queue.Close)
 	}
 
-	hooks := NewWebhookDispatcher(ctx)
-	progress := MustStartProgressFromEnv(ctx)
+	rs, err := CreateResultStore(os.Getenv("TOBEY_RESULTS_DSN"))
+	if err != nil {
+		panic(err)
+	}
+
+	progress := CreateProgress(os.Getenv("TOBEY_PROGRESS_DSN"))
 
 	workers := CreateVisitWorkersPool(
 		ctx,
@@ -183,7 +187,7 @@ func main() {
 		runs,
 		queue,
 		progress,
-		hooks,
+		rs,
 	)
 	tear(workers.Wait)
 
@@ -260,7 +264,7 @@ func main() {
 				SkipRobots:           req.SkipRobots,
 				SkipSitemapDiscovery: req.SkipSitemapDiscovery,
 
-				WebhookConfig: req.WebhookConfig,
+				WebhookConfig: req.WebhookResultStoreConfig,
 			},
 		}
 
@@ -268,7 +272,7 @@ func main() {
 		// we start publishing to the work queue.
 		runs.Add(ctx, run)
 
-		go run.Start(reqctx, queue, progress, hooks, req.GetURLs(true))
+		go run.Start(reqctx, queue, progress, rs, req.GetURLs(true))
 
 		result := &APIResponse{
 			Run: run.ID,
