@@ -179,7 +179,10 @@ func main() {
 		panic(err)
 	}
 
-	progress := CreateProgress(os.Getenv("TOBEY_PROGRESS_DSN"))
+	progress, err := CreateProgress(os.Getenv("TOBEY_PROGRESS_DSN"))
+	if err != nil {
+		panic(err)
+	}
 
 	workers := CreateVisitWorkersPool(
 		ctx,

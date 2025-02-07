@@ -1,42 +1,71 @@
 # Tobey, a robust and scalable Crawler
 
-The service is entirely stateless and receives requests to crawl a website via a
-simple HTTP API. Once a resources has been downloaded, forwards the results to a
-webhook, if one is configured.
-
-In its simplest form the service just receives a root URL of the website to be
-crawled.
-
-The service vertical scaling can be controlled by the number of workers used for
-crawling. The service is horizontally scalable by adding more instances on nodes
-in a cluster. In horizontal scaling, any instances can receive crawl requests,
-for easy load balancing. The instances will coordinate with each other via Redis.
-
-## Features
-
-- No configuration required.
-- Simple HTTP API to submit crawl requests.
-- Scalable, horizontally and vertically.
-- Stateless, no data store required, as nothing is persisted.
-- No further service dependencies, when operating as a single instance.
-- Detects and uses a sitemap and robots.txt automatically (can be disabled).
-- Per host rate limiting, even when multiple instances are used.
-- Full support for OpenTelemetry.
+Tobey is a throughput optimizing web crawler, that is scalable from a single instance to a cluster. It features intelligent 
+rate limiting, distributed coordination, and flexible deployment options.
 
 ## Running Tobey
 
+Start the service.
 ```sh
-# In the first terminal start the service.
 go run . 
+```
 
-# In another terminal, submit a crawl request.
+In its simplest form the service just receives a root URL of the website to be
+crawled. 
+
+```sh
 curl -X POST http://127.0.0.1:8080 \
      -H 'Content-Type: application/json' \
      -d '{"url": "https://www.example.org/"}'
 ```
 
+## Deployment Options
 
-## Architecture
+### Dependency Free
+
+By default Tobey runs without any depdencies on any other service. It this mode
+the service will not coordinate with other instances. It will store results locally 
+on disk, but not report any progress. If you are tryint out tobey this is the
+easiest way to get started.
+
+```sh
+TOBEY_RESULTS_DSN=disk:///path/to/results go run .
+```
+
+### Stateless Operation
+
+It is possible to configure and use Tobey in a stateless manner. In this operation mode
+you'll specificy configuration on a per-run basis, and not statically via a configuration file. Choosing 
+the webhook results store will forward results to a webhook endpoint without storing them locally.
+
+```sh
+TOBEY_RESULTS_DSN=webhook://example.org/webhook go run .
+```
+
+### Distributed Operation
+
+The service is horizontally scalable by adding more instances on nodes
+in a cluster. In horizontal scaling, any instances can receive crawl requests,
+for easy load balancing. The instances will coordinate with each other via Redis.
+
+```sh
+TOBEY_REDIS_DSN=redis://localhost:6379 go run .
+```
+
+## Scaling
+
+Tobey can be scaled vertically by increasing the number of workers, via the `WORKERS` environment variable, or horizontally 
+by adding more instances in a cluster, see the [Distributed Operation](#distributed-operation) section for more details.
+
+The crawler is designed to handle a large potentially infinite number of hosts,
+which presents challenges for managing resources like memory and concurrency.
+Keeping a persistent worker process or goroutine for each host would be
+inefficient and resource-intensive, particularly since external interactions
+can make it difficult to keep them alive. Instead, Tobey uses a pool of workers
+that can process multiple requests per host concurrently, balancing the workload
+across different hosts.
+
+## Smart Rate Limiting
 
 The Tobey Crawler architecture optimizes throughput per host by dynamically
 managing rate limits, ensuring that requests to each host are processed as
@@ -50,13 +79,7 @@ complexities of dynamic rate limiting from other parts of the system. The goal
 is to focus on maintaining a steady flow of requests without overwhelming
 individual hosts.
 
-The crawler is designed to handle a large potentially infinite number of hosts,
-which presents challenges for managing resources like memory and concurrency.
-Keeping a persistent worker process or goroutine for each host would be
-inefficient and resource-intensive, particularly since external interactions
-can make it difficult to keep them alive. Instead, Tobey uses a pool of workers
-that can process multiple requests per host concurrently, balancing the workload
-across different hosts.
+## Caching
 
 Caching is a critical part of the architecture. The crawler uses a global cache,
 for HTTP responses. Access to sitemaps and robot control files are also cached.
@@ -68,14 +91,13 @@ keeping the system responsive and compliant. This layered caching strategy,
 along with the dynamic rate limit adjustment, ensures that Tobey maintains high
 efficiency and adaptability during its crawling operations.
 
-## Trade-offs
+## Limitations
 
 Also Tobey can be configured - on a per run basis - to crawl websites behind
 HTTP basic auth, **it does not support fetching personalized content**. It is
 expected that the website is generally publicly available, and that the content
 is the same for all users. When HTTP basic auth is used by the website it must
 only be so in order to prevent early access.
-
 
 ## Configuration
 
@@ -87,7 +109,8 @@ variables are available:
 | `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
 | `TOBEY_SKIP_CACHE` | `false` | `true`, `false`  | Controls caching access. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
-| `TOBEY_PROGRESS_DSN` | empty | i.e. `http://localhost:9020`  | DSN where to reach a progress service. When configured tobey will send progress updates there. |
+| `TOBEY_PROGRESS_DSN` | empty | `factorial://host:port`, `noop://` | DSN for progress reporting service. When configured, Tobey will send progress updates there. The factorial scheme enables progress updates to a Factorial progress service. Use noop:// to explicitly disable progress updates. |
+| `TOBEY_RESULTS_DSN` | empty | `disk:///path`, `webhook://host/path`, `noop://` | DSN specifying where crawl results should be stored. Use disk:// for local filesystem storage, webhook:// to forward results to an HTTP endpoint, or noop:// to discard results. |
 | `TOBEY_TELEMETRY` | empty | i.e. `metrics traces` | Space separated list of what kind of telemetry is emitted. |
 
 On top of these variables, the service's telemetry

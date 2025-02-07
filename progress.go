@@ -7,7 +7,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net/url"
 )
 
 // ProgressStatus represents the valid states for progress updates
@@ -25,15 +27,29 @@ const (
 
 // CreateProgress creates a new progress dispatcher based on the provided DSN.
 // If dsn is empty, it returns a NoopProgressDispatcher.
-func CreateProgress(dsn string) ProgressDispatcher {
-	if dsn != "" {
-		slog.Info("Using progress service for updates.", "dsn", dsn)
+func CreateProgress(dsn string) (ProgressDispatcher, error) {
+	if dsn == "" {
+		slog.Debug("Not sharing progress updates.")
+		return &NoopProgressDispatcher{}, nil
+	}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("invalid progress DSN: %w", err)
+	}
+
+	switch u.Scheme {
+	case "factorial":
+		slog.Info("Using Factorial progress service for updates.", "dsn", dsn)
 		return &FactorialProgressServiceDispatcher{
 			client: CreateRetryingHTTPClient(NoAuthFn),
-		}
+		}, nil
+	case "noop":
+		slog.Debug("Using noop progress dispatcher.")
+		return &NoopProgressDispatcher{}, nil
+	default:
+		return nil, fmt.Errorf("unsupported progress dispatcher type: %s", u.Scheme)
 	}
-	slog.Debug("Not sharing progress updates.")
-	return &NoopProgressDispatcher{}
 }
 
 type ProgressDispatcher interface {
