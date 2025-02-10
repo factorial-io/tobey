@@ -19,90 +19,11 @@ curl -X POST http://127.0.0.1:8080 \
      -d '{"url": "https://www.example.org/"}'
 ```
 
-## Deployment Options
-
-### Dependency Free
-
-By default Tobey runs without any dependencies on any other service. In this mode
-the service will not coordinate with other instances. It will store results locally 
-on disk, but not report any progress. If you are trying out tobey this is the
-easiest way to get started.
-
-```sh
-TOBEY_RESULTS_DSN=disk:///path/to/results go run .
-```
-
-### Stateless Operation
-
-It is possible to configure and use Tobey in a stateless manner. In this operation mode
-you'll specify configuration on a per-run basis, and not statically via a configuration file. Choosing 
-the webhook results store will forward results to a webhook endpoint without storing them locally.
-
-```sh
-TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config=true go run .
-```
-
-### Distributed Operation
-
-The service is horizontally scalable by adding more instances on nodes
-in a cluster. In horizontal scaling, any instances can receive crawl requests,
-for easy load balancing. The instances will coordinate with each other via Redis.
-
-```sh
-TOBEY_REDIS_DSN=redis://localhost:6379 go run .
-```
-
-## Scaling
-
-Tobey can be scaled vertically by increasing the number of workers, via the `WORKERS` environment variable, or horizontally 
-by adding more instances in a cluster, see the [Distributed Operation](#distributed-operation) section for more details.
-
-The crawler is designed to handle a large potentially infinite number of hosts,
-which presents challenges for managing resources like memory and concurrency.
-Keeping a persistent worker process or goroutine for each host would be
-inefficient and resource-intensive, particularly since external interactions
-can make it difficult to keep them alive. Instead, Tobey uses a pool of workers
-that can process multiple requests per host concurrently, balancing the workload
-across different hosts.
-
-## Smart Rate Limiting
-
-The Tobey Crawler architecture optimizes throughput per host by dynamically
-managing rate limits, ensuring that requests to each host are processed as
-efficiently as possible. The crawler does not impose static rate limits;
-instead, it adapts to each host's capabilities, adjusting the rate limit in real
-time based on feedback from headers or other factors. 
-
-This dynamic adjustment is essential. To manage these rate limits
-effectively, Tobey employs a rate-limited work queue that abstracts away the
-complexities of dynamic rate limiting from other parts of the system. The goal
-is to focus on maintaining a steady flow of requests without overwhelming
-individual hosts.
-
-## Caching
-
-Caching is a critical part of the architecture. The crawler uses a global cache,
-for HTTP responses. Access to sitemaps and robot control files are also cached.
-While these files have expiration times, the crawler maintains an in-memory
-cache to quickly validate requests without constantly retrieving them. The cache
-is designed to be updated or invalidated as necessary, and a signal can be sent
-across all Tobey instances to ensure the latest robot control files are used,
-keeping the system responsive and compliant. This layered caching strategy,
-along with the dynamic rate limit adjustment, ensures that Tobey maintains high
-efficiency and adaptability during its crawling operations.
-
-## Limitations
-
-Also Tobey can be configured - on a per run basis - to crawl websites behind
-HTTP basic auth, **it does not support fetching personalized content**. It is
-expected that the website is generally publicly available, and that the content
-is the same for all users. When HTTP basic auth is used by the website it must
-only be so in order to prevent early access.
-
 ## Configuration
 
 The service is configured via environment variables. The following environment
-variables are available:
+variables are available. Please also see `.env.example` for a working
+example configuration that should get you started.
 
 | Variable Name  | Default Value  | Supported Values | Description                      |
 |----------------|----------------|------------------|----------------------------------|
@@ -115,7 +36,7 @@ variables are available:
 
 On top of these variables, the service's telemetry
 feature can be configured via the commonly known 
-[OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+[OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/). 
 
 ## Providing Crawl Targets
 
@@ -362,3 +283,81 @@ variable.
 TOBEY_PROGRESS_DSN=factorial://host:port
 ```
 
+## Deployment Options
+
+### Dependency Free
+
+By default Tobey runs without any dependencies on any other service. In this mode
+the service will not coordinate with other instances. It will store results locally 
+on disk, but not report any progress. If you are trying out tobey this is the
+easiest way to get started.
+
+```sh
+TOBEY_RESULTS_DSN=disk:///path/to/results go run .
+```
+
+### Stateless Operation
+
+It is possible to configure and use Tobey in a stateless manner. In this operation mode
+you'll specify configuration on a per-run basis, and not statically via a configuration file. Choosing 
+the webhook results store will forward results to a webhook endpoint without storing them locally.
+
+```sh
+TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config=true go run .
+```
+
+### Distributed Operation
+
+The service is horizontally scalable by adding more instances on nodes
+in a cluster. In horizontal scaling, any instances can receive crawl requests,
+for easy load balancing. The instances will coordinate with each other via Redis.
+
+```sh
+TOBEY_REDIS_DSN=redis://localhost:6379 go run .
+```
+## Scaling
+
+Tobey can be scaled vertically by increasing the number of workers, via the `WORKERS` environment variable, or horizontally 
+by adding more instances in a cluster, see the [Distributed Operation](#distributed-operation) section for more details.
+
+The crawler is designed to handle a large potentially infinite number of hosts,
+which presents challenges for managing resources like memory and concurrency.
+Keeping a persistent worker process or goroutine for each host would be
+inefficient and resource-intensive, particularly since external interactions
+can make it difficult to keep them alive. Instead, Tobey uses a pool of workers
+that can process multiple requests per host concurrently, balancing the workload
+across different hosts.
+
+## Smart Rate Limiting
+
+The Tobey Crawler architecture optimizes throughput per host by dynamically
+managing rate limits, ensuring that requests to each host are processed as
+efficiently as possible. The crawler does not impose static rate limits;
+instead, it adapts to each host's capabilities, adjusting the rate limit in real
+time based on feedback from headers or other factors. 
+
+This dynamic adjustment is essential. To manage these rate limits
+effectively, Tobey employs a rate-limited work queue that abstracts away the
+complexities of dynamic rate limiting from other parts of the system. The goal
+is to focus on maintaining a steady flow of requests without overwhelming
+individual hosts.
+
+## Caching
+
+Caching is a critical part of the architecture. The crawler uses a global cache,
+for HTTP responses. Access to sitemaps and robot control files are also cached.
+While these files have expiration times, the crawler maintains an in-memory
+cache to quickly validate requests without constantly retrieving them. The cache
+is designed to be updated or invalidated as necessary, and a signal can be sent
+across all Tobey instances to ensure the latest robot control files are used,
+keeping the system responsive and compliant. This layered caching strategy,
+along with the dynamic rate limit adjustment, ensures that Tobey maintains high
+efficiency and adaptability during its crawling operations.
+
+## Limitations
+
+Also Tobey can be configured - on a per run basis - to crawl websites behind
+HTTP basic auth, **it does not support fetching personalized content**. It is
+expected that the website is generally publicly available, and that the content
+is the same for all users. When HTTP basic auth is used by the website it must
+only be so in order to prevent early access.
