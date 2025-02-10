@@ -74,7 +74,7 @@ func CreateResultStore(dsn string) (ResultStore, error) {
 		if u.Host == "" {
 			return nil, fmt.Errorf("webhook results store requires a valid host (e.g., webhook://example.com/results)")
 		}
-		endpoint := fmt.Sprintf("%s://%s%s", "https", u.Host, u.Path)
+		endpoint := fmt.Sprintf("%s://%s%s?%s", "https", u.Host, u.Path, u.RawQuery)
 		return NewWebhookResultStore(context.Background(), endpoint), nil
 	case "noop":
 		return &NoopResultStore{}, nil

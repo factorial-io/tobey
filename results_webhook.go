@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"tobey/internal/collector"
 )
 
@@ -32,14 +33,30 @@ func (c *WebhookResultStoreConfig) GetWebhook() *WebhookResultStoreConfig {
 // WebhookResultStore implements ResultsStore by sending results to a webhook endpoint.
 // It sends results in a non-blocking way, following a fire-and-forget approach.
 type WebhookResultStore struct {
-	client          *http.Client
-	defaultEndpoint string
+	client             *http.Client
+	defaultEndpoint    string
+	allowDynamicConfig bool
 }
 
 func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultStore {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return &WebhookResultStore{
+			client:             CreateRetryingHTTPClient(NoAuthFn),
+			defaultEndpoint:    endpoint,
+			allowDynamicConfig: false,
+		}
+	}
+
+	allowDynamic := u.Query().Get("enable_dynamic_config") != ""
+
+	u.RawQuery = ""
+	cleanEndpoint := u.String()
+
 	return &WebhookResultStore{
-		client:          CreateRetryingHTTPClient(NoAuthFn),
-		defaultEndpoint: endpoint,
+		client:             CreateRetryingHTTPClient(NoAuthFn),
+		defaultEndpoint:    cleanEndpoint,
+		allowDynamicConfig: allowDynamic,
 	}
 }
 
@@ -51,8 +68,10 @@ func (wrs *WebhookResultStore) Save(ctx context.Context, config ResultStoreConfi
 	if config != nil {
 		if whConfig, ok := config.(*WebhookResultStoreConfig); ok {
 			webhook = whConfig
-			if whConfig.Endpoint != "" {
+			if whConfig.Endpoint != "" && wrs.allowDynamicConfig {
 				endpoint = whConfig.Endpoint
+			} else if whConfig.Endpoint != "" && !wrs.allowDynamicConfig {
+				slog.Warn("Dynamic webhook configuration is disabled. Ignoring custom endpoint.")
 			}
 		}
 	}
