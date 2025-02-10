@@ -311,7 +311,10 @@ configure the webhook endpoint on a per-request basis. Dynamic re-configuration 
 by default, and can be enabled by adding `enable_dynamic_config` to the DSN.
 
 ```sh
-TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config
+TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config # with default endpoint
+TOBEY_RESULTS_DSN=webhook://?enable_dynamic_config # without default endpoint, requires dynamic 
+                                                   # rconfiguration in each crawl request
+                                                   # request
 ```
 
 You can than specify the webhook endpoint in the crawl request:

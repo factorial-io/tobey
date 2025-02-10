@@ -34,7 +34,7 @@ func (c *WebhookResultStoreConfig) GetWebhook() *WebhookResultStoreConfig {
 // It sends results in a non-blocking way, following a fire-and-forget approach.
 type WebhookResultStore struct {
 	client             *http.Client
-	defaultEndpoint    string
+	defaultEndpoint    string // Can be empty when only using dynamic config
 	allowDynamicConfig bool
 }
 
@@ -50,8 +50,12 @@ func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultS
 
 	allowDynamic := u.Query().Get("enable_dynamic_config") != ""
 
-	u.RawQuery = ""
-	cleanEndpoint := u.String()
+	// If dynamic config is enabled, we don't require a default endpoint
+	var cleanEndpoint string
+	if u.Host != "" {
+		u.RawQuery = ""
+		cleanEndpoint = u.String()
+	}
 
 	return &WebhookResultStore{
 		client:             CreateRetryingHTTPClient(NoAuthFn),
@@ -62,7 +66,7 @@ func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultS
 
 // Save implements ResultsStore.Save by sending results to a webhook endpoint
 func (wrs *WebhookResultStore) Save(ctx context.Context, config ResultStoreConfig, run *Run, res *collector.Response) error {
-	endpoint := wrs.defaultEndpoint
+	var endpoint string
 	var webhook *WebhookResultStoreConfig
 
 	if config != nil {
@@ -76,8 +80,13 @@ func (wrs *WebhookResultStore) Save(ctx context.Context, config ResultStoreConfi
 		}
 	}
 
+	// If no dynamic endpoint, fall back to default
 	if endpoint == "" {
-		return fmt.Errorf("no webhook endpoint configured")
+		endpoint = wrs.defaultEndpoint
+	}
+
+	if endpoint == "" {
+		return fmt.Errorf("no webhook endpoint configured - must provide either default endpoint or dynamic configuration")
 	}
 
 	logger := slog.With("endpoint", endpoint, "run", run.ID)

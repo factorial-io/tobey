@@ -71,8 +71,9 @@ func CreateResultStore(dsn string) (ResultStore, error) {
 		}
 		return store, nil
 	case "webhook":
-		if u.Host == "" {
-			return nil, fmt.Errorf("webhook results store requires a valid host (e.g., webhook://example.com/results)")
+		// Only require host if dynamic config is not enabled
+		if u.Host == "" && u.Query().Get("enable_dynamic_config") == "" {
+			return nil, fmt.Errorf("webhook results store requires a valid host (e.g., webhook://example.com/results) unless dynamic configuration is enabled")
 		}
 		endpoint := fmt.Sprintf("%s://%s%s?%s", "https", u.Host, u.Path, u.RawQuery)
 		return NewWebhookResultStore(context.Background(), endpoint), nil
