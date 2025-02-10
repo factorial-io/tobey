@@ -92,7 +92,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 			tctx, span := tracer.Start(ctx, "enqueue_element")
 			defer span.End()
 
-			p := progress.With(run.ID, url)
+			p := progress.With(run, url)
 
 			span.SetAttributes(attribute.String("URL", url))
 			// Ensure we never publish a URL twice for a single run. Not only does

@@ -21,12 +21,40 @@ const (
 	// FactorialProgressEndpointTransition  = "api/status/transition-to" // Not yet implemented.
 )
 
+// factorialProgressStatus maps internal ProgressStatus to Factorial API string representations.
+func factorialProgressStatus(status ProgressStatus) string {
+	switch status {
+	case ProgressStateQueuedForCrawling:
+		return "queued_for_crawling"
+	case ProgressStateCrawling:
+		return "crawling"
+	case ProgressStateCrawled:
+		return "crawled"
+	case ProgressStateSucceeded:
+		return "succeeded"
+	case ProgressStateErrored:
+		return "errored"
+	case ProgressStateCancelled:
+		return "cancelled"
+	default:
+		return "unknown"
+	}
+}
+
+type FactorialProgressUpdatePayload struct {
+	Stage  string `json:"stage"`
+	Status string `json:"status"` // Changed to string since we're using string representations
+	Run    string `json:"run_uuid"`
+	URL    string `json:"url"`
+	// FIXME: If the service starts supporting accepting run metadata, we can add it here.
+}
+
 // FactorialProgressServiceDispatcher is a dispatcher for the Factorial progress service.
 type FactorialProgressServiceDispatcher struct {
 	client *http.Client
 }
 
-func (p *FactorialProgressServiceDispatcher) With(run string, url string) *Progressor {
+func (p *FactorialProgressServiceDispatcher) With(run *Run, url string) *Progressor {
 	return &Progressor{
 		dispatcher: p,
 		stage:      FactorialProgressServiceDefaultStage,
@@ -43,7 +71,14 @@ func (p *FactorialProgressServiceDispatcher) Call(ctx context.Context, pu Progre
 	ctx, span := tracer.Start(ctx, "output.progress.send")
 	defer span.End()
 
-	payload := pu
+	// Convert generic ProgressUpdate to Factorial-specific payload
+	payload := FactorialProgressUpdatePayload{
+		Stage:  pu.Stage,
+		Status: factorialProgressStatus(pu.Status),
+		Run:    pu.Run,
+		URL:    pu.URL,
+	}
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		span.RecordError(err)

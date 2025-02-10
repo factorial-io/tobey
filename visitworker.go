@@ -88,8 +88,6 @@ func VisitWorker(
 		}
 		jlogger := wlogger.With("run", job.Run, "url", job.URL, "job.id", job.ID)
 
-		p := progress.With(job.Run, job.URL)
-
 		jctx, span := tracer.Start(job.Context, "process_visit_job")
 		span.SetAttributes(attribute.String("Url", job.URL))
 		t := trace.WithAttributes(attribute.String("Url", job.URL))
@@ -109,6 +107,7 @@ func VisitWorker(
 		// are not shared by the Manager across tobey instances.
 		r, _ := runs.Get(ctx, job.Run)
 		c := r.GetCollector(ctx, q, progress, rs)
+		p := progress.With(r, job.URL)
 
 		p.Update(jctx, ProgressStateCrawling)
 
