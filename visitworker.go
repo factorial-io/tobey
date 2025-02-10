@@ -32,8 +32,8 @@ func CreateVisitWorkersPool(
 	num int,
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
-	progress ProgressReporter,
-	rs ResultReporter,
+	pr ProgressReporter,
+	rr ResultReporter,
 ) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
@@ -42,7 +42,7 @@ func CreateVisitWorkersPool(
 		wg.Add(1)
 
 		go func(id int) {
-			if err := VisitWorker(ctx, id, runs, q, progress, rs); err != nil {
+			if err := VisitWorker(ctx, id, runs, q, pr, rr); err != nil {
 				slog.Error("Visitor: Worker exited with error.", "worker.id", id, "error", err)
 			} else {
 				slog.Debug("Visitor: Worker exited cleanly.", "worker.id", id)
@@ -59,8 +59,8 @@ func VisitWorker(
 	id int,
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
-	progress ProgressReporter,
-	rs ResultReporter,
+	pr ProgressReporter,
+	rr ResultReporter,
 ) error {
 	wlogger := slog.With("worker.id", id)
 	wlogger.Debug("Visitor: Starting...")
@@ -106,8 +106,8 @@ func VisitWorker(
 		// yet have a collector available via the Manager. Please note that Collectors
 		// are not shared by the Manager across tobey instances.
 		r, _ := runs.Get(ctx, job.Run)
-		c := r.GetCollector(ctx, q, progress, rs)
-		p := progress.With(r, job.URL)
+		c := r.GetCollector(ctx, q, pr, rr)
+		p := pr.With(r, job.URL)
 
 		p.Update(jctx, ProgressStateCrawling)
 
@@ -133,8 +133,12 @@ func VisitWorker(
 			jlogger.Info("Visitor: Visited URL.", "took.lifetime", time.Since(job.Created), "took.fetch", res.Took)
 			span.AddEvent("Visitor: Visited URL.", t)
 
-			if r.WebhookConfig != nil {
-				rs.Accept(jctx, r.WebhookConfig, r, res)
+			// Pass the per-call config depending on the ResultReporter type.
+			switch rr := rr.(type) {
+			case *WebhookResultReporter:
+				rr.Accept(jctx, r.WebhookConfig, r, res)
+			case *DiskResultReporter:
+				rr.Accept(jctx, nil, r, res)
 			}
 
 			span.End()

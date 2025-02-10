@@ -70,6 +70,8 @@ func NewWebhookResultReporter(ctx context.Context, endpoint string) *WebhookResu
 func (wrs *WebhookResultReporter) Accept(ctx context.Context, config any, run *Run, res *collector.Response) error {
 	var endpoint string
 
+	slog.Debug("Result reporter: Forwarding result...")
+
 	var webhook *WebhookResultReporterConfig
 	if config != nil {
 		var ok bool

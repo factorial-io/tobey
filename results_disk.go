@@ -60,7 +60,7 @@ func NewDiskResultReporter(config DiskResultReporterConfig) (*DiskResultReporter
 // but we don't use it here, as we don't allow dynamic config for this reporter.
 func (drs *DiskResultReporter) Accept(ctx context.Context, config any, run *Run, res *collector.Response) error {
 	logger := slog.With("run", run.ID, "url", res.Request.URL)
-	logger.Debug("DiskResultReporter: Saving result to file...")
+	logger.Debug("Result reporter: Saving result to file...")
 
 	result := &DiskResult{
 		Run:                run.ID,

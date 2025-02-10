@@ -174,6 +174,11 @@ func main() {
 		tear(queue.Close)
 	}
 
+	if _, ok := os.LookupEnv("TOBEY_RESULTS_DSN"); !ok {
+		if _, ok := os.LookupEnv("TOBEY_RESULT_DSN"); ok {
+			slog.Debug("You have a typo in your env var: TOBEY_RESULTS_DSN is not set, but TOBEY_RESULT_DSN is set. Please use TOBEY_RESULTS_DSN instead.")
+		}
+	}
 	rs, err := CreateResultReporter(os.Getenv("TOBEY_RESULTS_DSN"))
 	if err != nil {
 		panic(err)

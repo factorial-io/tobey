@@ -105,7 +105,7 @@ func (s *Sitemaps) Drain(ctx context.Context, getAuth GetAuthFn, url string, yie
 
 		if isProbablySitemap(url) {
 			return sitemap.Parse(res.Body, func(e sitemap.Entry) error {
-				slog.Info("Sitemaps: Yield URL from sitemap.", "url", e.GetLocation())
+				slog.Info("Sitemaps: Yield URL.", "url", e.GetLocation())
 				return yieldu(ctx, e.GetLocation())
 			})
 		} else if isProbablySiteindex(url) {

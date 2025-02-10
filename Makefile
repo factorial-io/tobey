@@ -1,6 +1,6 @@
 .PHONY: dev
 dev:
-	TOBEY_SKIP_CACHE=true TOBEY_DEBUG=true TOBEY_HOST=127.0.0.1 go run .
+	TOBEY_SKIP_CACHE=true TOBEY_DEBUG=true TOBEY_RESULTS_DSN=disk:///tmp/tobey TOBEY_HOST=127.0.0.1 go run .
 
 .PHONY: pulse
 pulse:
