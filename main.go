@@ -179,7 +179,7 @@ func main() {
 		panic(err)
 	}
 
-	progress, err := CreateProgress(os.Getenv("TOBEY_PROGRESS_DSN"))
+	progress, err := CreateProgressReporter(os.Getenv("TOBEY_PROGRESS_DSN"))
 	if err != nil {
 		panic(err)
 	}

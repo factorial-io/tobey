@@ -39,8 +39,6 @@ func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultS
 		}
 	}
 
-	allowDynamic := u.Query().Get("enable_dynamic_config") != ""
-
 	// If dynamic config is enabled, we don't require a default endpoint
 	var cleanEndpoint string
 	if u.Host != "" {
@@ -49,9 +47,11 @@ func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultS
 	}
 
 	return &WebhookResultStore{
-		client:             CreateRetryingHTTPClient(NoAuthFn),
-		defaultEndpoint:    cleanEndpoint,
-		allowDynamicConfig: allowDynamic,
+		client:          CreateRetryingHTTPClient(NoAuthFn),
+		defaultEndpoint: cleanEndpoint,
+		// Presence of the query parameter is sufficient to enable dynamic config. This is,
+		// so we don't need to check what counts as boolean true, i.e. "true", "1", "yes", etc.
+		allowDynamicConfig: u.Query().Get("enable_dynamic_config") != "",
 	}
 }
 

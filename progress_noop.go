@@ -7,17 +7,18 @@ package main
 
 import "context"
 
-type NoopProgressDispatcher struct {
-}
+// NoopProgressReporter is a no-op implementation of the ProgressReporter interface, it
+// is used as the default when no progress reporting is configured.
+type NoopProgressReporter struct{}
 
-func (p *NoopProgressDispatcher) With(run *Run, url string) *Progressor {
-	return &Progressor{
-		dispatcher: p,
-		Run:        run,
-		URL:        url,
+func (p *NoopProgressReporter) With(run *Run, url string) *Progress {
+	return &Progress{
+		reporter: p,
+		Run:      run,
+		URL:      url,
 	}
 }
 
-func (p *NoopProgressDispatcher) Call(ctx context.Context, pu ProgressUpdate) error {
+func (p *NoopProgressReporter) Call(ctx context.Context, pu ProgressUpdate) error {
 	return nil
 }

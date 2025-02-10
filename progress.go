@@ -25,12 +25,12 @@ const (
 	ProgressStateCancelled                               // When crawling has been cancelled.
 )
 
-// CreateProgress creates a new progress dispatcher based on the provided DSN.
+// CreateProgressReporter creates a new progress dispatcher based on the provided DSN.
 // If dsn is empty, it returns a NoopProgressDispatcher.
-func CreateProgress(dsn string) (ProgressDispatcher, error) {
+func CreateProgressReporter(dsn string) (ProgressReporter, error) {
 	if dsn == "" {
-		slog.Debug("Not sharing progress updates.")
-		return &NoopProgressDispatcher{}, nil
+		slog.Debug("Progress Reporting: Disabled, not sharing progress updates.")
+		return &NoopProgressReporter{}, nil
 	}
 
 	u, err := url.Parse(dsn)
@@ -40,29 +40,29 @@ func CreateProgress(dsn string) (ProgressDispatcher, error) {
 
 	switch u.Scheme {
 	case "factorial":
-		slog.Info("Using Factorial progress service for updates.", "dsn", dsn)
-		return &FactorialProgressServiceDispatcher{
+		slog.Info("Progress Reporting: Enabled, using Factorial progress service for updates.", "dsn", dsn)
+		return &FactorialProgressReporter{
 			client: CreateRetryingHTTPClient(NoAuthFn),
 		}, nil
 	case "noop":
-		slog.Debug("Using noop progress dispatcher.")
-		return &NoopProgressDispatcher{}, nil
+		slog.Debug("Progress Reporting: Disabled, not sharing progress updates.")
+		return &NoopProgressReporter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported progress dispatcher type: %s", u.Scheme)
 	}
 }
 
-type ProgressDispatcher interface {
-	With(run *Run, url string) *Progressor
+type ProgressReporter interface {
+	With(run *Run, url string) *Progress
 	Call(ctx context.Context, msg ProgressUpdate) error // Usually only called by the Progressor.
 }
 
-// Progressor is a helper struct that is used to update the progress of a run.
+// Progress is a helper struct that is used to update the progress of a run.
 // It is returned by the With method of the ProgressDispatcher. It allows for
 // cleaner code when updating the progress of a run, multiple times in the same
 // function.
-type Progressor struct {
-	dispatcher ProgressDispatcher
+type Progress struct {
+	reporter ProgressReporter
 
 	stage string
 	Run   *Run
@@ -78,8 +78,8 @@ type ProgressUpdate struct {
 }
 
 // Update updates the progress with a new status
-func (p *Progressor) Update(ctx context.Context, status ProgressStatus) error {
-	return p.dispatcher.Call(ctx, ProgressUpdate{
+func (p *Progress) Update(ctx context.Context, status ProgressStatus) error {
+	return p.reporter.Call(ctx, ProgressUpdate{
 		Stage:    p.stage,
 		Run:      p.Run.ID,
 		URL:      p.URL,

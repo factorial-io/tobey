@@ -32,7 +32,7 @@ func CreateVisitWorkersPool(
 	num int,
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
-	progress ProgressDispatcher,
+	progress ProgressReporter,
 	rs ResultStore,
 ) *sync.WaitGroup {
 	var wg sync.WaitGroup
@@ -59,7 +59,7 @@ func VisitWorker(
 	id int,
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
-	progress ProgressDispatcher,
+	progress ProgressReporter,
 	rs ResultStore,
 ) error {
 	wlogger := slog.With("worker.id", id)

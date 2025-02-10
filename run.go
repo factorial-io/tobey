@@ -80,11 +80,11 @@ func (r *Run) getAuthFn() GetAuthFn {
 	}
 }
 
-func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressDispatcher, rs ResultStore) *collector.Collector {
+func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressReporter, rs ResultStore) *collector.Collector {
 	// getEnqueueFn returns the enqueue function, that will enqueue a single URL to
 	// be crawled. The enqueue function is called whenever a new URL is discovered
 	// by that Collector, i.e. by looking at all links in a crawled page HTML.
-	getEnqueueFn := func(run *Run, q ctrlq.VisitWorkQueue, progress ProgressDispatcher) collector.EnqueueFn {
+	getEnqueueFn := func(run *Run, q ctrlq.VisitWorkQueue, progress ProgressReporter) collector.EnqueueFn {
 
 		// The returned function takes the run context.
 		return func(ctx context.Context, c *collector.Collector, url string) error {
@@ -181,7 +181,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 
 // Start starts the crawl with the given URLs. It will discover sitemaps and
 // enqueue the URLs. From there on more URLs will be discovered and enqueued.
-func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressDispatcher, rs ResultStore, urls []string) {
+func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressReporter, rs ResultStore, urls []string) {
 	c := r.GetCollector(ctx, q, p, rs)
 
 	// Decide where the initial URLs should go, users may provide sitemaps and

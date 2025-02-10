@@ -21,6 +21,14 @@ const (
 	// FactorialProgressEndpointTransition  = "api/status/transition-to" // Not yet implemented.
 )
 
+type FactorialProgressUpdatePayload struct {
+	Stage  string `json:"stage"`
+	Status string `json:"status"` // Changed to string since we're using string representations
+	Run    string `json:"run_uuid"`
+	URL    string `json:"url"`
+	// FIXME: If the service starts supporting accepting run metadata, we can add it here.
+}
+
 // factorialProgressStatus maps internal ProgressStatus to Factorial API string representations.
 func factorialProgressStatus(status ProgressStatus) string {
 	switch status {
@@ -41,30 +49,22 @@ func factorialProgressStatus(status ProgressStatus) string {
 	}
 }
 
-type FactorialProgressUpdatePayload struct {
-	Stage  string `json:"stage"`
-	Status string `json:"status"` // Changed to string since we're using string representations
-	Run    string `json:"run_uuid"`
-	URL    string `json:"url"`
-	// FIXME: If the service starts supporting accepting run metadata, we can add it here.
-}
-
-// FactorialProgressServiceDispatcher is a dispatcher for the Factorial progress service.
-type FactorialProgressServiceDispatcher struct {
+// FactorialProgressReporter is a reporter for the Factorial progress service.
+type FactorialProgressReporter struct {
 	client *http.Client
 }
 
-func (p *FactorialProgressServiceDispatcher) With(run *Run, url string) *Progressor {
-	return &Progressor{
-		dispatcher: p,
-		stage:      FactorialProgressServiceDefaultStage,
-		Run:        run,
-		URL:        url,
+func (p *FactorialProgressReporter) With(run *Run, url string) *Progress {
+	return &Progress{
+		reporter: p,
+		stage:    FactorialProgressServiceDefaultStage,
+		Run:      run,
+		URL:      url,
 	}
 }
 
 // Call sends the progress update over the wire, it implements a fire and forget approach.
-func (p *FactorialProgressServiceDispatcher) Call(ctx context.Context, pu ProgressUpdate) error {
+func (p *FactorialProgressReporter) Call(ctx context.Context, pu ProgressUpdate) error {
 	logger := slog.With("run", pu.Run, "url", pu.URL)
 	logger.Debug("Progress Dispatcher: Sending update...")
 
