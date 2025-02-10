@@ -16,7 +16,7 @@ import (
 
 func CreateResultReporter(dsn string) (ResultReporter, error) {
 	if dsn == "" {
-		slog.Debug("Result Reporter: Disabled, using noop reporter")
+		slog.Info("Result Reporter: Disabled, using noop reporter")
 		return &NoopResultReporter{}, nil
 	}
 
@@ -39,7 +39,7 @@ func CreateResultReporter(dsn string) (ResultReporter, error) {
 			return nil, fmt.Errorf("failed to create disk store: %w", err)
 		}
 
-		slog.Debug("Result Reporter: Enabled, using disk store", "dsn", dsn)
+		slog.Info("Result Reporter: Enabled, using disk store", "dsn", dsn)
 		return store, nil
 	case "webhook":
 		// Only require host if dynamic config is not enabled
@@ -48,11 +48,11 @@ func CreateResultReporter(dsn string) (ResultReporter, error) {
 		}
 		endpoint := fmt.Sprintf("%s://%s%s?%s", "https", u.Host, u.Path, u.RawQuery)
 
-		slog.Debug("Result Reporter: Enabled, using webhook reporter", "dsn", dsn)
+		slog.Info("Result Reporter: Enabled, using webhook reporter", "dsn", dsn)
 		return NewWebhookResultReporter(context.Background(), endpoint), nil
 	case "noop":
 
-		slog.Debug("Result Reporter: Disabled, using noop reporter")
+		slog.Info("Result Reporter: Disabled, using noop reporter")
 		return &NoopResultReporter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported results store type: %s", u.Scheme)

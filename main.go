@@ -184,9 +184,17 @@ func main() {
 		panic(err)
 	}
 
-	progress, err := CreateProgressReporter(os.Getenv("TOBEY_PROGRESS_DSN"))
-	if err != nil {
-		panic(err)
+	var progress ProgressReporter
+	if v, ok := os.LookupEnv("TOBEY_PROGRESS_DSN"); !ok {
+		progress, err = CreateProgressReporter("console://")
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		progress, err = CreateProgressReporter(v)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	workers := CreateVisitWorkersPool(

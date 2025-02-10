@@ -57,7 +57,7 @@ type FactorialProgressReporter struct {
 func (p *FactorialProgressReporter) With(run *Run, url string) *Progress {
 	return &Progress{
 		reporter: p,
-		stage:    FactorialProgressServiceDefaultStage,
+		Stage:    FactorialProgressServiceDefaultStage,
 		Run:      run,
 		URL:      url,
 	}
@@ -75,7 +75,7 @@ func (p *FactorialProgressReporter) Call(ctx context.Context, pu ProgressUpdate)
 	payload := FactorialProgressUpdatePayload{
 		Stage:  pu.Stage,
 		Status: factorialProgressStatus(pu.Status),
-		Run:    pu.Run,
+		Run:    pu.Run.ID,
 		URL:    pu.URL,
 	}
 

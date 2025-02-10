@@ -29,7 +29,7 @@ const (
 // If dsn is empty, it returns a NoopProgressDispatcher.
 func CreateProgressReporter(dsn string) (ProgressReporter, error) {
 	if dsn == "" {
-		slog.Debug("Progress Reporting: Disabled, not sharing progress updates.")
+		slog.Info("Progress Reporting: Disabled, not sharing progress updates.")
 		return &NoopProgressReporter{}, nil
 	}
 
@@ -39,13 +39,16 @@ func CreateProgressReporter(dsn string) (ProgressReporter, error) {
 	}
 
 	switch u.Scheme {
+	case "console":
+		slog.Info("Progress Reporting: Using Console for progress updates.")
+		return &ConsoleProgressReporter{}, nil
 	case "factorial":
 		slog.Info("Progress Reporting: Enabled, using Factorial progress service for updates.", "dsn", dsn)
 		return &FactorialProgressReporter{
 			client: CreateRetryingHTTPClient(NoAuthFn),
 		}, nil
 	case "noop":
-		slog.Debug("Progress Reporting: Disabled, not sharing progress updates.")
+		slog.Info("Progress Reporting: Disabled, not sharing progress updates.")
 		return &NoopProgressReporter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported progress dispatcher type: %s", u.Scheme)
@@ -64,26 +67,24 @@ type ProgressReporter interface {
 type Progress struct {
 	reporter ProgressReporter
 
-	stage string
 	Run   *Run
 	URL   string
+	Stage string
 }
 
 type ProgressUpdate struct {
-	Stage    string
-	Status   ProgressStatus
-	Run      string
-	URL      string
-	Metadata interface{}
+	Run    *Run
+	URL    string
+	Stage  string
+	Status ProgressStatus
 }
 
 // Update updates the progress with a new status
 func (p *Progress) Update(ctx context.Context, status ProgressStatus) error {
 	return p.reporter.Call(ctx, ProgressUpdate{
-		Stage:    p.stage,
-		Run:      p.Run.ID,
-		URL:      p.URL,
-		Status:   status,
-		Metadata: p.Run.Metadata,
+		Run:    p.Run,
+		URL:    p.URL,
+		Stage:  p.Stage,
+		Status: status,
 	})
 }

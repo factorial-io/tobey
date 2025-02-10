@@ -276,11 +276,12 @@ the metadata of the run, see _Runs_ above for more details.
 ## Progress Reporting
 
 Tobey can report progress while it's crawling. This is useful for monitoring the
-progress of a crawl and for debugging and determine when a crawl has finished. By default no progress reporting is enabled. There is currently only one progress reporting service that is supported, the Factorial Progress Service. It is configured via the `TOBEY_PROGRESS_DSN` environment
-variable.
+progress of a crawl and for debugging and determine when a crawl has finished. By default the console progress reporter is used. 
 
 ```sh
-TOBEY_PROGRESS_DSN=factorial://host:port
+TOBEY_PROGRESS_DSN=factorial://host:port # To report progress to the Factorial progress service.
+TOBEY_PROGRESS_DSN=console # To report progress to the console, this is the default.
+TOBEY_PROGRESS_DSN= # To disable progress reporting.
 ```
 
 ## Deployment Options
