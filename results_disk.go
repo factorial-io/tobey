@@ -7,6 +7,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -49,53 +51,25 @@ func (drs *DiskResultStore) Save(ctx context.Context, config any, run *Run, res 
 
 	result := NewResult(run, res)
 
-	// Create a filename based on URL and run ID
-	urlPath := sanitizeFilename(res.Request.URL.Path)
-	if urlPath == "" {
-		urlPath = "root"
+	// MkdirAll ignores errors where the directory exists.
+	runDir := filepath.Join(drs.outputDir, run.ID)
+	if err := os.MkdirAll(runDir, 0755); err != nil {
+		return fmt.Errorf("failed to create run directory: %w", err)
 	}
 
-	filename := fmt.Sprintf("%s_%s.json", run.ID, urlPath)
-	filepath := filepath.Join(drs.outputDir, filename)
+	hash := sha256.New()
+	hash.Write([]byte(res.Request.URL.String()))
+	filename := fmt.Sprintf("%s.json", hex.EncodeToString(hash.Sum(nil)))
+	filepath := filepath.Join(runDir, filename)
 
 	jsonData, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		logger.Error("DiskResultsStore: Failed to marshal result", "error", err)
 		return fmt.Errorf("failed to marshal result: %w", err)
 	}
 
 	if err := os.WriteFile(filepath, jsonData, 0644); err != nil {
-		logger.Error("DiskResultsStore: Failed to write file", "error", err, "path", filepath)
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
-	logger.Debug("DiskResultsStore: Successfully saved result", "path", filepath)
 	return nil
-}
-
-// sanitizeFilename creates a safe filename from a URL path
-func sanitizeFilename(path string) string {
-	// Remove leading slash
-	path = filepath.Clean(path)
-	if path == "/" || path == "." {
-		return ""
-	}
-	if path[0] == '/' {
-		path = path[1:]
-	}
-
-	// Replace remaining slashes with underscores
-	path = filepath.ToSlash(path)
-	for i := 0; i < len(path); i++ {
-		if path[i] == '/' {
-			path = path[:i] + "_" + path[i+1:]
-		}
-	}
-
-	// Limit filename length
-	if len(path) > 100 {
-		path = path[:100]
-	}
-
-	return path
 }
