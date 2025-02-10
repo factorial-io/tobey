@@ -25,12 +25,12 @@ import (
 
 func CreateWorkQueue(redis *redis.Client) VisitWorkQueue {
 	if redis != nil {
-		slog.Debug("Using distributed work queue...")
+		slog.Debug("Work Queue: Using distributed work queue")
 		// TODO: Add support for redis work queue.
 		// return &RedisVisitWorkQueue{conn: redis}
 		return NewMemoryVisitWorkQueue()
 	} else {
-		slog.Debug("Using in-memory work queue...")
+		slog.Debug("Work Queue: Using in-memory work queue")
 		return NewMemoryVisitWorkQueue()
 	}
 }
