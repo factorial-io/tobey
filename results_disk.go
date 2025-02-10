@@ -17,19 +17,32 @@ import (
 	"tobey/internal/collector"
 )
 
-// DiskStoreConfig holds configuration for DiskResultsStore
 type DiskStoreConfig struct {
 	OutputDir string `json:"output_dir"`
 }
 
-// DiskResultStore implements ResultsStore by saving results to files on disk
+// DiskResultStore stores results on disk as JSON files. Results are grouped by run
+// in a run specific directory. The directory structure is as follows:
+//
+//	<output_dir>/
+//		<run_uuid>/
+//			<url_hash>.json
+//
+// The <url_hash> is the SHA-256 hash of the request URL, encoded as a hex string.
+// The JSON file contains the result as a JSON object.
 type DiskResultStore struct {
 	outputDir string
 }
 
-// NewDiskResultStore creates a new DiskResultStore
+type DiskResult struct {
+	Run                string      `json:"run_uuid"`
+	RunMetadata        interface{} `json:"run_metadata,omitempty"`
+	RequestURL         string      `json:"request_url"`
+	ResponseBody       []byte      `json:"response_body"` // Will be base64 encoded when JSON marshalled.
+	ResponseStatusCode int         `json:"response_status_code"`
+}
+
 func NewDiskResultStore(config DiskStoreConfig) (*DiskResultStore, error) {
-	// Create default output directory if it doesn't exist
 	if config.OutputDir != "" {
 		if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create output directory: %w", err)
@@ -49,7 +62,12 @@ func (drs *DiskResultStore) Save(ctx context.Context, config any, run *Run, res 
 	logger := slog.With("run", run.ID, "url", res.Request.URL)
 	logger.Debug("DiskResultStore: Saving result to file...")
 
-	result := NewResult(run, res)
+	result := &DiskResult{
+		Run:                run.ID,
+		RequestURL:         res.Request.URL.String(),
+		ResponseBody:       res.Body[:],
+		ResponseStatusCode: res.StatusCode,
+	}
 
 	// MkdirAll ignores errors where the directory exists.
 	runDir := filepath.Join(drs.outputDir, run.ID)

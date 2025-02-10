@@ -29,6 +29,14 @@ type WebhookResultStore struct {
 	allowDynamicConfig bool
 }
 
+type WebhookResult struct {
+	Run                string      `json:"run_uuid"`
+	RunMetadata        interface{} `json:"run_metadata,omitempty"`
+	RequestURL         string      `json:"request_url"`
+	ResponseBody       []byte      `json:"response_body"` // Will be base64 encoded when JSON marshalled.
+	ResponseStatusCode int         `json:"response_status_code"`
+}
+
 func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultStore {
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -89,14 +97,19 @@ func (wrs *WebhookResultStore) Save(ctx context.Context, config any, run *Run, r
 	defer span.End()
 
 	// Create result using run metadata
-	result := NewResult(run, res)
+	result := &WebhookResult{
+		Run:                run.ID,
+		RequestURL:         res.Request.URL.String(),
+		ResponseBody:       res.Body[:],
+		ResponseStatusCode: res.StatusCode,
+	}
 
 	payload := struct {
 		Action string `json:"action"`
-		*Result
+		*WebhookResult
 	}{
-		Action: "collector.response",
-		Result: result,
+		Action:        "collector.response",
+		WebhookResult: result,
 	}
 
 	body, err := json.Marshal(payload)

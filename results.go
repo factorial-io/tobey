@@ -13,33 +13,6 @@ import (
 	"tobey/internal/collector"
 )
 
-// Result represents a crawl result that can be stored by any ResultsStore implementation
-type Result struct {
-	Run                string      `json:"run_uuid"`
-	RunMetadata        interface{} `json:"run_metadata,omitempty"`
-	RequestURL         string      `json:"request_url"`
-	ResponseBody       []byte      `json:"response_body"` // Will be base64 encoded when marshalled
-	ResponseStatusCode int         `json:"response_status_code"`
-	Metadata           interface{} `json:"metadata,omitempty"` // Optional additional data
-}
-
-// NewResult creates a Result from a collector.Response and optional data
-func NewResult(run *Run, res *collector.Response) *Result {
-	return &Result{
-		Run:                run.ID,
-		RunMetadata:        run.Metadata,
-		RequestURL:         res.Request.URL.String(),
-		ResponseBody:       res.Body[:],
-		ResponseStatusCode: res.StatusCode,
-	}
-}
-
-// ResultStore defines how crawl results are stored
-type ResultStore interface {
-	Save(ctx context.Context, config any, run *Run, res *collector.Response) error
-}
-
-// CreateResultStore creates a ResultsStore based on the provided DSN
 func CreateResultStore(dsn string) (ResultStore, error) {
 	if dsn == "" {
 		return &NoopResultStore{}, nil
@@ -76,4 +49,8 @@ func CreateResultStore(dsn string) (ResultStore, error) {
 	default:
 		return nil, fmt.Errorf("unsupported results store type: %s", u.Scheme)
 	}
+}
+
+type ResultStore interface {
+	Save(ctx context.Context, config any, run *Run, res *collector.Response) error
 }
