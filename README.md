@@ -23,9 +23,9 @@ curl -X POST http://127.0.0.1:8080 \
 
 ### Dependency Free
 
-By default Tobey runs without any depdencies on any other service. It this mode
+By default Tobey runs without any dependencies on any other service. In this mode
 the service will not coordinate with other instances. It will store results locally 
-on disk, but not report any progress. If you are tryint out tobey this is the
+on disk, but not report any progress. If you are trying out tobey this is the
 easiest way to get started.
 
 ```sh
@@ -35,11 +35,11 @@ TOBEY_RESULTS_DSN=disk:///path/to/results go run .
 ### Stateless Operation
 
 It is possible to configure and use Tobey in a stateless manner. In this operation mode
-you'll specificy configuration on a per-run basis, and not statically via a configuration file. Choosing 
+you'll specify configuration on a per-run basis, and not statically via a configuration file. Choosing 
 the webhook results store will forward results to a webhook endpoint without storing them locally.
 
 ```sh
-TOBEY_RESULTS_DSN=webhook://example.org/webhook go run .
+TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config=true go run .
 ```
 
 ### Distributed Operation
@@ -117,7 +117,9 @@ On top of these variables, the service's telemetry
 feature can be configured via the commonly known 
 [OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
-## Submitting a Basic Crawl Request
+## Providing Crawl Targets
+
+### Submitting a Basic Crawl Request
 
 Tobey currently has a single API endpoint to receive crawl requests: `/`.
 
@@ -132,9 +134,46 @@ extracting links for content of the webpages.
 }
 ```
 
-### Constraining Crawling
+### Multiple URLs
 
-#### Domains
+Multiple URLs either as entrypoints or for oneshot downloading work a well,
+using the `urls` key:
+
+```jsonc
+{
+  "urls": [
+    "https://example.org/blog", 
+    "https://example.org/values"
+  ]
+}
+```
+
+
+### Authentication
+
+When the target you want to crawl requires authentication, you can provide
+the credentials for HTTP basic auth in the URL. The crawler will use these
+credientials for all resources under the same domain for that run.
+
+```jsonc
+{
+  "url": "https://foo:secret@example.org"
+}
+```
+
+When you want to provide the credentials in a more structured way, you can do so
+by providing the `auth` key:
+
+```jsonc
+{
+  "url": "https://example.org"
+  "auth": [
+    { host: "example.org", method: "basic", username: "foo", password: "secret" }
+  ]
+}
+```
+
+### Domain Constraints
 
 By default and when crawling a whole website tobey will only download resources
 from the host as provided in the URL, this is so we don't end up downloading the
@@ -156,7 +195,7 @@ allow the naked domain (and all its subdomains).
 }
 ```
 
-### Paths
+### Path Constraints
 
 To skip resources with certain paths, you may provide a list of literal path
 segments to include or skip via the `paths` or `!paths` key. The path segments
@@ -177,38 +216,6 @@ you may also use regular expressions.
 
 As you can see positive and negative path constraints can be combined. With the options
 given above, `/en/about-us/` would be crawled, but not `/en/search/` and not `/blog/article`.
-
-### Run Identifiers
-
-Each time you submit a URL to be crawled, a "run" is internally created. Tobey
-automatically creates a unique run UUID for you, when you don't submit one
-yourself. You'll receive that created run UUID in the response when submitting a
-URL to be crawled.
-
-When you already have a run UUID yourself, you may as well submit in the crawl
-request, than your run UUID will be used internally and visible when results are
-dispatched.
-
-```jsonc
-{
-  "url": "https://example.org",
-  "run_uuid": "0033085c-685b-432a-9aa4-0aca59cc3e12"
-}
-```
-
-### Multiple URLs
-
-Multiple URLs either as entrypoints or for oneshot downloading work a well,
-using the `urls` key:
-
-```jsonc
-{
-  "urls": [
-    "https://example.org/blog", 
-    "https://example.org/values"
-  ]
-}
-```
 
 ### Bypassing robots.txt
 
@@ -250,68 +257,95 @@ the URL under the `url` key algonside the entrypoint:
 }
 ```
 
-### Authentication
+## Triggering Runs
 
-When the resource you want to download requires authentication, you can provide
-the credentials for HTTP basic auth in the URL. The crawler will use these
-credientials for all resources under the same domain.
+Each time you submit a URL to be crawled, a _Run_ is internally created. Tobey
+automatically creates a unique run UUID as **a run identifier** for you. You may
+specify your own run UUID as well. 
 
 ```jsonc
 {
-  "url": "https://foo:secret@example.org"
+  "url": "https://example.org",
+  "run_uuid": "0033085c-685b-432a-9aa4-0aca59cc3e12" // optional
+  // ...
 }
 ```
 
-When you want to provide the credentials in a more structured way, you can do so
-by providing the `auth` key:
+You may also attach metadata to a run. This metadata will be attached to all results
+from that run. 
 
 ```jsonc
 {
-  "url": "https://example.org"
-  "auth": [
-    { host: "example.org", method: "basic", username: "foo", password: "secret" }
-  ]
-```
-
-### Output Methods
-
-Tobey currently supports one output method. 
-
-#### Using Webhook to state where results should go
-
-With this output method tobey doesn't store any results by itself. It instead forwards
-the results to a configured webhook endpoint. [Webhooks](https://mailchimp.com/en/marketing-glossary/webhook) are a technique to notify other services about a result, once its ready.
-
-Once the crawlwer has results for a resource, it will deliver them to a webhook,
-if one is configured via the `webhook` key. Using the `data` key you can pass
-through additional information to the target of the webhook.
-
-```jsonc
-{
-  // ...
   "url": "https://example.org",
   // ...
-  "webhook": {
-    "endpoint": "https://metatags.example.org/accept-webhook",
-    "data": { // Any additional data that you want the hook to receive.
-      "magic_number": 12 
-    }
+  "metadata": {
+    "internal_project_reference": 42,
+    "triggered_by": "user@example.org"
   }
 }
 ```
 
-This is how the payload will look like, and how it is received by the target:
+## Collecting Results
+
+Tobey currently supports multiple methods to handle results. You can either store
+them locally on disk, or forward them to a webhook endpoint. Additionaly results
+can also be discarded, this is useful for testing.
+
+When you configure the crawler to **store results on disk**, it will save the results
+to the local filesystem. The results are saved in the same directory as the crawl
+request.
+
+```sh
+TOBEY_RESULTS_DSN=disk:///path/to/results
+```
+
+When you configure the crawler to **forward results to a webhook**, it will deliver
+the results to a configured webhook endpoint. [Webhooks](https://mailchimp.com/en/marketing-glossary/webhook) are a technique to notify other services about a result, once its ready.
+
+```sh
+TOBEY_RESULTS_DSN=webhook://example.org/webhook
+```
+
+For the webhook method, **dynamic re-configuration** is supported. This means that you can
+configure the webhook endpoint on a per-request basis. Dynamic re-configuration is disabled
+by default, and can be enabled by adding `enable_dynamic_config` to the DSN.
+
+```sh
+TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config
+```
+
+You can than specify the webhook endpoint in the crawl request:
+
+```jsonc 
+{
+  "url": "https://example.org",
+  "results_dsn": "webhook://example.org/webhook"
+}
+```
+
+When you configure the crawler to **discard results**, it will not store any results
+by itself. This is useful for testing and **the default behavior**.
+
+```sh
+TOBEY_RESULTS_DSN=noop://
+```
+
+### Results Format
+
+A _Result object_ is a JSON object that contains the result of a crawl request alongside
+the metadata of the run, see _Runs_ above for more details.
 
 ```jsonc
 {
   "action": "collector.response",
   "run_uuid": "0033085c-685b-432a-9aa4-0aca59cc3e12",
-  // ... 
+  "run_metadata": {
+    "internal_project_reference": 42,
+    "triggered_by": "user@example.org"
+  },
   "request_url": "http://...", 
   "response_body": "...", // Base64 encoded raw response body received when downloading the resource.
   // ... 
-  "data": { // Passed-through data.
-    "magic_number": 12 
-  },
 }
 ```
+

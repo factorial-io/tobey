@@ -14,6 +14,6 @@ import (
 type NoopResultStore struct{}
 
 // Save implements ResultsStore.Save by discarding the result
-func (n *NoopResultStore) Save(ctx context.Context, config ResultStoreConfig, run string, res *collector.Response) error {
+func (n *NoopResultStore) Save(ctx context.Context, config ResultStoreConfig, run *Run, res *collector.Response) error {
 	return nil
 }

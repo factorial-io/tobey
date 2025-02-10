@@ -44,7 +44,7 @@ func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultS
 }
 
 // Save implements ResultsStore.Save by sending results to a webhook endpoint
-func (wrs *WebhookResultStore) Save(ctx context.Context, config ResultStoreConfig, run string, res *collector.Response) error {
+func (wrs *WebhookResultStore) Save(ctx context.Context, config ResultStoreConfig, run *Run, res *collector.Response) error {
 	endpoint := wrs.defaultEndpoint
 	var webhook *WebhookResultStoreConfig
 
@@ -61,13 +61,13 @@ func (wrs *WebhookResultStore) Save(ctx context.Context, config ResultStoreConfi
 		return fmt.Errorf("no webhook endpoint configured")
 	}
 
-	logger := slog.With("endpoint", endpoint, "run", run)
+	logger := slog.With("endpoint", endpoint, "run", run.ID)
 	logger.Debug("WebhookResultStore: Sending webhook...")
 
 	ctx, span := tracer.Start(ctx, "output.webhook.send")
 	defer span.End()
 
-	// Create result using common Result type and wrap it in a webhook payload
+	// Create result using run metadata
 	result := NewResult(run, res, webhook.Data)
 
 	payload := struct {

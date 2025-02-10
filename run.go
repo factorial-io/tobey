@@ -34,7 +34,8 @@ type Run struct {
 // store the Run in the RunStore. It contains only static data. "Live" data,
 // like seen URLs are not kept in this struct.
 type SerializableRun struct {
-	ID string
+	ID       string
+	Metadata interface{}
 
 	URLs []string
 
@@ -149,7 +150,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 				"response.status", res.StatusCode,
 			)
 			if run.WebhookConfig != nil && run.WebhookConfig.Endpoint != "" {
-				rs.Save(ctx, run.WebhookConfig, run.ID, res)
+				rs.Save(ctx, run.WebhookConfig, run, res)
 			}
 		}
 	}

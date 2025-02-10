@@ -254,7 +254,8 @@ func main() {
 
 		run := &Run{
 			SerializableRun: SerializableRun{
-				ID: id,
+				ID:       id,
+				Metadata: req.RunMetadata,
 
 				URLs: req.GetURLs(true),
 

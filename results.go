@@ -16,6 +16,7 @@ import (
 // Result represents a crawl result that can be stored by any ResultsStore implementation
 type Result struct {
 	Run                string      `json:"run_uuid"`
+	RunMetadata        interface{} `json:"run_metadata,omitempty"`
 	RequestURL         string      `json:"request_url"`
 	ResponseBody       []byte      `json:"response_body"` // Will be base64 encoded when marshalled
 	ResponseStatusCode int         `json:"response_status_code"`
@@ -23,9 +24,10 @@ type Result struct {
 }
 
 // NewResult creates a Result from a collector.Response and optional data
-func NewResult(run string, res *collector.Response, data interface{}) *Result {
+func NewResult(run *Run, res *collector.Response, data interface{}) *Result {
 	return &Result{
-		Run:                run,
+		Run:                run.ID,
+		RunMetadata:        run.Metadata,
 		RequestURL:         res.Request.URL.String(),
 		ResponseBody:       res.Body[:],
 		ResponseStatusCode: res.StatusCode,
@@ -35,7 +37,7 @@ func NewResult(run string, res *collector.Response, data interface{}) *Result {
 
 // ResultStore defines how crawl results are stored
 type ResultStore interface {
-	Save(ctx context.Context, config ResultStoreConfig, run string, res *collector.Response) error
+	Save(ctx context.Context, config ResultStoreConfig, run *Run, res *collector.Response) error
 }
 
 // ResultStoreConfig is the base configuration interface that all result store configs must implement

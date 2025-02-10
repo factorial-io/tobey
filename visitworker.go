@@ -135,7 +135,7 @@ func VisitWorker(
 			span.AddEvent("Visitor: Visited URL.", t)
 
 			if r.WebhookConfig != nil {
-				rs.Save(jctx, r.WebhookConfig, r.ID, res)
+				rs.Save(jctx, r.WebhookConfig, r, res)
 			}
 
 			span.End()

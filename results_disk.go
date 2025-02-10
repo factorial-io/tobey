@@ -45,8 +45,8 @@ func NewDiskResultStore(config DiskStoreConfig) (*DiskResultStore, error) {
 }
 
 // Save implements ResultStore.Save by writing results to a file
-func (drs *DiskResultStore) Save(ctx context.Context, config ResultStoreConfig, run string, res *collector.Response) error {
-	logger := slog.With("run", run, "url", res.Request.URL)
+func (drs *DiskResultStore) Save(ctx context.Context, config ResultStoreConfig, run *Run, res *collector.Response) error {
+	logger := slog.With("run", run.ID, "url", res.Request.URL)
 	logger.Debug("DiskResultStore: Saving result to file...")
 
 	// Use per-call config if provided, otherwise use default config
@@ -68,7 +68,7 @@ func (drs *DiskResultStore) Save(ctx context.Context, config ResultStoreConfig, 
 		}
 	}
 
-	// Create result using common Result type
+	// Create result using run metadata
 	result := NewResult(run, res, webhookData)
 
 	// Create a filename based on URL and run ID
@@ -77,7 +77,7 @@ func (drs *DiskResultStore) Save(ctx context.Context, config ResultStoreConfig, 
 		urlPath = "root"
 	}
 
-	filename := fmt.Sprintf("%s_%s.json", run, urlPath)
+	filename := fmt.Sprintf("%s_%s.json", run.ID, urlPath)
 	filepath := filepath.Join(outputDir, filename)
 
 	jsonData, err := json.MarshalIndent(result, "", "  ")

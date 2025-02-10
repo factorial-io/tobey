@@ -60,6 +60,9 @@ type APIRequest struct {
 	// empty, we'll generate one.
 	Run string `json:"run_uuid"`
 
+	// Metadata associated with this run that will be included in all results
+	RunMetadata interface{} `json:"run_metadata,omitempty"`
+
 	URL  string   `json:"url"`
 	URLs []string `json:"urls"`
 
