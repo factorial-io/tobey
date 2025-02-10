@@ -20,29 +20,23 @@ type Result struct {
 	RequestURL         string      `json:"request_url"`
 	ResponseBody       []byte      `json:"response_body"` // Will be base64 encoded when marshalled
 	ResponseStatusCode int         `json:"response_status_code"`
-	Data               interface{} `json:"data,omitempty"` // Optional additional data
+	Metadata           interface{} `json:"metadata,omitempty"` // Optional additional data
 }
 
 // NewResult creates a Result from a collector.Response and optional data
-func NewResult(run *Run, res *collector.Response, data interface{}) *Result {
+func NewResult(run *Run, res *collector.Response) *Result {
 	return &Result{
 		Run:                run.ID,
 		RunMetadata:        run.Metadata,
 		RequestURL:         res.Request.URL.String(),
 		ResponseBody:       res.Body[:],
 		ResponseStatusCode: res.StatusCode,
-		Data:               data,
 	}
 }
 
 // ResultStore defines how crawl results are stored
 type ResultStore interface {
-	Save(ctx context.Context, config ResultStoreConfig, run *Run, res *collector.Response) error
-}
-
-// ResultStoreConfig is the base configuration interface that all result store configs must implement
-type ResultStoreConfig interface {
-	Validate() error
+	Save(ctx context.Context, config any, run *Run, res *collector.Response) error
 }
 
 // CreateResultStore creates a ResultsStore based on the provided DSN

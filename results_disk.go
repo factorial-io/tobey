@@ -20,14 +20,9 @@ type DiskStoreConfig struct {
 	OutputDir string `json:"output_dir"`
 }
 
-func (c *DiskStoreConfig) Validate() error {
-	// No validation needed for now, but we could add checks for write permissions, etc.
-	return nil
-}
-
 // DiskResultStore implements ResultsStore by saving results to files on disk
 type DiskResultStore struct {
-	defaultConfig DiskStoreConfig
+	outputDir string
 }
 
 // NewDiskResultStore creates a new DiskResultStore
@@ -40,36 +35,19 @@ func NewDiskResultStore(config DiskStoreConfig) (*DiskResultStore, error) {
 	}
 
 	return &DiskResultStore{
-		defaultConfig: config,
+		outputDir: config.OutputDir,
 	}, nil
 }
 
-// Save implements ResultStore.Save by writing results to a file
-func (drs *DiskResultStore) Save(ctx context.Context, config ResultStoreConfig, run *Run, res *collector.Response) error {
+// Save implements ResultStore.Save by writing results to a file.
+//
+// We accept per-call config in the signature, to satisfy the ResultsStore interface,
+// but we don't use it here, as we don't allow dynamic config for this store.
+func (drs *DiskResultStore) Save(ctx context.Context, config any, run *Run, res *collector.Response) error {
 	logger := slog.With("run", run.ID, "url", res.Request.URL)
 	logger.Debug("DiskResultStore: Saving result to file...")
 
-	// Use per-call config if provided, otherwise use default config
-	outputDir := drs.defaultConfig.OutputDir
-	var webhookData interface{}
-
-	if config != nil {
-		if diskConfig, ok := config.(*DiskStoreConfig); ok {
-			if diskConfig.OutputDir != "" {
-				outputDir = diskConfig.OutputDir
-				// Create directory if it doesn't exist
-				if err := os.MkdirAll(outputDir, 0755); err != nil {
-					return fmt.Errorf("failed to create output directory: %w", err)
-				}
-			}
-		}
-		if whConfig, ok := config.(*WebhookResultStoreConfig); ok {
-			webhookData = whConfig.Data
-		}
-	}
-
-	// Create result using run metadata
-	result := NewResult(run, res, webhookData)
+	result := NewResult(run, res)
 
 	// Create a filename based on URL and run ID
 	urlPath := sanitizeFilename(res.Request.URL.Path)
@@ -78,7 +56,7 @@ func (drs *DiskResultStore) Save(ctx context.Context, config ResultStoreConfig, 
 	}
 
 	filename := fmt.Sprintf("%s_%s.json", run.ID, urlPath)
-	filepath := filepath.Join(outputDir, filename)
+	filepath := filepath.Join(drs.outputDir, filename)
 
 	jsonData, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {

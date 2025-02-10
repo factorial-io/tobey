@@ -18,16 +18,7 @@ import (
 
 // WebhookResultStoreConfig defines the configuration for webhook endpoints
 type WebhookResultStoreConfig struct {
-	Endpoint string      `json:"endpoint"`
-	Data     interface{} `json:"data"` // Accept arbitrary data here.
-}
-
-func (c *WebhookResultStoreConfig) Validate() error {
-	return nil
-}
-
-func (c *WebhookResultStoreConfig) GetWebhook() *WebhookResultStoreConfig {
-	return c
+	Endpoint string `json:"endpoint"`
 }
 
 // WebhookResultStore implements ResultsStore by sending results to a webhook endpoint.
@@ -65,26 +56,28 @@ func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultS
 }
 
 // Save implements ResultsStore.Save by sending results to a webhook endpoint
-func (wrs *WebhookResultStore) Save(ctx context.Context, config ResultStoreConfig, run *Run, res *collector.Response) error {
+func (wrs *WebhookResultStore) Save(ctx context.Context, config any, run *Run, res *collector.Response) error {
 	var endpoint string
-	var webhook *WebhookResultStoreConfig
 
+	var webhook *WebhookResultStoreConfig
 	if config != nil {
-		if whConfig, ok := config.(*WebhookResultStoreConfig); ok {
-			webhook = whConfig
-			if whConfig.Endpoint != "" && wrs.allowDynamicConfig {
-				endpoint = whConfig.Endpoint
-			} else if whConfig.Endpoint != "" && !wrs.allowDynamicConfig {
-				slog.Warn("Dynamic webhook configuration is disabled. Ignoring custom endpoint.")
-			}
+		var ok bool
+		webhook, ok = config.(*WebhookResultStoreConfig)
+		if !ok {
+			return fmt.Errorf("invalid webhook configuration: %T", config)
 		}
 	}
-
-	// If no dynamic endpoint, fall back to default
+	if webhook != nil {
+		if webhook.Endpoint != "" && wrs.allowDynamicConfig {
+			endpoint = webhook.Endpoint
+		} else if webhook.Endpoint != "" && !wrs.allowDynamicConfig {
+			slog.Warn("Dynamic webhook configuration is disabled. Ignoring custom endpoint.")
+		}
+	}
+	// If no dynamic endpoint, fall back to default.
 	if endpoint == "" {
 		endpoint = wrs.defaultEndpoint
 	}
-
 	if endpoint == "" {
 		return fmt.Errorf("no webhook endpoint configured - must provide either default endpoint or dynamic configuration")
 	}
@@ -96,7 +89,7 @@ func (wrs *WebhookResultStore) Save(ctx context.Context, config ResultStoreConfi
 	defer span.End()
 
 	// Create result using run metadata
-	result := NewResult(run, res, webhook.Data)
+	result := NewResult(run, res)
 
 	payload := struct {
 		Action string `json:"action"`
