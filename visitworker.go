@@ -33,7 +33,7 @@ func CreateVisitWorkersPool(
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
 	progress ProgressReporter,
-	rs ResultStore,
+	rs ResultReporter,
 ) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
@@ -60,7 +60,7 @@ func VisitWorker(
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
 	progress ProgressReporter,
-	rs ResultStore,
+	rs ResultReporter,
 ) error {
 	wlogger := slog.With("worker.id", id)
 	wlogger.Debug("Visitor: Starting...")
@@ -134,7 +134,7 @@ func VisitWorker(
 			span.AddEvent("Visitor: Visited URL.", t)
 
 			if r.WebhookConfig != nil {
-				rs.Save(jctx, r.WebhookConfig, r, res)
+				rs.Accept(jctx, r.WebhookConfig, r, res)
 			}
 
 			span.End()

@@ -174,7 +174,7 @@ func main() {
 		tear(queue.Close)
 	}
 
-	rs, err := CreateResultStore(os.Getenv("TOBEY_RESULTS_DSN"))
+	rs, err := CreateResultReporter(os.Getenv("TOBEY_RESULTS_DSN"))
 	if err != nil {
 		panic(err)
 	}

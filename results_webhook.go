@@ -16,16 +16,18 @@ import (
 	"tobey/internal/collector"
 )
 
-// WebhookResultStoreConfig defines the configuration for webhook endpoints
-type WebhookResultStoreConfig struct {
+// WebhookResultReporterConfig defines the configuration for webhook endpoints
+type WebhookResultReporterConfig struct {
 	Endpoint string `json:"endpoint"`
 }
 
-// WebhookResultStore implements ResultsStore by sending results to a webhook endpoint.
+// WebhookResultReporter implements ResultsStore by sending results to a webhook endpoint.
 // It sends results in a non-blocking way, following a fire-and-forget approach.
-type WebhookResultStore struct {
-	client             *http.Client
-	defaultEndpoint    string // Can be empty when only using dynamic config
+type WebhookResultReporter struct {
+	client *http.Client
+	// defaultEndppoint may be empty when always using dynamic config. It may be overriden
+	// on a per-call basis when allowDynamicConfig is true.
+	defaultEndpoint    string
 	allowDynamicConfig bool
 }
 
@@ -37,25 +39,26 @@ type WebhookResult struct {
 	ResponseStatusCode int         `json:"response_status_code"`
 }
 
-func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultStore {
+func NewWebhookResultReporter(ctx context.Context, endpoint string) *WebhookResultReporter {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return &WebhookResultStore{
+		return &WebhookResultReporter{
 			client:             CreateRetryingHTTPClient(NoAuthFn),
 			defaultEndpoint:    endpoint,
 			allowDynamicConfig: false,
 		}
 	}
 
-	// If dynamic config is enabled, we don't require a default endpoint
+	// If dynamic config is enabled, we don't require a default endpoint.
 	var cleanEndpoint string
 	if u.Host != "" {
 		u.RawQuery = ""
 		cleanEndpoint = u.String()
 	}
 
-	return &WebhookResultStore{
-		client:          CreateRetryingHTTPClient(NoAuthFn),
+	return &WebhookResultReporter{
+		client: CreateRetryingHTTPClient(NoAuthFn),
+
 		defaultEndpoint: cleanEndpoint,
 		// Presence of the query parameter is sufficient to enable dynamic config. This is,
 		// so we don't need to check what counts as boolean true, i.e. "true", "1", "yes", etc.
@@ -63,14 +66,14 @@ func NewWebhookResultStore(ctx context.Context, endpoint string) *WebhookResultS
 	}
 }
 
-// Save implements ResultsStore.Save by sending results to a webhook endpoint
-func (wrs *WebhookResultStore) Save(ctx context.Context, config any, run *Run, res *collector.Response) error {
+// Accept implements ResultsStore.Accept by sending results to a webhook endpoint
+func (wrs *WebhookResultReporter) Accept(ctx context.Context, config any, run *Run, res *collector.Response) error {
 	var endpoint string
 
-	var webhook *WebhookResultStoreConfig
+	var webhook *WebhookResultReporterConfig
 	if config != nil {
 		var ok bool
-		webhook, ok = config.(*WebhookResultStoreConfig)
+		webhook, ok = config.(*WebhookResultReporterConfig)
 		if !ok {
 			return fmt.Errorf("invalid webhook configuration: %T", config)
 		}

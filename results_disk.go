@@ -17,11 +17,11 @@ import (
 	"tobey/internal/collector"
 )
 
-type DiskStoreConfig struct {
+type DiskResultReporterConfig struct {
 	OutputDir string `json:"output_dir"`
 }
 
-// DiskResultStore stores results on disk as JSON files. Results are grouped by run
+// DiskResultReporter stores results on disk as JSON files. Results are grouped by run
 // in a run specific directory. The directory structure is as follows:
 //
 //	<output_dir>/
@@ -30,7 +30,7 @@ type DiskStoreConfig struct {
 //
 // The <url_hash> is the SHA-256 hash of the request URL, encoded as a hex string.
 // The JSON file contains the result as a JSON object.
-type DiskResultStore struct {
+type DiskResultReporter struct {
 	outputDir string
 }
 
@@ -42,25 +42,25 @@ type DiskResult struct {
 	ResponseStatusCode int         `json:"response_status_code"`
 }
 
-func NewDiskResultStore(config DiskStoreConfig) (*DiskResultStore, error) {
+func NewDiskResultReporter(config DiskResultReporterConfig) (*DiskResultReporter, error) {
 	if config.OutputDir != "" {
 		if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create output directory: %w", err)
 		}
 	}
 
-	return &DiskResultStore{
+	return &DiskResultReporter{
 		outputDir: config.OutputDir,
 	}, nil
 }
 
-// Save implements ResultStore.Save by writing results to a file.
+// Accept implements ResultStore.Accept by writing results to a file.
 //
-// We accept per-call config in the signature, to satisfy the ResultsStore interface,
-// but we don't use it here, as we don't allow dynamic config for this store.
-func (drs *DiskResultStore) Save(ctx context.Context, config any, run *Run, res *collector.Response) error {
+// We accept per-call config in the signature, to satisfy the ResultReporter interface,
+// but we don't use it here, as we don't allow dynamic config for this reporter.
+func (drs *DiskResultReporter) Accept(ctx context.Context, config any, run *Run, res *collector.Response) error {
 	logger := slog.With("run", run.ID, "url", res.Request.URL)
-	logger.Debug("DiskResultStore: Saving result to file...")
+	logger.Debug("DiskResultReporter: Saving result to file...")
 
 	result := &DiskResult{
 		Run:                run.ID,

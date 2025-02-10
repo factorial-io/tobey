@@ -10,10 +10,10 @@ import (
 	"tobey/internal/collector"
 )
 
-// NoopResultStore implements ResultsStore but discards all results
-type NoopResultStore struct{}
+// NoopResultReporter implements ResultsStore but discards all results
+type NoopResultReporter struct{}
 
-// Save implements ResultsStore.Save by discarding the result
-func (n *NoopResultStore) Save(ctx context.Context, config any, run *Run, res *collector.Response) error {
+// Accept implements ResultsStore.Accept by discarding the result
+func (n *NoopResultReporter) Accept(ctx context.Context, config any, run *Run, res *collector.Response) error {
 	return nil
 }

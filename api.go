@@ -70,7 +70,7 @@ type APIRequest struct {
 	AllowPaths   []string `json:"paths"`
 	DenyPaths    []string `json:"!paths"`
 
-	WebhookResultStoreConfig *WebhookResultStoreConfig `json:"webhook"`
+	WebhookResultStoreConfig *WebhookResultReporterConfig `json:"webhook"`
 
 	// If true, we'll bypass the robots.txt check, however we'll still
 	// download the file to look for sitemaps.
