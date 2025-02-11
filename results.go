@@ -16,8 +16,15 @@ import (
 
 func CreateResultReporter(dsn string) (ResultReporter, error) {
 	if dsn == "" {
-		slog.Info("Result Reporter: Disabled, using noop reporter")
-		return &NoopResultReporter{}, nil
+		config := DiskResultReporterConfig{
+			OutputDir: "results", // Relative to the current working directory.
+		}
+		store, err := NewDiskResultReporter(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to setup disk result reporter: %w", err)
+		}
+		slog.Info("Result Reporter: Enabled, using disk store", "dsn", dsn)
+		return store, nil
 	}
 
 	u, err := url.Parse(dsn)
@@ -36,7 +43,7 @@ func CreateResultReporter(dsn string) (ResultReporter, error) {
 		}
 		store, err := NewDiskResultReporter(config)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create disk store: %w", err)
+			return nil, fmt.Errorf("failed to setup disk result reporter: %w", err)
 		}
 
 		slog.Info("Result Reporter: Enabled, using disk store", "dsn", dsn)
@@ -51,7 +58,6 @@ func CreateResultReporter(dsn string) (ResultReporter, error) {
 		slog.Info("Result Reporter: Enabled, using webhook reporter", "dsn", dsn)
 		return NewWebhookResultReporter(context.Background(), endpoint), nil
 	case "noop":
-
 		slog.Info("Result Reporter: Disabled, using noop reporter")
 		return &NoopResultReporter{}, nil
 	default:
