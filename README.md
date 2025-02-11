@@ -1,37 +1,29 @@
-# Tobey, a robust and scalable Crawler
+# Tobey, a throughput optimizing web crawler
 
 Tobey is a throughput optimizing web crawler, that is scalable from a single instance to a cluster. It features intelligent 
 rate limiting, distributed coordination, and flexible deployment options.
 
 ## Running Tobey
 
-Start the service.
 ```sh
-go run . 
-```
-
-In its simplest form the service just receives a root URL of the website to be
-crawled. 
-
-```sh
-curl -X POST http://127.0.0.1:8080 \
-     -H 'Content-Type: application/json' \
-     -d '{"url": "https://www.example.org/"}'
+go run . # Start the crawler.
+curl -X POST http://127.0.0.1:8080 https://www.example.org/ # Submit a crawl request.
 ```
 
 ## Configuration
 
-The service is configured via environment variables. The following environment
-variables are available. Please also see `.env.example` for a working
+Tobey is configured with sane defaults, which means it will work out of the box. If you need to configure it, you 
+can do so via environment variables. The following variables are available. Please also see `.env.example` for a working
 example configuration that should get you started.
 
 | Variable Name  | Default Value  | Supported Values | Description                      |
 |----------------|----------------|------------------|----------------------------------|
 | `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
 | `TOBEY_SKIP_CACHE` | `false` | `true`, `false`  | Controls caching access. |
+| `TOBEY_WORKERS` | `5` | `1-128` | Controls the number of workers per instance. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
-| `TOBEY_PROGRESS_DSN` | empty | `factorial://host:port`, `noop://` | DSN for progress reporting service. When configured, Tobey will send progress updates there. The factorial scheme enables progress updates to a Factorial progress service. Use noop:// to explicitly disable progress updates. |
-| `TOBEY_RESULTS_DSN` | empty | `disk:///path`, `webhook://host/path`, `noop://` | DSN specifying where crawl results should be stored. Use disk:// for local filesystem storage, webhook:// to forward results to an HTTP endpoint, or noop:// to discard results. |
+| `TOBEY_PROGRESS_DSN` | empty | `factorial://host:port` | DSN for progress reporting service. When configured, Tobey will send progress updates there. The factorial scheme enables progress updates to a Factorial progress service. Use noop:// to explicitly disable progress updates. |
+| `TOBEY_RESULTS_DSN` | `disk://results` | `disk:///path`, `webhook://host/path` | DSN specifying where crawl results should be stored. Use disk:// for local filesystem storage, webhook:// to forward results to an HTTP endpoint, or noop:// to discard results. |
 | `TOBEY_TELEMETRY` | empty | i.e. `metrics traces` | Space separated list of what kind of telemetry is emitted. |
 
 On top of these variables, the service's telemetry
@@ -174,7 +166,7 @@ the URL under the `url` key algonside the entrypoint:
     "https://example.org", 
     "https://example.org/sitemap.xml"
   ],
-  "skip_auto_sitemaps": true
+  "skip_sitemap_discovery": true
 }
 ```
 
@@ -227,15 +219,14 @@ the results to a configured webhook endpoint. [Webhooks](https://mailchimp.com/e
 TOBEY_RESULTS_DSN=webhook://example.org/webhook
 ```
 
-For the webhook method, **dynamic re-configuration** is supported. This means that you can
+For the webhook method, **dynamic re-configuration** is supported. This means that you 
 configure the webhook endpoint on a per-request basis. Dynamic re-configuration is disabled
-by default, and can be enabled by adding `enable_dynamic_config` to the DSN.
+by default, for security reasons. It can be enabled by adding `enable_dynamic_config` to the DSN, if
+can you trust the users that submit the crawl requests, i.e. if tobey is deployed as an internal service.
 
 ```sh
 TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config # with default endpoint
-TOBEY_RESULTS_DSN=webhook://?enable_dynamic_config # without default endpoint, requires dynamic 
-                                                   # rconfiguration in each crawl request
-                                                   # request
+TOBEY_RESULTS_DSN=webhook://?enable_dynamic_config # without default endpoint
 ```
 
 You can than specify the webhook endpoint in the crawl request:
@@ -247,21 +238,13 @@ You can than specify the webhook endpoint in the crawl request:
 }
 ```
 
-When you configure the crawler to **discard results**, it will not store any results
-by itself. This is useful for testing and **the default behavior**.
-
-```sh
-TOBEY_RESULTS_DSN=noop://
-```
-
 ### Results Format
 
-A _Result object_ is a JSON object that contains the result of a crawl request alongside
+A _Result_ is an object that contains the result of a crawl request alongside
 the metadata of the run, see _Runs_ above for more details.
 
 ```jsonc
 {
-  "action": "collector.response",
   "run_uuid": "0033085c-685b-432a-9aa4-0aca59cc3e12",
   "run_metadata": {
     "internal_project_reference": 42,
@@ -276,12 +259,12 @@ the metadata of the run, see _Runs_ above for more details.
 ## Progress Reporting
 
 Tobey can report progress while it's crawling. This is useful for monitoring the
-progress of a crawl and for debugging and determine when a crawl has finished. By default the console progress reporter is used. 
+progress of a crawl and for debugging and determine when a crawl has finished. By 
+default this feature is disabled.
 
 ```sh
 TOBEY_PROGRESS_DSN=factorial://host:port # To report progress to the Factorial progress service.
-TOBEY_PROGRESS_DSN=console # To report progress to the console, this is the default.
-TOBEY_PROGRESS_DSN= # To disable progress reporting.
+TOBEY_PROGRESS_DSN=console # To report progress to the console.
 ```
 
 ## Deployment Options
@@ -293,10 +276,6 @@ the service will not coordinate with other instances. It will store results loca
 on disk, but not report any progress. If you are trying out tobey this is the
 easiest way to get started.
 
-```sh
-TOBEY_RESULTS_DSN=disk:///path/to/results go run .
-```
-
 ### Stateless Operation
 
 It is possible to configure and use Tobey in a stateless manner. In this operation mode
@@ -304,7 +283,7 @@ you'll specify configuration on a per-run basis, and not statically via a config
 the webhook results store will forward results to a webhook endpoint without storing them locally.
 
 ```sh
-TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config=true go run .
+TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config
 ```
 
 ### Distributed Operation
@@ -314,7 +293,7 @@ in a cluster. In horizontal scaling, any instances can receive crawl requests,
 for easy load balancing. The instances will coordinate with each other via Redis.
 
 ```sh
-TOBEY_REDIS_DSN=redis://localhost:6379 go run .
+TOBEY_REDIS_DSN=redis://localhost:6379
 ```
 ## Scaling
 

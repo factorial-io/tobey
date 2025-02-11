@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -43,6 +44,9 @@ var (
 	UseMetrics = false
 	UsePulse   = false // High Frequency Metrics can be enabled by adding "pulse".
 
+	// NumVisitWorkers hard codes the number of workers we start at startup.
+	NumVisitWorkers int = 5
+
 	// ListenHost is the host where the main HTTP server listens and the API is served,
 	// this can be controlled via the TOBEY_HOST environment variable. An empty
 	// string means "listen on all interfaces".
@@ -54,9 +58,6 @@ var (
 )
 
 const (
-	// NumVisitWorkers hard codes the number of workers we start at startup.
-	NumVisitWorkers int = 5
-
 	// MaxParallelRuns specifies how many collectors we keep in memory, and thus
 	// limits the maximum number of parrallel runs that we can perform.
 	MaxParallelRuns int = 128
@@ -93,7 +94,13 @@ func configure() {
 		SkipCache = true
 		slog.Info("Skipping cache.")
 	}
-
+	if v := os.Getenv("TOBEY_WORKERS"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		NumVisitWorkers = p
+	}
 	v := os.Getenv("TOBEY_TELEMETRY")
 	if strings.Contains(v, "traces") || strings.Contains(v, "tracing") {
 		UseTracing = true
@@ -184,17 +191,9 @@ func main() {
 		panic(err)
 	}
 
-	var progress ProgressReporter
-	if v, ok := os.LookupEnv("TOBEY_PROGRESS_DSN"); !ok {
-		progress, err = CreateProgressReporter("console://")
-		if err != nil {
-			panic(err)
-		}
-	} else {
-		progress, err = CreateProgressReporter(v)
-		if err != nil {
-			panic(err)
-		}
+	progress, err := CreateProgressReporter(os.Getenv("TOBEY_PROGRESS_DSN"))
+	if err != nil {
+		panic(err)
 	}
 
 	workers := CreateVisitWorkersPool(
@@ -220,7 +219,6 @@ func main() {
 		body, _ := ioutil.ReadAll(r.Body)
 		r.Body.Close()
 
-		w.Header().Set("Content-Type", "application/json")
 		slog.Debug("Handling incoming request for crawl run...")
 
 		// The context of the HTTP request might contain OpenTelemetry information,
@@ -230,17 +228,25 @@ func main() {
 		// This ends the very first span in handling the crawl run. It ends the HTTP handling span.
 		defer span.End()
 
-		var req APIRequest
-		err := json.Unmarshal(body, &req)
-		if err != nil {
-			slog.Error("Failed to parse incoming JSON.", "error", err)
+		w.Header().Set("Content-Type", "application/json")
 
-			result := &APIError{
-				Message: fmt.Sprintf("%s", err),
+		var req APIRequest
+		if bytes.HasPrefix(body, []byte("http://")) || bytes.HasPrefix(body, []byte("https://")) {
+			// As a special case, and to support minimalism, we allow directly
+			// posting a single URL.
+			req.URL = string(body)
+		} else {
+			err := json.Unmarshal(body, &req)
+			if err != nil {
+				slog.Error("Failed to parse incoming JSON.", "error", err)
+
+				result := &APIError{
+					Message: fmt.Sprintf("%s", err),
+				}
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(result)
+				return
 			}
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(result)
-			return
 		}
 
 		if ok := req.Validate(); !ok {
