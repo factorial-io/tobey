@@ -8,7 +8,7 @@ pulse:
 
 .PHONY: test
 test:
-	TOBEY_SKIP_CACHE=true TOBEY_DEBUG=true go test
+	TOBEY_SKIP_CACHE=true TOBEY_DEBUG=true go test -v ./...
 
 .PHONY: clean
 clean:
