@@ -1,7 +1,7 @@
 # A docker compose file that sets up a Tobey instance that is instrumented and
 # exposes metrics to Prometheus via /metrics endpoint. The metrics are then
 # scraped by prometheus. Grafana is used to visualize the metrics scraped by
-# Prometheus.
+# Prometheus. It also configures Redis for coordination.
 
 services:
   tobey:
@@ -11,8 +11,15 @@ services:
       context: .
     environment:
       - TOBEY_TELEMETRY=metrics
+      - TOBEY_REDIS_URL=redis://redis:6379
+      - TOBEY_RESULTS_URL=disk:///tmp/tobey
     volumes:
       - tobey-cache:/cache
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
 
   prometheus:
     image: prom/prometheus
