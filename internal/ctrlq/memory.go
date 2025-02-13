@@ -145,6 +145,14 @@ func (wq *MemoryVisitWorkQueue) Consume(ctx context.Context) (<-chan *VisitJob, 
 			case msg := <-wq.dqueue:
 				// slog.Debug("Work Queue: Received message, forwarding to results channel.", "msg.id", p.Message.ID)
 
+				if msg == nil {
+					slog.Debug("Work Queue: Detected closed channel, closing channels.")
+
+					close(reschan)
+					close(errchan)
+					return
+				}
+
 				// Initializes the context for the job. Than extract the tracing
 				// information from the carrier into the job's context.
 				jctx := context.Background()
