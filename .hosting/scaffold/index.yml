@@ -1,8 +1,0 @@
-questions: []
-assets:
-  - template/app/app-service.yml
-  - template/app/app-deployment.yml
-  - template/secrets/app-secrets.yml
-scaffold:
-  - copy_assets(%rootFolder%, assets)
-  - log_message(info, scaffold message to display)
