@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -87,6 +88,14 @@ const (
 )
 
 func configure() {
+	// Add command line flag parsing
+	var flagHost string
+	var flagPort int
+
+	flag.StringVar(&flagHost, "host", "", "Host interface to bind the HTTP server to")
+	flag.IntVar(&flagPort, "port", 0, "Port to bind the HTTP server to")
+	flag.Parse()
+
 	if os.Getenv("TOBEY_DEBUG") == "true" {
 		Debug = true
 	}
@@ -115,10 +124,16 @@ func configure() {
 		slog.Info("High Frequency Metrics (Pulse) enabled.")
 	}
 
-	if v := os.Getenv("TOBEY_HOST"); v != "" {
+	// First check command line args, then fall back to env vars
+	if flagHost != "" {
+		ListenHost = flagHost
+	} else if v := os.Getenv("TOBEY_HOST"); v != "" {
 		ListenHost = v
 	}
-	if v := os.Getenv("TOBEY_PORT"); v != "" {
+
+	if flagPort != 0 {
+		ListenPort = flagPort
+	} else if v := os.Getenv("TOBEY_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
 		if err != nil {
 			panic(err)

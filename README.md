@@ -21,6 +21,8 @@ example configuration that should get you started.
 | `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
 | `TOBEY_SKIP_CACHE` | `false` | `true`, `false`  | Controls caching access. |
 | `TOBEY_WORKERS` | `5` | `1-128` | Controls the number of workers per instance. |
+| `TOBEY_HOST` | empty | i.e. `localhost`, `127.0.0.1` | Host interface to bind the HTTP server to. Empty means listen on all interfaces. Alternatively you can use the `-host` command line flag. |
+| `TOBEY_PORT` | `8080` | `1-65535` | Port to bind the HTTP server to. Alternatively you can use the `-port` command line flag. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
 | `TOBEY_PROGRESS_DSN` | empty | `factorial://host:port` | DSN for progress reporting service. When configured, Tobey will send progress updates there. The factorial scheme enables progress updates to a Factorial progress service. Use noop:// to explicitly disable progress updates. |
 | `TOBEY_RESULTS_DSN` | `disk://results` | `disk:///path`, `webhook://host/path` | DSN specifying where crawl results should be stored. Use disk:// for local filesystem storage, webhook:// to forward results to an HTTP endpoint, or noop:// to discard results. |
