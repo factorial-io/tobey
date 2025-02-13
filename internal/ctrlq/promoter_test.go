@@ -7,6 +7,7 @@ package ctrlq
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 )
@@ -32,15 +33,15 @@ func TestPromoteNothingToRead(t *testing.T) {
 }
 
 func TestCandidatesNothingToDo(t *testing.T) {
-	hqueues := make(map[uint32]*ControlledQueue)
+	hqueues := &sync.Map{}
 
-	hqueues[1] = &ControlledQueue{
+	hqueues.Store(uint32(1), &ControlledQueue{
 		ID:         1,
 		Name:       "example.org",
 		IsAdaptive: false,
 		Queue:      make(chan *VisitMessage, 10),
 		Limiter:    NewMemoryLimiter(),
-	}
+	})
 
 	candidates, retry := candidates(hqueues)
 
@@ -53,16 +54,17 @@ func TestCandidatesNothingToDo(t *testing.T) {
 }
 
 func TestCandidatesSingle(t *testing.T) {
-	hqueues := make(map[uint32]*ControlledQueue)
+	hqueues := &sync.Map{}
 
-	hqueues[1] = &ControlledQueue{
+	queue := &ControlledQueue{
 		ID:         1,
 		Name:       "example.org",
 		IsAdaptive: false,
 		Queue:      make(chan *VisitMessage, 10),
 		Limiter:    NewMemoryLimiter(),
 	}
-	hqueues[1].Queue <- &VisitMessage{ID: 1}
+	hqueues.Store(uint32(1), queue)
+	queue.Queue <- &VisitMessage{ID: 1}
 
 	candidates, _ := candidates(hqueues)
 
@@ -75,30 +77,32 @@ func TestCandidatesSingle(t *testing.T) {
 }
 
 func TestCandidatesAcquireReservation(t *testing.T) {
-	hqueues := make(map[uint32]*ControlledQueue)
+	hqueues := &sync.Map{}
 
-	hqueues[1] = &ControlledQueue{
+	queue1 := &ControlledQueue{
 		ID:         1,
 		Name:       "example1.org",
 		IsAdaptive: false,
 		Queue:      make(chan *VisitMessage, 10),
 		Limiter:    NewMemoryLimiter(),
 	}
-	hqueues[1].Queue <- &VisitMessage{ID: 1}
+	queue1.Queue <- &VisitMessage{ID: 1}
+	hqueues.Store(uint32(1), queue1)
 
-	hqueues[2] = &ControlledQueue{
+	queue2 := &ControlledQueue{
 		ID:         2,
 		Name:       "example2.org",
 		IsAdaptive: false,
 		Queue:      make(chan *VisitMessage, 10),
 		Limiter:    NewMemoryLimiter(),
 	}
-	hqueues[2].Queue <- &VisitMessage{ID: 2}
+	queue2.Queue <- &VisitMessage{ID: 2}
+	hqueues.Store(uint32(2), queue2)
 
-	if hqueues[1].Limiter.HoldsReservation() != false {
+	if queue1.Limiter.HoldsReservation() != false {
 		t.Errorf("Expected no reservation to be held.")
 	}
-	if hqueues[2].Limiter.HoldsReservation() != false {
+	if queue2.Limiter.HoldsReservation() != false {
 		t.Errorf("Expected no reservation to be held.")
 	}
 
@@ -108,16 +112,16 @@ func TestCandidatesAcquireReservation(t *testing.T) {
 		t.Errorf("Expected 2 candidates, got %d", len(candidates))
 	}
 
-	if hqueues[1].Limiter.HoldsReservation() != true {
+	if queue1.Limiter.HoldsReservation() != true {
 		t.Errorf("Expected reservation to be held.")
 	}
-	if hqueues[2].Limiter.HoldsReservation() != true {
+	if queue2.Limiter.HoldsReservation() != true {
 		t.Errorf("Expected reservation to be held.")
 	}
 }
 
 func TestCandidatesPausedQueueDoesNotHitLimiterCalcShortest(t *testing.T) {
-	hqueues := make(map[uint32]*ControlledQueue)
+	hqueues := &sync.Map{}
 
 	d1, _ := time.ParseDuration("1s")
 	d2, _ := time.ParseDuration("2s")
@@ -125,25 +129,27 @@ func TestCandidatesPausedQueueDoesNotHitLimiterCalcShortest(t *testing.T) {
 	t1 := time.Now().Add(d1).Unix()
 	t2 := time.Now().Add(d2).Unix()
 
-	hqueues[1] = &ControlledQueue{
+	queue1 := &ControlledQueue{
 		ID:         1,
 		Name:       "example1.org",
 		IsAdaptive: false,
 		Queue:      make(chan *VisitMessage, 10),
 		Limiter:    NewMemoryLimiter(),
 	}
-	hqueues[1].Queue <- &VisitMessage{ID: 1}
-	hqueues[1].pausedUntil.Store(t1)
+	queue1.Queue <- &VisitMessage{ID: 1}
+	queue1.pausedUntil.Store(t1)
+	hqueues.Store(uint32(1), queue1)
 
-	hqueues[2] = &ControlledQueue{
+	queue2 := &ControlledQueue{
 		ID:         2,
 		Name:       "example2.org",
 		IsAdaptive: false,
 		Queue:      make(chan *VisitMessage, 10),
 		Limiter:    NewMemoryLimiter(),
 	}
-	hqueues[2].Queue <- &VisitMessage{ID: 2}
-	hqueues[2].pausedUntil.Store(t2)
+	queue2.Queue <- &VisitMessage{ID: 2}
+	queue2.pausedUntil.Store(t2)
+	hqueues.Store(uint32(2), queue2)
 
 	candidates, retry := candidates(hqueues)
 
@@ -156,10 +162,10 @@ func TestCandidatesPausedQueueDoesNotHitLimiterCalcShortest(t *testing.T) {
 
 	// Should not have hit rate limiter as we paused the queue and
 	// the queue's pause has not yet passed.
-	if hqueues[1].Limiter.HoldsReservation() != false {
+	if queue1.Limiter.HoldsReservation() != false {
 		t.Errorf("Expected no reservation to be held.")
 	}
-	if hqueues[2].Limiter.HoldsReservation() != false {
+	if queue2.Limiter.HoldsReservation() != false {
 		t.Errorf("Expected no reservation to be held.")
 	}
 }

@@ -46,15 +46,9 @@ type MemoryVisitWorkQueue struct {
 }
 
 func (wq *MemoryVisitWorkQueue) Open(ctx context.Context) error {
-	snap := make(map[uint32]*ControlledQueue)
-
-	wq.hqueues.Range(func(key any, value any) bool {
-		snap[key.(uint32)] = value.(*ControlledQueue)
-		return true
-	})
 
 	go func() {
-		promoteLoop(ctx, wq.dqueue, snap, wq.shouldRecalc)
+		promoteLoop(ctx, wq.dqueue, &wq.hqueues, wq.shouldRecalc)
 	}()
 	return nil
 }

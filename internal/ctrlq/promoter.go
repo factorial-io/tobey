@@ -11,6 +11,7 @@ package ctrlq
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -22,7 +23,7 @@ var next uint32
 // promoteLoop starts a loop that shovels message from host queue into the
 // default queue. The promoter is responsible for load balancing the host
 // queues.
-func promoteLoop(ctx context.Context, dqueue chan *VisitMessage, hqueues map[uint32]*ControlledQueue, shouldRecalc chan bool) {
+func promoteLoop(ctx context.Context, dqueue chan *VisitMessage, hqueues *sync.Map, shouldRecalc chan bool) {
 	slog.Debug("Work Queue: Starting promoter...")
 
 	for {
@@ -66,9 +67,12 @@ func promoteLoop(ctx context.Context, dqueue chan *VisitMessage, hqueues map[uin
 		n := atomic.AddUint32(&next, 1)
 		key := immediate[(int(n)-1)%len(immediate)]
 
-		hq, _ := hqueues[key]
-		// FIXME: The host queue might haven gone poof in the meantime, we should
-		//        check if the host queue is still there.
+		value, ok := hqueues.Load(key)
+		if !ok {
+			// Queue has gone *poof* in the meantime, recalculate.
+			goto immediatecalc
+		}
+		hq := value.(*ControlledQueue)
 
 		if promote(ctx, hq.Queue, dqueue) {
 			hq.Limiter.ReleaseReservation()
@@ -84,9 +88,9 @@ func promoteLoop(ctx context.Context, dqueue chan *VisitMessage, hqueues map[uin
 // queue is paused (non only the candidates). When no candidate is found, the
 // callee should wait at least for that time and than try and call this function
 // again.
-func candidates(hqueues map[uint32]*ControlledQueue) ([]uint32, time.Time) {
+func candidates(hqueues *sync.Map) ([]uint32, time.Time) {
 	// Host queue candidates that can be queried immediately.
-	immediate := make([]uint32, 0, len(hqueues))
+	immediate := make([]uint32, 0)
 	var shortestPauseUntil time.Time
 
 	// First calculate which host queues are candidates for immediate
@@ -97,14 +101,15 @@ func candidates(hqueues map[uint32]*ControlledQueue) ([]uint32, time.Time) {
 	// FIXME: It might be less expensive to first check for the PausedUntil
 	//        time and then check the length of the queue, depending on the
 	//        underlying implementation of the work queue.
-	for _, hq := range hqueues {
+	hqueues.Range(func(key, value interface{}) bool {
+		hq := value.(*ControlledQueue)
 		hlogger := slog.With("queue.name", hq.Name)
 		hlogger.Debug("Work Queue: Checking if is candidate.", "Queue", hq.String())
 
 		if len(hq.Queue) == 0 {
 			// This host queue is empty, no message to process for that queue,
 			// so don't include it in the immediate list.
-			continue
+			return true // continue iteration
 		}
 		// hlogger.Debug("Work Queue: Host queue has messages to process.")
 
@@ -118,7 +123,7 @@ func candidates(hqueues map[uint32]*ControlledQueue) ([]uint32, time.Time) {
 			// As this host queue is still paused we don't include
 			// it in the imediate list. Continue to check if the
 			// next host queue is paused or not.
-			continue
+			return true // continue iteration
 		}
 
 		// If we get here, the current host queue was either never
@@ -129,7 +134,7 @@ func candidates(hqueues map[uint32]*ControlledQueue) ([]uint32, time.Time) {
 			ok, delay := hq.Limiter.Reserve()
 			if !ok {
 				hlogger.Warn("Work Queue: Rate limiter cannot provide reservation in max wait time.")
-				continue
+				return true // continue iteration
 			}
 
 			if delay > 0 {
@@ -141,11 +146,12 @@ func candidates(hqueues map[uint32]*ControlledQueue) ([]uint32, time.Time) {
 				if shortestPauseUntil.IsZero() || until.Before(shortestPauseUntil) {
 					shortestPauseUntil = until
 				}
-				continue
+				return true // continue iteration
 			}
 		}
-		immediate = append(immediate, hq.ID)
-	}
+		immediate = append(immediate, key.(uint32))
+		return true
+	})
 	return immediate, shortestPauseUntil
 }
 
