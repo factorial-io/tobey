@@ -102,12 +102,12 @@ func (r *Request) AbsoluteURL(u string) string {
 // Visit continues Collector's collecting job by creating a
 // request and preserves the Context of the previous request.
 // Visit also calls the previously provided callbacks
-func (r *Request) Visit(rctx context.Context, URL string) error {
+func (r *Request) Visit(rctx context.Context, URL string) (*Response, error) {
 	return r.collector.scrape(rctx, r.AbsoluteURL(URL), "GET", r.Depth+1, nil, nil)
 }
 
 // Do submits the request
-func (r *Request) Do() error {
+func (r *Request) Do() (*Response, error) {
 	return r.collector.scrape(context.TODO(), r.URL.String(), r.Method, r.Depth, r.Body, *r.Headers)
 }
 

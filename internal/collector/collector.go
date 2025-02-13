@@ -19,14 +19,9 @@ import (
 	whatwgUrl "github.com/nlnwa/whatwg-url/url"
 )
 
-const (
-	FlagNone uint8 = 1 << iota
-	FlagInternal
-)
-
-type EnqueueFn func(ctx context.Context, c *Collector, u string, flags uint8) error // Enqueues a scrape.
-type CollectFn func(ctx context.Context, c *Collector, res *Response, flags uint8)  // Collects the result of a scrape.
-type RobotCheckFn func(agent string, u string) (bool, error)                        // Checks if a URL is allowed by robots.txt.
+type EnqueueFn func(ctx context.Context, c *Collector, u string) error // Enqueues a scrape.
+type CollectFn func(ctx context.Context, c *Collector, res *Response)  // Collects the result of a scrape.
+type RobotCheckFn func(agent string, u string) (ok bool, err error)    // Checks if a URL is allowed by robots.txt. ok is true if allowed.
 
 var WellKnownFiles = []string{"robots.txt", "sitemap.xml", "sitemap_index.xml"}
 
@@ -76,22 +71,11 @@ func NewCollector(
 		if !strings.HasPrefix(u.Scheme, "http") {
 			return
 		}
-		// We currently assume none internal / well known files are discovered via links.
-		enqueue(ctx, c, u.String(), FlagNone)
+		enqueue(ctx, c, u.String())
 	})
 
 	c.OnScraped(func(ctx context.Context, res *Response) {
-		collect(ctx, c, res, FlagNone)
-	})
-
-	// Resolve linked sitemaps.
-	c.OnXML("//sitemap/loc", func(ctx context.Context, e *XMLElement) {
-		slog.Info("Sitemaps: Found linked sitemap.", "url", e.Text)
-		enqueue(ctx, c, e.Text, FlagInternal)
-	})
-	c.OnXML("//urlset/url/loc", func(ctx context.Context, e *XMLElement) {
-		slog.Info("Sitemaps: Found URL in sitemap.", "url", e.Text)
-		enqueue(ctx, c, e.Text, FlagNone)
+		collect(ctx, c, res)
 	})
 
 	c.OnError(func(res *Response, err error) {
@@ -150,25 +134,21 @@ type Collector struct {
 }
 
 func (c *Collector) Enqueue(rctx context.Context, u string) error {
-	return c.enqueueFn(rctx, c, u, 0)
+	return c.enqueueFn(rctx, c, u)
 }
 
-func (c *Collector) EnqueueWithFlags(rctx context.Context, u string, flags uint8) error {
-	return c.enqueueFn(rctx, c, u, flags)
-}
-
-func (c *Collector) Visit(rctx context.Context, URL string) error {
+func (c *Collector) Visit(rctx context.Context, URL string) (*Response, error) {
 	return c.scrape(rctx, URL, "GET", 1, nil, nil)
 }
 
-func (c *Collector) scrape(rctx context.Context, u, method string, depth int, requestData io.Reader, hdr http.Header) error {
+func (c *Collector) scrape(rctx context.Context, u, method string, depth int, requestData io.Reader, hdr http.Header) (*Response, error) {
 	parsedWhatwgURL, err := urlParser.Parse(u)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	parsedURL, err := url.Parse(parsedWhatwgURL.Href(false))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if hdr == nil {
 		hdr = http.Header{}
@@ -176,9 +156,9 @@ func (c *Collector) scrape(rctx context.Context, u, method string, depth int, re
 	if _, ok := hdr["User-Agent"]; !ok {
 		hdr.Set("User-Agent", c.UserAgent)
 	}
-	req, err := http.NewRequest(method, parsedURL.String(), requestData)
+	req, err := http.NewRequestWithContext(rctx, method, parsedURL.String(), requestData)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header = hdr
 	// The Go HTTP API ignores "Host" in the headers, preferring the client
@@ -186,17 +166,13 @@ func (c *Collector) scrape(rctx context.Context, u, method string, depth int, re
 	if hostHeader := hdr.Get("Host"); hostHeader != "" {
 		req.Host = hostHeader
 	}
-	// note: once 1.13 is minimum supported Go version,
-	// replace this with http.NewRequestWithContext
-	req = req.WithContext(rctx)
-	if err := c.requestCheck(parsedURL, method, req.GetBody, depth); err != nil {
-		return err
+	if err := c.requestCheck(req.URL, req.Method, req.GetBody, depth); err != nil {
+		return nil, err
 	}
-	u = parsedURL.String()
-	return c.fetch(rctx, u, method, depth, requestData, hdr, req)
+	return c.fetch(rctx, req.URL.String(), req.Method, depth, requestData, hdr, req)
 }
 
-func (c *Collector) fetch(rctx context.Context, u, method string, depth int, requestData io.Reader, hdr http.Header, req *http.Request) error {
+func (c *Collector) fetch(rctx context.Context, u, method string, depth int, requestData io.Reader, hdr http.Header, req *http.Request) (*Response, error) {
 	request := &Request{
 		URL:       req.URL,
 		Headers:   &req.Header,
@@ -214,7 +190,7 @@ func (c *Collector) fetch(rctx context.Context, u, method string, depth int, req
 	c.handleOnRequest(request)
 
 	if request.abort {
-		return nil
+		return nil, nil
 	}
 
 	if method == "POST" && req.Header.Get("Content-Type") == "" {
@@ -236,14 +212,14 @@ func (c *Collector) fetch(rctx context.Context, u, method string, depth int, req
 		request.ProxyURL = proxyURL
 	}
 	if err := c.handleOnError(response, err, request); err != nil {
-		return err
+		return response, err
 	}
 
 	response.Request = request
 
 	err = response.fixCharset(c.DetectCharset, request.ResponseCharacterEncoding)
 	if err != nil {
-		return err
+		return response, err
 	}
 
 	c.handleOnResponse(response)
@@ -264,7 +240,7 @@ func (c *Collector) fetch(rctx context.Context, u, method string, depth int, req
 
 	c.handleOnScraped(rctx, response)
 
-	return err
+	return response, err
 }
 
 func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func() (io.ReadCloser, error), depth int) error {
@@ -283,23 +259,18 @@ func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Requ
 
 		// Enqueue the new redirect target URL, ensure when the HTTP request is
 		// cancelled, the queuing is not also cancelled.
-		c.EnqueueWithFlags(context.WithoutCancel(req.Context()), req.URL.String(), FlagNone)
+		c.Enqueue(context.WithoutCancel(req.Context()), req.URL.String())
 
 		// This URL was not processed, so we do not want to follow the redirect.
 		return http.ErrUseLastResponse
 	}
 }
 
-func (c *Collector) IsVisitAllowed(in string, flags uint8) (bool, error) {
+func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 	p, err := url.Parse(in)
 	if err != nil {
 		slog.Error("url parse error", in, "")
 		return false, ErrCheckInternal
-	}
-
-	// Internal URLs are always allowed.
-	if flags&FlagInternal != 0 {
-		return true, nil
 	}
 
 	checkDomain := func(u *url.URL) bool {

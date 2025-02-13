@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/saintfish/chardet"
 	"golang.org/x/net/html/charset"
@@ -29,6 +30,9 @@ type Response struct {
 	Request *Request
 	// Headers contains the Response's HTTP headers
 	Headers *http.Header
+
+	// How long it took to perform a request and get this response.
+	Took time.Duration
 }
 
 // Save writes response body to disk

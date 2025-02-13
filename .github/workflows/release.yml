@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Run Tests
+      run: go test -v ./...
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build for Linux
+      run: |
+        GOOS=linux GOARCH=amd64 go build -o tobey-linux-amd64
+        GOOS=linux GOARCH=arm64 go build -o tobey-linux-arm64
+
+    - name: Build for macOS
+      run: |
+        GOOS=darwin GOARCH=amd64 go build -o tobey-darwin-amd64
+        GOOS=darwin GOARCH=arm64 go build -o tobey-darwin-arm64
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          tobey-linux-amd64
+          tobey-linux-arm64
+          tobey-darwin-amd64
+          tobey-darwin-arm64
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

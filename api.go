@@ -1,8 +1,12 @@
 // Copyright 2024 Factorial GmbH. All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"log/slog"
@@ -17,7 +21,7 @@ const (
 )
 
 type AuthConfig struct {
-	Host   string `json:"host"`
+	Host   *Host  `json:"host"`
 	Method string `json:"method"`
 
 	// If method is "basic"
@@ -27,23 +31,37 @@ type AuthConfig struct {
 
 // GetHeader returns the value of the Authorization header for the given
 // authentication configuration.
-func (auth *AuthConfig) GetHeader() (string, bool) {
-	switch auth.Method {
+func (ac *AuthConfig) GetHeader() (string, bool) {
+	switch ac.Method {
 	case AuthMethodBasic:
-		token := fmt.Sprintf("%s:%s", auth.Username, auth.Password)
+		token := fmt.Sprintf("%s:%s", ac.Username, ac.Password)
 		token = base64.StdEncoding.EncodeToString([]byte(token))
 
 		return fmt.Sprintf("Basic %s", token), true
 	default:
-		slog.Warn("Unknown auth method.", "method", auth.Method)
+		slog.Warn("Unknown auth method.", "method", ac.Method)
 		return "", false
 	}
+}
+
+// Hash returns a hash of the authentication configuration. This is used to
+// uniquely identify the configuration.
+func (ac *AuthConfig) Hash() []byte {
+	return sha256.New().Sum([]byte(fmt.Sprintf("%#v", ac)))
+}
+
+// Matches checks if this AuthConfig should be used for the given Host.
+func (ac *AuthConfig) Matches(h *Host) bool {
+	return h.Name == ac.Host.Name && h.Port == ac.Host.Port
 }
 
 type APIRequest struct {
 	// We accept either a valid UUID as a string, or as an integer. If left
 	// empty, we'll generate one.
 	Run string `json:"run_uuid"`
+
+	// Metadata associated with this run that will be included in all results
+	RunMetadata interface{} `json:"run_metadata,omitempty"`
 
 	URL  string   `json:"url"`
 	URLs []string `json:"urls"`
@@ -52,7 +70,7 @@ type APIRequest struct {
 	AllowPaths   []string `json:"paths"`
 	DenyPaths    []string `json:"!paths"`
 
-	WebhookConfig *WebhookConfig `json:"webhook"`
+	WebhookResultStoreConfig *WebhookResultReporterConfig `json:"webhook"`
 
 	// If true, we'll bypass the robots.txt check, however we'll still
 	// download the file to look for sitemaps.
@@ -158,7 +176,7 @@ func (req *APIRequest) GetAuthConfigs() []*AuthConfig {
 
 			config := &AuthConfig{
 				Method:   "basic",
-				Host:     p.Hostname(),
+				Host:     NewHostFromURL(p),
 				Username: p.User.Username(),
 				Password: pass,
 			}
@@ -190,8 +208,8 @@ func (req *APIRequest) Validate() bool {
 			}
 		}
 	}
-	if req.WebhookConfig != nil {
-		if req.WebhookConfig.Endpoint == "" {
+	if req.WebhookResultStoreConfig != nil {
+		if req.WebhookResultStoreConfig.Endpoint == "" {
 			return false
 		}
 	}

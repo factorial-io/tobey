@@ -1,13 +1,19 @@
 // Copyright 2024 Factorial GmbH. All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
+	"os"
+	"strconv"
 	"time"
 
+	"github.com/mariuswilms/tears"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -16,6 +22,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+)
+
+var (
+	tracer = otel.Tracer("tobey")
 )
 
 // Transformer for Opentelemetry
@@ -42,59 +52,37 @@ func (c MapCarrierRabbitmq) Keys() []string {
 	return keys
 }
 
-// setupOTelSDK bootstraps the OpenTelemetry pipeline.
+// StartOTel bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
-	var shutdownFuncs []func(context.Context) error
-
-	// shutdown calls cleanup functions registered via shutdownFuncs.
-	// The errors from the calls are joined.
-	// Each registered cleanup will be invoked once.
-	shutdown = func(ctx context.Context) error {
-		var err error
-		for _, fn := range shutdownFuncs {
-			err = errors.Join(err, fn(ctx))
-		}
-		shutdownFuncs = nil
-		return err
-	}
-
-	// handleErr calls shutdown for cleanup and makes sure that all errors are returned.
-	handleErr := func(inErr error) {
-		err = errors.Join(inErr, shutdown(ctx))
-	}
+func StartOTel(ctx context.Context) (tears.DownFn, error) {
+	tear, down := tears.New()
 
 	// Set up propagator.
 	prop := newPropagator()
 	otel.SetTextMapPropagator(prop)
 
-	if UseTracing {
+	if UseTracing && os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != "" {
 		// Set up trace provider.
 		tracerProvider, erro := newTraceProvider(ctx)
 		if erro != nil {
-			handleErr(err)
-			return
+			return down, erro
 		}
 
-		shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
+		tear(tracerProvider.Shutdown)
 		otel.SetTracerProvider(tracerProvider)
 	}
 
-	if UseMetrics {
+	if UseMetrics && os.Getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") != "" {
 		// Set up meter provider.
 		meterProvider, erra := newMeterProvider(ctx)
 		if erra != nil {
-			handleErr(erra)
-			return
+			return down, erra
 		}
-		shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
+		tear(meterProvider.Shutdown)
 		otel.SetMeterProvider(meterProvider)
 	}
 
-	// TODO do some research
-	//otel.SetLogger(logger.GetBaseLogger().Logger)
-
-	return
+	return down, nil
 }
 
 func newPropagator() propagation.TextMapPropagator {
@@ -144,4 +132,59 @@ func newMeterProvider(ctx context.Context) (*metric.MeterProvider, error) {
 			metric.WithInterval(3*time.Second))),
 	)
 	return meterProvider, nil
+}
+
+// GetEnvString gets the environment variable for a key and if that env-var hasn't been set it returns the default value
+func GetEnvString(key string, defaultVal string) string {
+	value := os.Getenv(key)
+	if len(value) == 0 {
+		value = defaultVal
+	}
+
+	slog.Debug("Set Environment ", "key", key, "value", value)
+
+	return value
+}
+
+// GetEnvBool gets the environment variable for a key and if that env-var hasn't been set it returns the default value
+func GetEnvBool(key string, defaultVal bool) bool {
+	envvalue := os.Getenv(key)
+	value, err := strconv.ParseBool(envvalue)
+	if len(envvalue) == 0 || err != nil {
+		value := defaultVal
+		return value
+	}
+
+	slog.Debug("Set Environment ", "key", key, "value", value)
+
+	return value
+}
+
+// GetEnvInt gets the environment variable for a key and if that env-var hasn't been set it returns the default value. This function is equivalent to ParseInt(s, 10, 0) to convert env-vars to type int
+func GetEnvInt(key string, defaultVal int) int {
+	envvalue := os.Getenv(key)
+	value, err := strconv.Atoi(envvalue)
+
+	if len(envvalue) == 0 || err != nil {
+		value := defaultVal
+		return value
+	}
+
+	slog.Debug("Set Environment ", "key", key, "value", value)
+
+	return value
+}
+
+// GetEnvFloat gets the environment variable for a key and if that env-var hasn't been set it returns the default value. This function uses bitSize of 64 to convert string to float64.
+func GetEnvFloat(key string, defaultVal float64) float64 {
+	envvalue := os.Getenv(key)
+	value, err := strconv.ParseFloat(envvalue, 64)
+	if len(envvalue) == 0 || err != nil {
+		value := defaultVal
+		return value
+	}
+
+	slog.Debug("Set Environment ", "key", key, "value", value)
+
+	return value
 }

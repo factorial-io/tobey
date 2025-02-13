@@ -1,4 +1,7 @@
 // Copyright 2024 Factorial GmbH. All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package main
 
@@ -12,7 +15,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/kos-v/dsnparser"
-	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
@@ -59,29 +61,4 @@ func maybeRedis(ctx context.Context) (*redis.Client, error) {
 		}
 	}
 	return client, nil
-}
-
-func maybeRabbitMQ(ctx context.Context) (*amqp.Connection, error) {
-	dsn, ok := os.LookupEnv("TOBEY_RABBITMQ_DSN")
-	if !ok || dsn == "" {
-		return nil, nil
-	}
-	slog.Debug("Connecting to RabbitMQ...", "dsn", dsn)
-
-	client, err := backoff.RetryNotifyWithData(
-		func() (*amqp.Connection, error) {
-			return amqp.Dial(dsn)
-		},
-		backoff.WithContext(backoff.NewExponentialBackOff(), ctx),
-		func(err error, t time.Duration) {
-			slog.Info("Retrying RabbitMQ connection...", "error", err)
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("ultimately failed retrying RabitMQ connection: %w", err)
-	}
-
-	slog.Debug("Connection to RabbitMQ established :)")
-	return client, nil
-
 }
