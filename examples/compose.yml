@@ -15,6 +15,13 @@ services:
       - TOBEY_RESULTS_URL=disk:///tmp/tobey
     volumes:
       - tobey-cache:/cache
+    # Optional healthcheck.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   redis:
     image: redis:latest

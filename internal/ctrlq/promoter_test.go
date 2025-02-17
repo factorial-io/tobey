@@ -32,7 +32,7 @@ func TestPromoteNothingToRead(t *testing.T) {
 	}
 }
 
-func TestCandidatesNothingToDo(t *testing.T) {
+func TestCandidatesNothingToBeDone(t *testing.T) {
 	hqueues := &sync.Map{}
 
 	hqueues.Store(uint32(1), &ControlledQueue{

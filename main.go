@@ -184,7 +184,7 @@ func main() {
 	runs := NewRunManager(redisconn, robots, sitemaps)
 
 	queue := ctrlq.CreateWorkQueue(redisconn)
-	
+
 	if err := queue.Open(ctx); err != nil {
 		panic(err)
 	}
@@ -207,7 +207,7 @@ func main() {
 		panic(err)
 	}
 
-	workers := CreateVisitWorkersPool(
+	vpool := NewVisitorPool(
 		ctx,
 		NumVisitWorkers,
 		runs,
@@ -215,9 +215,9 @@ func main() {
 		progress,
 		rs,
 	)
-	tear(workers.Wait)
+	tear(vpool.Close)
 
-	// Set up and start the main API server
+	// Set up and start the main API server.
 	slog.Info("Starting HTTP API server...", "host", ListenHost, "port", ListenPort)
 	apiserver := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", ListenHost, ListenPort),
@@ -231,11 +231,12 @@ func main() {
 	}()
 	tear(apiserver.Shutdown)
 
-	// Set up and start the healthcheck server
+	// Set up and start the healthcheck server.
 	slog.Info("Starting HTTP Healthcheck server...", "port", HealthcheckListenPort)
+	healthcheckHandler := setupHealthcheckRoutes(vpool)
 	hcserver := &http.Server{
 		Addr:    fmt.Sprintf(":%d", HealthcheckListenPort),
-		Handler: setupHealthcheckRoutes(),
+		Handler: healthcheckHandler,
 	}
 	go func() {
 		if err := hcserver.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {

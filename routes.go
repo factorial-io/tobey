@@ -119,16 +119,27 @@ func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, progress Progress
 	return otelhttp.NewHandler(apirouter, "get_new_request")
 }
 
-func setupHealthcheckRoutes() http.Handler {
+// setupHealthcheckRoutes sets up a healthcheck route. It is common
+// that a Visitor dies when they are fetching from a misbehaving website.
+func setupHealthcheckRoutes(vpool *VisitorPool) http.Handler {
 	hcrouter := http.NewServeMux()
 
-	// Supports HEAD requests as well.
 	hcrouter.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		r.Body.Close()
 
-		// TODO: Add actual healthchecking logic here.
+		ok, err := vpool.IsHealthy()
+		if !ok {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			if err != nil {
+				fmt.Fprintf(w, "Visitor Pool unhealthy: %s", err)
+			} else {
+				fmt.Fprint(w, "Visitor Pool unhealthy.")
+			}
+			return
+		}
 
+		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "OK")
 	})
 

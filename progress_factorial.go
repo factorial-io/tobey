@@ -26,7 +26,6 @@ type FactorialProgressUpdatePayload struct {
 	Status string `json:"status"` // Changed to string since we're using string representations
 	Run    string `json:"run_uuid"`
 	URL    string `json:"url"`
-	// FIXME: If the service starts supporting accepting run metadata, we can add it here.
 }
 
 // factorialProgressStatus maps internal ProgressStatus to Factorial API string representations.

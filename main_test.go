@@ -32,7 +32,7 @@ func setupTestServer(ctx context.Context, t *testing.T) *httptest.Server {
 		t.Fatal(err)
 	}
 
-	CreateVisitWorkersPool(
+	NewVisitorPool(
 		ctx,
 		1,
 		runs,
