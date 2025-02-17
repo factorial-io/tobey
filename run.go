@@ -45,6 +45,8 @@ type SerializableRun struct {
 	AllowPaths   []string
 	DenyPaths    []string
 
+	UserAgent string
+
 	SkipRobots           bool
 	SkipSitemapDiscovery bool
 
@@ -74,7 +76,7 @@ func (r *Run) ShortID() string {
 
 // GetClient configures and returns the http.Client for the Run.
 func (r *Run) GetClient() *http.Client {
-	return CreateCrawlerHTTPClient(r.getAuthFn())
+	return CreateCrawlerHTTPClient(r.getAuthFn(), r.UserAgent)
 }
 
 // getAuthFn returns a GetAuthFn that can be used to get the auth configuration.
@@ -179,8 +181,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 		getCollectFn(r, rs),
 	)
 
-	// TODO: We should be able to pass these into the NewCollector constructor.
-	c.UserAgent = UserAgent
+	c.UserAgent = r.UserAgent
 	c.AllowDomains = r.AllowDomains
 	c.AllowPaths = r.AllowPaths
 	c.DenyPaths = r.DenyPaths
@@ -199,7 +200,7 @@ func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressRepor
 	// FIXME: This doesn't yet support providing an alternative robots.txt.
 	for _, u := range urls {
 		if isProbablySitemap(u) || isProbablySiteindex(u) {
-			r.sitemaps.Drain(context.WithoutCancel(ctx), r.getAuthFn(), u, c.Enqueue)
+			r.sitemaps.Drain(context.WithoutCancel(ctx), r.getAuthFn(), r.UserAgent, u, c.Enqueue)
 		} else {
 			c.Enqueue(context.WithoutCancel(ctx), u)
 		}
@@ -207,8 +208,8 @@ func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressRepor
 
 	// This only skips *automatic* sitemap discovery, if the user provided sitemaps we still want to crawl them.
 	if !r.SkipSitemapDiscovery {
-		for _, u := range r.sitemaps.Discover(ctx, r.getAuthFn(), urls) {
-			r.sitemaps.Drain(context.WithoutCancel(ctx), r.getAuthFn(), u, c.Enqueue)
+		for _, u := range r.sitemaps.Discover(ctx, r.getAuthFn(), r.UserAgent, urls) {
+			r.sitemaps.Drain(context.WithoutCancel(ctx), r.getAuthFn(), r.UserAgent, u, c.Enqueue)
 		}
 	}
 }

@@ -60,14 +60,14 @@ type getAuthHeaderFn func(context.Context, *url.URL) (string, bool)
 
 // CreateCrawlerHTTPClient creates a new HTTP client configured and optimized for use
 // in crawling actions. It adds caching, tracing, metrics, and authentication support.
-func CreateCrawlerHTTPClient(getAuth GetAuthFn) *http.Client {
+func CreateCrawlerHTTPClient(getAuth GetAuthFn, ua string) *http.Client {
 	return &http.Client{
 		Timeout:   10 * time.Second,
-		Transport: withMiddlewares(http.DefaultTransport, getAuth),
+		Transport: withMiddlewares(http.DefaultTransport, getAuth, ua),
 	}
 }
 
-func CreateRetryingHTTPClient(getAuth GetAuthFn) *http.Client {
+func CreateRetryingHTTPClient(getAuth GetAuthFn, ua string) *http.Client {
 	rc := retryablehttp.NewClient()
 
 	// Fail a little quicker, as the caller might block until
@@ -83,7 +83,7 @@ func CreateRetryingHTTPClient(getAuth GetAuthFn) *http.Client {
 		Timeout: 10 * time.Second,
 		Transport: withMiddlewares(&retryablehttp.RoundTripper{
 			Client: rc,
-		}, getAuth),
+		}, getAuth, ua),
 	}
 }
 
@@ -98,7 +98,7 @@ func CreateRetryingHTTPClient(getAuth GetAuthFn) *http.Client {
 // -> CachingTransport
 // -> t (usually http.DefaultTransport)
 // [endpoint]
-func withMiddlewares(t http.RoundTripper, getAuth GetAuthFn) http.RoundTripper {
+func withMiddlewares(t http.RoundTripper, getAuth GetAuthFn, ua string) http.RoundTripper {
 	if !SkipCache {
 		// Adds caching support to the client. Please note that the cache is a
 		// private cache and will store responses that required authentication
@@ -133,7 +133,10 @@ func withMiddlewares(t http.RoundTripper, getAuth GetAuthFn) http.RoundTripper {
 
 	// Add User-Agent to the transport, these headers should be added
 	// before going through the caching transport.
-	t = &UserAgentTransport{Transport: t}
+	t = &UserAgentTransport{
+		Transport: t,
+		UserAgent: ua,
+	}
 
 	// Any request independent if cached or not should be traced
 	// and have metrics collected.
@@ -161,9 +164,10 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // header to each request.
 type UserAgentTransport struct {
 	Transport http.RoundTripper
+	UserAgent string
 }
 
 func (t *UserAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Add("User-Agent", UserAgent)
+	req.Header.Add("User-Agent", t.UserAgent)
 	return t.Transport.RoundTrip(req)
 }

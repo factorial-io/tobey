@@ -45,7 +45,7 @@ func CreateProgressReporter(dsn string) (ProgressReporter, error) {
 	case "factorial":
 		slog.Info("Progress Reporting: Enabled, using Factorial progress service for updates.", "dsn", dsn)
 		return &FactorialProgressReporter{
-			client: CreateRetryingHTTPClient(NoAuthFn),
+			client: CreateRetryingHTTPClient(NoAuthFn, UserAgent),
 		}, nil
 	case "noop":
 		slog.Info("Progress Reporting: Disabled, not sharing progress updates.")

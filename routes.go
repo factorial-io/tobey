@@ -92,6 +92,8 @@ func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, progress Progress
 				AllowPaths:   req.GetAllowPaths(),
 				DenyPaths:    req.GetDenyPaths(),
 
+				UserAgent: req.GetUserAgent(),
+
 				SkipRobots:           req.SkipRobots,
 				SkipSitemapDiscovery: req.SkipSitemapDiscovery,
 

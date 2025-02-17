@@ -51,6 +51,10 @@ var (
 	// The port where the main HTTP server listens and the API is served, this can
 	// be controlled via the TOBEY_PORT environment variable.
 	ListenPort int = 8080
+
+	// UserAgent to be used with all HTTP requests unless overridden per run.
+	// Can be controlled via TOBEY_USER_AGENT env var.
+	UserAgent = "Tobey/0"
 )
 
 const (
@@ -66,10 +70,6 @@ const (
 	// HostTTL specifies the maximum time a host is kept in memory. After this
 	// time the host is evicted from memory and the cache. The TTL defaults to 365 days.
 	HostTTL = 365 * 24 * time.Hour
-
-	// UserAgent to be used with all HTTP request. The value is set to a
-	// backwards compatible one. Some sites allowwlist this specific user agent.
-	UserAgent = "WebsiteStandardsBot/1.0"
 
 	// HTTPCachePath is the absolute or relative path (to the working
 	// directory) where we store the cache for HTTP responses.
@@ -117,6 +117,11 @@ func configure() {
 	if strings.Contains(v, "pulse") {
 		UsePulse = true
 		slog.Info("High Frequency Metrics (Pulse) enabled.")
+	}
+
+	if v := os.Getenv("TOBEY_USER_AGENT"); v != "" {
+		UserAgent = v
+		slog.Info("Using custom user agent.", "user_agent", UserAgent)
 	}
 
 	// First check command line args, then fall back to env vars

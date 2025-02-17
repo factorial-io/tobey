@@ -44,7 +44,7 @@ type Sitemaps struct {
 
 // Discover sitemaps for the hosts, if the robots.txt has no
 // information about it, fall back to a well known location.
-func (s *Sitemaps) Discover(ctx context.Context, getAuth GetAuthFn, urls []string) []string {
+func (s *Sitemaps) Discover(ctx context.Context, getAuth GetAuthFn, ua string, urls []string) []string {
 	bases := make([]string, 0, len(urls))
 	for _, u := range urls {
 		p, err := url.Parse(u)
@@ -61,7 +61,7 @@ func (s *Sitemaps) Discover(ctx context.Context, getAuth GetAuthFn, urls []strin
 
 	sitemaps := make([]string, 0)
 	for _, base := range bases {
-		urls, err := s.robots.Sitemaps(base, getAuth) // This may block.
+		urls, err := s.robots.Sitemaps(base, getAuth, ua) // This may block.
 
 		if err != nil {
 			slog.Error("Sitemaps: Failed to fetch sitemap URLs, taking a well known location.", "error", err)
@@ -81,8 +81,8 @@ func (s *Sitemaps) Discover(ctx context.Context, getAuth GetAuthFn, urls []strin
 //
 // FIXME: Implement this, might use FFI to use Stephan's Rust sitemap fetcher.
 // FIXME: Implement this as a work process and go through the work queue.
-func (s *Sitemaps) Drain(ctx context.Context, getAuth GetAuthFn, url string, yieldu func(context.Context, string) error) {
-	client := CreateRetryingHTTPClient(getAuth)
+func (s *Sitemaps) Drain(ctx context.Context, getAuth GetAuthFn, ua string, url string, yieldu func(context.Context, string) error) {
+	client := CreateRetryingHTTPClient(getAuth, ua)
 
 	var resolve func(context.Context, string) error
 	resolve = func(ctx context.Context, url string) error {

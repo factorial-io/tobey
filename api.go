@@ -70,6 +70,8 @@ type APIRequest struct {
 	AllowPaths   []string `json:"paths"`
 	DenyPaths    []string `json:"!paths"`
 
+	UserAgent string `json:"user_agent"`
+
 	WebhookResultStoreConfig *WebhookResultReporterConfig `json:"webhook"`
 
 	// If true, we'll bypass the robots.txt check, however we'll still
@@ -184,6 +186,13 @@ func (req *APIRequest) GetAuthConfigs() []*AuthConfig {
 		}
 	}
 	return configs
+}
+
+func (req *APIRequest) GetUserAgent() string {
+	if req.UserAgent != "" {
+		return req.UserAgent
+	}
+	return UserAgent
 }
 
 func (req *APIRequest) Validate() bool {

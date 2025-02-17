@@ -66,27 +66,27 @@ func NewRobots() *Robots {
 }
 
 // Check checks whether the given URL is allowed to be fetched by the given user agent.
-func (r *Robots) Check(u string, getAuth GetAuthFn, agent string) (bool, error) {
+func (r *Robots) Check(u string, getAuth GetAuthFn, ua string) (bool, error) {
 	p, err := url.Parse(u)
 	if err != nil {
 		return false, err
 	}
 
-	robot, err := r.get(NewHostFromURL(p), getAuth)
+	robot, err := r.get(NewHostFromURL(p), getAuth, ua)
 	if err != nil {
 		slog.Info("Robots: Failed to fetch robots.txt file.", "url", u, "error", err)
 	}
-	return robot.TestAgent(agent, u), err
+	return robot.TestAgent(ua, u), err
 }
 
 // Sitemaps returns available sitemap URLs for the given host.
-func (r *Robots) Sitemaps(u string, getAuth GetAuthFn) ([]string, error) {
+func (r *Robots) Sitemaps(u string, getAuth GetAuthFn, ua string) ([]string, error) {
 	p, err := url.Parse(u)
 	if err != nil {
 		return nil, err
 	}
 
-	robot, err := r.get(NewHostFromURL(p), getAuth)
+	robot, err := r.get(NewHostFromURL(p), getAuth, ua)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (r *Robots) Sitemaps(u string, getAuth GetAuthFn) ([]string, error) {
 }
 
 // get ensures that the robots.txt file for the given host is fetched. It will block until.
-func (r *Robots) get(h *Host, getAuth GetAuthFn) (*robotstxt.RobotsData, error) {
+func (r *Robots) get(h *Host, getAuth GetAuthFn, ua string) (*robotstxt.RobotsData, error) {
 	var robot *robotstxt.RobotsData
 	var err error
 	var res *http.Response
@@ -112,7 +112,7 @@ func (r *Robots) get(h *Host, getAuth GetAuthFn) (*robotstxt.RobotsData, error) 
 		return robot, nil
 	}
 
-	client := CreateRetryingHTTPClient(getAuth)
+	client := CreateRetryingHTTPClient(getAuth, ua)
 
 	rurl := fmt.Sprintf("%s://%s/robots.txt", h.PreferredScheme, h.String())
 	hlogger := slog.With("url", rurl, "host.name", h.Name, "host.port", h.Port)

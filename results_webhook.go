@@ -43,7 +43,7 @@ func NewWebhookResultReporter(ctx context.Context, endpoint string) *WebhookResu
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return &WebhookResultReporter{
-			client:             CreateRetryingHTTPClient(NoAuthFn),
+			client:             CreateRetryingHTTPClient(NoAuthFn, UserAgent),
 			defaultEndpoint:    endpoint,
 			allowDynamicConfig: false,
 		}
@@ -57,7 +57,7 @@ func NewWebhookResultReporter(ctx context.Context, endpoint string) *WebhookResu
 	}
 
 	return &WebhookResultReporter{
-		client: CreateRetryingHTTPClient(NoAuthFn),
+		client: CreateRetryingHTTPClient(NoAuthFn, UserAgent),
 
 		defaultEndpoint: cleanEndpoint,
 		// Presence of the query parameter is sufficient to enable dynamic config. This is,

@@ -21,6 +21,7 @@ example configuration that should get you started.
 | `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
 | `TOBEY_SKIP_CACHE` | `false` | `true`, `false`  | Controls caching access. |
 | `TOBEY_WORKERS` | `5` | `1-128` | Controls the number of workers per instance. |
+| `TOBEY_USER_AGENT` | `Tobey/0` | any string | Default User-Agent string used for requests. |
 | `TOBEY_HOST` | empty | i.e. `localhost`, `127.0.0.1` | Host interface to bind the HTTP server to. Empty means listen on all interfaces. Alternatively you can use the `-host` command line flag. |
 | `TOBEY_PORT` | `8080` | `1-65535` | Port to bind the HTTP server to. Alternatively you can use the `-port` command line flag. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
@@ -169,6 +170,18 @@ the URL under the `url` key algonside the entrypoint:
     "https://example.org/sitemap.xml"
   ],
   "skip_sitemap_discovery": true
+}
+```
+
+### User Agents
+
+If a certain website requires a specific user agent string, you can override the
+user agent for a specific run via the `user_agent` field in the crawl request:
+
+```jsonc
+{
+  "url": "https://example.org",
+  "user_agent": "CustomBot/1.0" // Overrides the default user agent for this run
 }
 ```
 
@@ -343,3 +356,6 @@ HTTP basic auth, **it does not support fetching personalized content**. It is
 expected that the website is generally publicly available, and that the content
 is the same for all users. When HTTP basic auth is used by the website it must
 only be so in order to prevent early access.
+
+Per-run user agent strings are only used when visiting a website, they are not
+used, i.e. when forwarding results to a webhook.

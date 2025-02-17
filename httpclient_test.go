@@ -38,7 +38,7 @@ func TestRetryingHTTPClientReturnsResponseOn503(t *testing.T) {
 	}))
 	defer errserver.Close()
 
-	client := CreateRetryingHTTPClient(NoAuthFn)
+	client := CreateRetryingHTTPClient(NoAuthFn, "test")
 
 	resp, err := client.Get(errserver.URL)
 	if err != nil {
