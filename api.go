@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"slices"
+	"os"
 
 	"github.com/google/uuid"
 )

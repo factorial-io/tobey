@@ -273,15 +273,16 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 		return false, ErrCheckInternal
 	}
 
+	// Treats www.domain.tld and domain.tld as equivalent.
 	checkDomain := func(u *url.URL) bool {
 		// Ensure there is at least one domain in the allowlist. Do not treat an
 		// empty allowlist as a wildcard.
-		if c.AllowDomains == nil || len(c.AllowDomains) == 0 {
+		if len(c.AllowDomains) == 0 {
 			slog.Error("No domains have been added to the allowlist.")
 			return false
 		}
 
-		naked := strings.TrimPrefix(p.Hostname(), "www.")
+		naked := strings.TrimPrefix(u.Hostname(), "www.")
 		www := fmt.Sprintf("www.%s", naked)
 
 		for _, allowed := range c.AllowDomains {

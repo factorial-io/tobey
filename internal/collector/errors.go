@@ -11,25 +11,25 @@ import (
 )
 
 var (
-	ErrCheckInternal = errors.New("Internal check error")
+	ErrCheckInternal = errors.New("internal check error")
 
 	// ErrForbiddenDomain is the error thrown if visiting
 	// a domain which is not allowed in AllowedDomains
-	ErrForbiddenDomain = errors.New("Forbidden domain")
-	ErrForbiddenPath   = errors.New("Forbidden path")
+	ErrForbiddenDomain = errors.New("forbidden domain")
+	ErrForbiddenPath   = errors.New("forbidden path")
 
 	// ErrMissingURL is the error type for missing URL errors
-	ErrMissingURL = errors.New("Missing URL")
+	ErrMissingURL = errors.New("missing URL")
 	// ErrMaxDepth is the error type for exceeding max depth
-	ErrMaxDepth = errors.New("Max depth limit reached")
+	ErrMaxDepth = errors.New("max depth limit reached")
 	// ErrForbiddenURL is the error thrown if visiting
 	// a URL which is not allowed by URLFilters
-	ErrForbiddenURL = errors.New("ForbiddenURL")
+	ErrForbiddenURL = errors.New("forbidden URL")
 
 	// ErrRobotsTxtBlocked is the error type for robots.txt errors
 	ErrRobotsTxtBlocked = errors.New("URL blocked by robots.txt")
 	// ErrEmptyProxyURL is the error type for empty Proxy URL list
-	ErrEmptyProxyURL = errors.New("Proxy URL list is empty")
+	ErrEmptyProxyURL = errors.New("proxy URL list is empty")
 	// ErrAbortedAfterHeaders is the error returned when OnResponseHeaders aborts the transfer.
-	ErrAbortedAfterHeaders = errors.New("Aborted after receiving response headers")
+	ErrAbortedAfterHeaders = errors.New("aborted after receiving response headers")
 )
