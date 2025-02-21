@@ -121,13 +121,14 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 
 	res, err := c.Visit(jctx, job.URL)
 
+	// Take samples and metrics for the visit, that should always be done,
+	// regardless of whether the visit was successful or not.
 	if UseMetrics {
 		PromVisitTxns.Inc()
 	}
 	if UsePulse {
 		atomic.AddInt32(&PulseVisitTxns, 1)
 	}
-
 	if res != nil {
 		w.queue.TakeRateLimitHeaders(jctx, job.URL, res.Headers)
 		w.queue.TakeSample(jctx, job.URL, res.StatusCode, err, res.Took)
@@ -135,9 +136,10 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 		w.queue.TakeSample(jctx, job.URL, 0, err, 0)
 	}
 
+	// The happy path.
 	if err == nil {
 		p.Update(jctx, ProgressStateCrawled)
-		jlogger.Info("Visitor: Visited URL.", "took.lifetime", time.Since(job.Created), "took.fetch", res.Took)
+		jlogger.Debug("Visitor: Visited URL.", "took.lifetime", time.Since(job.Created), "took.fetch", res.Took)
 		span.AddEvent("Visitor: Visited URL.", t)
 
 		switch rr := w.results.(type) {
@@ -149,6 +151,7 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 		return nil
 	}
 
+	// The sad path, where the previous error is now interpreted as a fail.
 	span.AddEvent("Visitor: URL visit failed.", t)
 	jlogger.Debug("Visitor: URL visit failed, handling ...", "error", err)
 
@@ -195,8 +198,8 @@ func (w *Visitor) failed(ctx context.Context, job *ctrlq.VisitJob, res *collecto
 		// We have response information, use it to determine the correct error handling in detail.
 		switch res.StatusCode {
 		case 302: // Redirect
-			// When a redirect is encountered, the visit errors out. This is in fact
-			// no an actual error, but just a skip.
+			// When a redirect is encountered, a new URL is enqueued already by the collector. We
+			// don't want to retry this job, so we return CodeIgnore.
 			return CodeIgnore, nil
 		case 404:
 			return CodeIgnore, nil
