@@ -10,21 +10,16 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"runtime"
 	"tobey/internal/collector"
 )
 
 func CreateResultReporter(dsn string) (ResultReporter, error) {
 	if dsn == "" {
+		slog.Info("Result Reporter: Enabling, using disk reporter", "dsn", dsn)
 		config := DiskResultReporterConfig{
 			OutputDir: "results", // Relative to the current working directory.
 		}
-		store, err := NewDiskResultReporter(config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to setup disk result reporter: %w", err)
-		}
-		slog.Info("Result Reporter: Enabled, using disk store", "dsn", dsn)
-		return store, nil
+		return NewDiskResultReporter(config)
 	}
 
 	u, err := url.Parse(dsn)
@@ -34,31 +29,22 @@ func CreateResultReporter(dsn string) (ResultReporter, error) {
 
 	switch u.Scheme {
 	case "disk":
-		path := u.Path
-		if runtime.GOOS == "windows" && len(path) > 0 && path[0] == '/' {
-			path = path[1:] // Remove leading slash on Windows
-		}
-		config := DiskResultReporterConfig{
-			OutputDir: path,
-		}
-		store, err := NewDiskResultReporter(config)
+		slog.Info("Result Reporter: Enabling, using disk reporter", "dsn", dsn)
+		config, err := newDiskResultReporterConfigFromDSN(dsn)
 		if err != nil {
-			return nil, fmt.Errorf("failed to setup disk result reporter: %w", err)
+			return nil, err
 		}
-
-		slog.Info("Result Reporter: Enabled, using disk store", "dsn", dsn)
-		return store, nil
+		return NewDiskResultReporter(config)
 	case "webhook":
-		// Only require host if dynamic config is not enabled
-		if u.Host == "" && u.Query().Get("enable_dynamic_config") == "" {
-			return nil, fmt.Errorf("webhook results store requires a valid host (e.g., webhook://example.com/results) unless dynamic configuration is enabled")
-		}
-		endpoint := fmt.Sprintf("%s://%s%s?%s", "https", u.Host, u.Path, u.RawQuery)
+		slog.Info("Result Reporter: Enabling, using webhook reporter", "dsn", dsn)
 
-		slog.Info("Result Reporter: Enabled, using webhook reporter", "dsn", dsn)
-		return NewWebhookResultReporter(context.Background(), endpoint), nil
+		config, err := newWebhookResultReporterConfigFromDSN(dsn)
+		if err != nil {
+			return nil, err
+		}
+		return NewWebhookResultReporter(context.Background(), config)
 	case "noop":
-		slog.Info("Result Reporter: Disabled, using noop reporter")
+		slog.Info("Result Reporter: Disabling, using noop reporter")
 		return &NoopResultReporter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported results store type: %s", u.Scheme)

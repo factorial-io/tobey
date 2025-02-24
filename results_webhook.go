@@ -18,7 +18,26 @@ import (
 
 // WebhookResultReporterConfig defines the configuration for webhook endpoints
 type WebhookResultReporterConfig struct {
-	Endpoint string `json:"endpoint"`
+	Endpoint           string `json:"endpoint"`
+	AllowDynamicConfig bool   `json:"allow_dynamic_config"`
+}
+
+func newWebhookResultReporterConfigFromDSN(dsn string) (WebhookResultReporterConfig, error) {
+	config := WebhookResultReporterConfig{}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return config, fmt.Errorf("invalid webhook endpoint: %w", err)
+	}
+
+	config.AllowDynamicConfig = u.Query().Get("enable_dynamic_config") != ""
+	config.Endpoint = fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+
+	// Only require host if dynamic config is not enabled.
+	if u.Host == "" && !config.AllowDynamicConfig {
+		return config, fmt.Errorf("webhook results store requires a valid host (e.g., https://example.com/results) unless dynamic configuration is enabled")
+	}
+	return config, nil
 }
 
 // WebhookResultReporter implements ResultsStore by sending results to a webhook endpoint.
@@ -39,31 +58,12 @@ type WebhookResult struct {
 	ResponseStatusCode int         `json:"response_status_code"`
 }
 
-func NewWebhookResultReporter(ctx context.Context, endpoint string) *WebhookResultReporter {
-	u, err := url.Parse(endpoint)
-	if err != nil {
-		return &WebhookResultReporter{
-			client:             CreateRetryingHTTPClient(NoAuthFn, UserAgent),
-			defaultEndpoint:    endpoint,
-			allowDynamicConfig: false,
-		}
-	}
-
-	// If dynamic config is enabled, we don't require a default endpoint.
-	var cleanEndpoint string
-	if u.Host != "" {
-		u.RawQuery = ""
-		cleanEndpoint = u.String()
-	}
-
+func NewWebhookResultReporter(ctx context.Context, config WebhookResultReporterConfig) (*WebhookResultReporter, error) {
 	return &WebhookResultReporter{
-		client: CreateRetryingHTTPClient(NoAuthFn, UserAgent),
-
-		defaultEndpoint: cleanEndpoint,
-		// Presence of the query parameter is sufficient to enable dynamic config. This is,
-		// so we don't need to check what counts as boolean true, i.e. "true", "1", "yes", etc.
-		allowDynamicConfig: u.Query().Get("enable_dynamic_config") != "",
-	}
+		client:             CreateRetryingHTTPClient(NoAuthFn, UserAgent),
+		defaultEndpoint:    config.Endpoint,
+		allowDynamicConfig: config.AllowDynamicConfig,
+	}, nil
 }
 
 // Accept implements ResultsStore.Accept by sending results to a webhook endpoint

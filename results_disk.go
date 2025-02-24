@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"tobey/internal/collector"
@@ -19,6 +20,20 @@ import (
 
 type DiskResultReporterConfig struct {
 	OutputDir string `json:"output_dir"`
+}
+
+func newDiskResultReporterConfigFromDSN(dsn string) (DiskResultReporterConfig, error) {
+	config := DiskResultReporterConfig{}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return config, fmt.Errorf("invalid disk result reporter DSN: %w", err)
+	}
+
+	// FIXME: No windows support yet, would need to remove leading slash.
+	config.OutputDir = u.Path
+
+	return config, nil
 }
 
 // DiskResultReporter stores results on disk as JSON files. Results are grouped by run
@@ -43,12 +58,9 @@ type DiskResult struct {
 }
 
 func NewDiskResultReporter(config DiskResultReporterConfig) (*DiskResultReporter, error) {
-	if config.OutputDir != "" {
-		if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create output directory: %w", err)
-		}
+	if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
-
 	return &DiskResultReporter{
 		outputDir: config.OutputDir,
 	}, nil
