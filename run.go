@@ -50,7 +50,7 @@ type SerializableRun struct {
 	SkipRobots           bool
 	SkipSitemapDiscovery bool
 
-	WebhookConfig *WebhookResultReporterConfig
+	ResultReporterDSN string
 }
 
 // LiveRun is a live version of the Run struct. It contains data that should not
@@ -91,7 +91,7 @@ func (r *Run) getAuthFn() GetAuthFn {
 	}
 }
 
-func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressReporter, rs ResultReporter) *collector.Collector {
+func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr ResultReporter, p ProgressReporter) *collector.Collector {
 	// getEnqueueFn returns the enqueue function, that will enqueue a single URL to
 	// be crawled. The enqueue function is called whenever a new URL is discovered
 	// by that Collector, i.e. by looking at all links in a crawled page HTML.
@@ -149,8 +149,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 	// getCollectFn returns the collect function that is called once we have a
 	// result. Uses the information provided in the original crawl request, i.e. the
 	// WebhookConfig, that we have received via the queued message.
-	getCollectFn := func(run *Run, rs ResultReporter) collector.CollectFn {
-
+	getCollectFn := func(run *Run) collector.CollectFn {
 		// The returned function takes the run context.
 		return func(ctx context.Context, c *collector.Collector, res *collector.Response) {
 			slog.Debug(
@@ -160,8 +159,16 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 				"response.body.length", len(res.Body),
 				"response.status", res.StatusCode,
 			)
-			if run.WebhookConfig != nil && run.WebhookConfig.Endpoint != "" {
-				rs.Accept(ctx, run.WebhookConfig, run, res)
+
+			if DynamicConfig && run.ResultReporterDSN != "" {
+				rr, err := CreateResultReporter(ctx, run.ResultReporterDSN, run, res)
+				if err != nil {
+					slog.Error("Failed to create report result function.", "error", err)
+				} else {
+					rr(ctx, run, res)
+				}
+			} else {
+				rr(ctx, run, res) // Use the default result reporter.
 			}
 		}
 	}
@@ -178,7 +185,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 			return r.robots.Check(u, r.getAuthFn(), a)
 		},
 		getEnqueueFn(r, q, p),
-		getCollectFn(r, rs),
+		getCollectFn(r),
 	)
 
 	c.UserAgent = r.UserAgent
@@ -191,8 +198,8 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, p Progre
 
 // Start starts the crawl with the given URLs. It will discover sitemaps and
 // enqueue the URLs. From there on more URLs will be discovered and enqueued.
-func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, p ProgressReporter, rs ResultReporter, urls []string) {
-	c := r.GetCollector(ctx, q, p, rs)
+func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, rr ResultReporter, p ProgressReporter, urls []string) {
+	c := r.GetCollector(ctx, q, rr, p)
 
 	// Decide where the initial URLs should go, users may provide sitemaps and
 	// just URLs to web pages.

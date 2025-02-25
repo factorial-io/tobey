@@ -72,8 +72,6 @@ type APIRequest struct {
 
 	UserAgent string `json:"user_agent"`
 
-	WebhookResultStoreConfig *WebhookResultReporterConfig `json:"webhook"`
-
 	// If true, we'll bypass the robots.txt check, however we'll still
 	// download the file to look for sitemaps.
 	SkipRobots bool `json:"skip_robots"`
@@ -84,6 +82,9 @@ type APIRequest struct {
 
 	// A list of authentication configurations, that are used in the run.
 	AuthConfigs []*AuthConfig `json:"auth"`
+
+	// The DSN of the result reporter to use as dynamic configuration.
+	ResultReporterDSN string `json:"result_reporter_dsn"`
 }
 
 func (req *APIRequest) GetRun() (string, error) {
@@ -215,11 +216,6 @@ func (req *APIRequest) Validate() bool {
 			if err != nil {
 				return false
 			}
-		}
-	}
-	if req.WebhookResultStoreConfig != nil {
-		if req.WebhookResultStoreConfig.Endpoint == "" {
-			return false
 		}
 	}
 	return true

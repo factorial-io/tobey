@@ -20,8 +20,8 @@ func NewVisitorPool(
 	num int,
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
-	pr ProgressReporter,
 	rr ResultReporter,
+	pr ProgressReporter,
 ) *VisitorPool {
 	pool := &VisitorPool{
 		startWorkersNum: num,
@@ -34,8 +34,8 @@ func NewVisitorPool(
 			id:       i,
 			runs:     runs,
 			queue:    q,
+			result:   rr,
 			progress: pr,
-			results:  rr,
 			logger:   slog.With("worker.id", i),
 		}
 		pool.workers = append(pool.workers, worker)

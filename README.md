@@ -234,22 +234,26 @@ the results to a configured webhook endpoint. [Webhooks](https://mailchimp.com/e
 TOBEY_RESULTS_DSN=webhook://example.org/webhook
 ```
 
-For the webhook method, **dynamic re-configuration** is supported. This means that you 
-configure the webhook endpoint on a per-request basis. Dynamic re-configuration is disabled
-by default, for security reasons. It can be enabled by adding `enable_dynamic_config` to the DSN, if
-can you trust the users that submit the crawl requests, i.e. if tobey is deployed as an internal service.
+### Dynamic Re-configuration
+
+Tobey supports dynamic re-configuration of the result reporter at runtime. This
+means that you can change the result reporter configuration while the crawler is
+running. This is useful if you want to change the result reporter configuration
+while the crawler is running.
+
+**Dynamic re-configuration is disabled by default, for security reasons. Enable only if you can trust the users that submit the crawl requests, i.e. if tobey is deployed as an internal service.**
+
 
 ```sh
-TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config # with default endpoint
-TOBEY_RESULTS_DSN=webhook://?enable_dynamic_config # without default endpoint
+TOBEY_DYNAMIC_CONFIG=yes
 ```
 
-You can than specify the webhook endpoint in the crawl request:
+You can than use the `results_dsn` field in the crawl request to specify varying webhook endpoints:
 
 ```jsonc 
 {
   "url": "https://example.org",
-  "results_dsn": "webhook://example.org/webhook"
+  "result_reporter_dsn": "webhook://example.org/webhook"
 }
 ```
 

@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, progress ProgressReporter, rs ResultReporter) http.Handler {
+func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, rr ResultReporter, progress ProgressReporter) http.Handler {
 	apirouter := http.NewServeMux()
 
 	apirouter.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +97,7 @@ func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, progress Progress
 				SkipRobots:           req.SkipRobots,
 				SkipSitemapDiscovery: req.SkipSitemapDiscovery,
 
-				WebhookConfig: req.WebhookResultStoreConfig,
+				ResultReporterDSN: req.ResultReporterDSN,
 			},
 		}
 
@@ -105,7 +105,7 @@ func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, progress Progress
 		// we start publishing to the work queue.
 		runs.Add(reqctx, run)
 
-		go run.Start(reqctx, queue, progress, rs, req.GetURLs(true))
+		go run.Start(reqctx, queue, rr, progress, req.GetURLs(true))
 
 		result := &APIResponse{
 			Run: run.ID,

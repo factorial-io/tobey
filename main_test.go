@@ -22,9 +22,9 @@ func setupTestServer(ctx context.Context, t *testing.T) *httptest.Server {
 		t.Fatal(err)
 	}
 
-	rs, err := CreateResultReporter("noop://")
+	defaultrr, err := CreateResultReporter(ctx, "noop://", nil, nil)
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
 
 	progress, err := CreateProgressReporter("noop://")
@@ -37,11 +37,11 @@ func setupTestServer(ctx context.Context, t *testing.T) *httptest.Server {
 		1,
 		runs,
 		queue,
+		defaultrr,
 		progress,
-		rs,
 	)
 
-	return httptest.NewServer(setupRoutes(runs, queue, progress, rs))
+	return httptest.NewServer(setupRoutes(runs, queue, defaultrr, progress))
 }
 
 // TestCrawlRequestSubmission tries to perform a full integration test. On one

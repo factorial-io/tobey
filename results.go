@@ -8,49 +8,47 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"tobey/internal/collector"
 )
 
-func CreateResultReporter(dsn string) (ResultReporter, error) {
+// ResultReporter is a function type that can be used to report the result of a crawl. It comes
+// with a preconfigured config.
+type ResultReporter func(ctx context.Context, run *Run, res *collector.Response) error
+
+// CreateResultReporter creates a ResultReporter from a DSN.
+func CreateResultReporter(ctx context.Context, dsn string, run *Run, res *collector.Response) (ResultReporter, error) {
 	if dsn == "" {
-		slog.Info("Result Reporter: Enabling, using disk reporter", "dsn", dsn)
-		config := DiskResultReporterConfig{
-			OutputDir: "results", // Relative to the current working directory.
-		}
-		return NewDiskResultReporter(config)
+		config, err := newDiskResultReporterConfigFromDSN(dsn)
+
+		return func(ctx context.Context, run *Run, res *collector.Response) error {
+			return ReportResultToDisk(ctx, config, run, res)
+		}, err
 	}
 
 	u, err := url.Parse(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("invalid results DSN: %w", err)
+		return nil, fmt.Errorf("invalid result reporter DSN: %w", err)
 	}
 
 	switch u.Scheme {
 	case "disk":
-		slog.Info("Result Reporter: Enabling, using disk reporter", "dsn", dsn)
 		config, err := newDiskResultReporterConfigFromDSN(dsn)
-		if err != nil {
-			return nil, err
-		}
-		return NewDiskResultReporter(config)
+
+		return func(ctx context.Context, run *Run, res *collector.Response) error {
+			return ReportResultToDisk(ctx, config, run, res)
+		}, err
 	case "webhook":
-		slog.Info("Result Reporter: Enabling, using webhook reporter", "dsn", dsn)
-
 		config, err := newWebhookResultReporterConfigFromDSN(dsn)
-		if err != nil {
-			return nil, err
-		}
-		return NewWebhookResultReporter(context.Background(), config)
-	case "noop":
-		slog.Info("Result Reporter: Disabling, using noop reporter")
-		return &NoopResultReporter{}, nil
-	default:
-		return nil, fmt.Errorf("unsupported results store type: %s", u.Scheme)
-	}
-}
 
-type ResultReporter interface {
-	Accept(ctx context.Context, config any, run *Run, res *collector.Response) error
+		return func(ctx context.Context, run *Run, res *collector.Response) error {
+			return ReportResultToWebhook(ctx, config, run, res)
+		}, err
+	case "noop":
+		return func(ctx context.Context, run *Run, res *collector.Response) error {
+			return ReportResultToNoop(ctx, nil, run, res)
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported result reporter type: %s", u.Scheme)
+	}
 }

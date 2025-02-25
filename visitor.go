@@ -30,12 +30,14 @@ const (
 // Visitor is the main "work horse" of the crawler. It consumes jobs from the
 // work queue and processes them with the help of the Collector.
 type Visitor struct {
-	id       int
-	runs     *RunManager
-	queue    ctrlq.VisitWorkQueue
+	id    int
+	runs  *RunManager
+	queue ctrlq.VisitWorkQueue
+
+	result   ResultReporter
 	progress ProgressReporter
-	results  ResultReporter
-	logger   *slog.Logger
+
+	logger *slog.Logger
 }
 
 // Code is used when handling failed visits.
@@ -114,11 +116,12 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	// yet have a collector available via the Manager. Please note that Collectors
 	// are not shared by the Manager across tobey instances.
 	r, _ := w.runs.Get(ctx, job.Run)
-	c := r.GetCollector(ctx, w.queue, w.progress, w.results)
+	c := r.GetCollector(ctx, w.queue, w.result, w.progress)
 	p := w.progress.With(r, job.URL)
 
 	p.Update(jctx, ProgressStateCrawling)
 
+	// This will also call the ResultReporter.Accept method, via the collector.CollectFn.
 	res, err := c.Visit(jctx, job.URL)
 
 	// Take samples and metrics for the visit, that should always be done,
@@ -141,13 +144,6 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 		p.Update(jctx, ProgressStateCrawled)
 		jlogger.Debug("Visitor: Visited URL.", "took.lifetime", time.Since(job.Created), "took.fetch", res.Took)
 		span.AddEvent("Visitor: Visited URL.", t)
-
-		switch rr := w.results.(type) {
-		case *WebhookResultReporter:
-			rr.Accept(jctx, r.WebhookConfig, r, res)
-		case *DiskResultReporter:
-			rr.Accept(jctx, nil, r, res)
-		}
 		return nil
 	}
 

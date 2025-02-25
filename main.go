@@ -8,15 +8,12 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"time"
 	"tobey/internal/ctrlq"
 
@@ -25,7 +22,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 )
 
-// These variables can be controlled via environment variables.
+// These variables can be controlled via environment variables and are set
+// via configure().
 var (
 	// Debug enables or disables debug mode, this can be controlled
 	// via the environment variable TOBEY_DEBUG.
@@ -34,14 +32,6 @@ var (
 	// SkipCache disables caching when true. It can be controlled via the
 	// TOBEY_SKIP_CACHE environment variable.
 	SkipCache = false
-
-	// These can be controlled via the TOBEY_TELEMETRY environment variable.
-	UseTracing = false
-	UseMetrics = false
-	UsePulse   = false // High Frequency Metrics can be enabled by adding "pulse".
-
-	// NumVisitWorkers hard codes the number of workers we start at startup.
-	NumVisitWorkers int = 5
 
 	// ListenHost is the host where the main HTTP server listens and the API is served,
 	// this can be controlled via the TOBEY_HOST environment variable. An empty
@@ -52,9 +42,22 @@ var (
 	// be controlled via the TOBEY_PORT environment variable.
 	ListenPort int = 8080
 
+	// NumVisitWorkers hard codes the number of workers we start at startup.
+	NumVisitWorkers int = 5
+
 	// UserAgent to be used with all HTTP requests unless overridden per run.
 	// Can be controlled via TOBEY_USER_AGENT env var.
 	UserAgent = "Tobey/0"
+
+	// DynamicConfig allows the user to reconfigure i.e. the result reporter
+	// at runtime via the API. This should only be enabled if the users of the API
+	// can be fully trusted!
+	DynamicConfig = false
+
+	// These can be controlled via the TOBEY_TELEMETRY environment variable.
+	UseTracing = false
+	UseMetrics = false
+	UsePulse   = false // High Frequency Metrics can be enabled by adding "pulse".
 )
 
 const (
@@ -81,66 +84,6 @@ const (
 	// PulseEndpoint is the endpoint where we send the high frequency metrics.
 	PulseEndpoint = "http://localhost:8090"
 )
-
-func configure() {
-	// Add command line flag parsing
-	var flagHost string
-	var flagPort int
-
-	flag.StringVar(&flagHost, "host", "", "Host interface to bind the HTTP server to")
-	flag.IntVar(&flagPort, "port", 0, "Port to bind the HTTP server to")
-	flag.Parse()
-
-	if os.Getenv("TOBEY_DEBUG") == "true" {
-		Debug = true
-	}
-	if os.Getenv("TOBEY_SKIP_CACHE") == "true" {
-		SkipCache = true
-		slog.Info("Skipping cache.")
-	}
-	if v := os.Getenv("TOBEY_WORKERS"); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil {
-			panic(err)
-		}
-		NumVisitWorkers = p
-	}
-	v := os.Getenv("TOBEY_TELEMETRY")
-	if strings.Contains(v, "traces") || strings.Contains(v, "tracing") {
-		UseTracing = true
-		slog.Info("Tracing enabled.")
-	}
-	if strings.Contains(v, "metrics") {
-		UseMetrics = true
-		slog.Info("Metrics enabled.")
-	}
-	if strings.Contains(v, "pulse") {
-		UsePulse = true
-		slog.Info("High Frequency Metrics (Pulse) enabled.")
-	}
-
-	if v := os.Getenv("TOBEY_USER_AGENT"); v != "" {
-		UserAgent = v
-		slog.Info("Using custom user agent.", "user_agent", UserAgent)
-	}
-
-	// First check command line args, then fall back to env vars
-	if flagHost != "" {
-		ListenHost = flagHost
-	} else if v := os.Getenv("TOBEY_HOST"); v != "" {
-		ListenHost = v
-	}
-
-	if flagPort != 0 {
-		ListenPort = flagPort
-	} else if v := os.Getenv("TOBEY_PORT"); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil {
-			panic(err)
-		}
-		ListenPort = p
-	}
-}
 
 func main() {
 	slog.Info("Tobey starting...")
@@ -197,12 +140,9 @@ func main() {
 		tear(queue.Close)
 	}
 
-	if _, ok := os.LookupEnv("TOBEY_RESULTS_DSN"); !ok {
-		if _, ok := os.LookupEnv("TOBEY_RESULT_DSN"); ok {
-			slog.Debug("You have a typo in your env var: TOBEY_RESULTS_DSN is not set, but TOBEY_RESULT_DSN is set. Please use TOBEY_RESULTS_DSN instead.")
-		}
-	}
-	rs, err := CreateResultReporter(os.Getenv("TOBEY_RESULTS_DSN"))
+	// Set up the default result reporter. If dynamic config is enabled, we
+	// will use the API to change the result reporter at runtime.
+	defaultrr, err := CreateResultReporter(ctx, os.Getenv("TOBEY_RESULT_REPORTER_DSN"), nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -217,8 +157,8 @@ func main() {
 		NumVisitWorkers,
 		runs,
 		queue,
+		defaultrr,
 		progress,
-		rs,
 	)
 	tear(vpool.Close)
 
@@ -226,7 +166,7 @@ func main() {
 	slog.Info("Starting HTTP API server...", "host", ListenHost, "port", ListenPort)
 	apiserver := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", ListenHost, ListenPort),
-		Handler: setupRoutes(runs, queue, progress, rs),
+		Handler: setupRoutes(runs, queue, defaultrr, progress),
 	}
 	go func() {
 		if err := apiserver.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
