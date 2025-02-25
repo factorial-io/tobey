@@ -17,10 +17,11 @@ func configure() {
 	flag.IntVar(&flagPort, "port", 0, "Port to bind the HTTP server to")
 	flag.Parse()
 
-	if os.Getenv("TOBEY_DEBUG") == "true" {
+	if isForgivingTrue(os.Getenv("TOBEY_DEBUG")) {
 		Debug = true
+		slog.Info("Debug mode enabled.")
 	}
-	if os.Getenv("TOBEY_SKIP_CACHE") == "true" {
+	if isForgivingTrue(os.Getenv("TOBEY_SKIP_CACHE")) {
 		SkipCache = true
 		slog.Info("Skipping cache.")
 	}
@@ -56,7 +57,7 @@ func configure() {
 		slog.Info("Using custom user agent.", "user_agent", UserAgent)
 	}
 
-	if v := os.Getenv("TOBEY_DYNAMIC_CONFIG"); v == "true" || v == "yes" || v == "y" || v == "on" {
+	if isForgivingTrue(os.Getenv("TOBEY_DYNAMIC_CONFIG")) {
 		DynamicConfig = true
 		slog.Info("Dynamic configuration enabled!")
 	}
@@ -74,4 +75,9 @@ func configure() {
 		UsePulse = true
 		slog.Info("High Frequency Metrics (Pulse) enabled.")
 	}
+}
+
+func isForgivingTrue(v string) bool {
+	v = strings.ToLower(v)
+	return v == "true" || v == "yes" || v == "y" || v == "on"
 }
