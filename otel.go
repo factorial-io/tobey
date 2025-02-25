@@ -8,9 +8,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/mariuswilms/tears"
@@ -93,10 +91,17 @@ func newPropagator() propagation.TextMapPropagator {
 }
 
 func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
+	getEnvString := func(key string, defaultVal string) string {
+		value := os.Getenv(key)
+		if len(value) == 0 {
+			value = defaultVal
+		}
+		return value
+	}
 
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceName(GetEnvString("OTEL_SERVICE_NAME", "tobey")),
+			semconv.ServiceName(getEnvString("OTEL_SERVICE_NAME", "tobey")),
 		),
 	)
 	if err != nil {
@@ -132,59 +137,4 @@ func newMeterProvider(ctx context.Context) (*metric.MeterProvider, error) {
 			metric.WithInterval(3*time.Second))),
 	)
 	return meterProvider, nil
-}
-
-// GetEnvString gets the environment variable for a key and if that env-var hasn't been set it returns the default value
-func GetEnvString(key string, defaultVal string) string {
-	value := os.Getenv(key)
-	if len(value) == 0 {
-		value = defaultVal
-	}
-
-	slog.Debug("Set Environment ", "key", key, "value", value)
-
-	return value
-}
-
-// GetEnvBool gets the environment variable for a key and if that env-var hasn't been set it returns the default value
-func GetEnvBool(key string, defaultVal bool) bool {
-	envvalue := os.Getenv(key)
-	value, err := strconv.ParseBool(envvalue)
-	if len(envvalue) == 0 || err != nil {
-		value := defaultVal
-		return value
-	}
-
-	slog.Debug("Set Environment ", "key", key, "value", value)
-
-	return value
-}
-
-// GetEnvInt gets the environment variable for a key and if that env-var hasn't been set it returns the default value. This function is equivalent to ParseInt(s, 10, 0) to convert env-vars to type int
-func GetEnvInt(key string, defaultVal int) int {
-	envvalue := os.Getenv(key)
-	value, err := strconv.Atoi(envvalue)
-
-	if len(envvalue) == 0 || err != nil {
-		value := defaultVal
-		return value
-	}
-
-	slog.Debug("Set Environment ", "key", key, "value", value)
-
-	return value
-}
-
-// GetEnvFloat gets the environment variable for a key and if that env-var hasn't been set it returns the default value. This function uses bitSize of 64 to convert string to float64.
-func GetEnvFloat(key string, defaultVal float64) float64 {
-	envvalue := os.Getenv(key)
-	value, err := strconv.ParseFloat(envvalue, 64)
-	if len(envvalue) == 0 || err != nil {
-		value := defaultVal
-		return value
-	}
-
-	slog.Debug("Set Environment ", "key", key, "value", value)
-
-	return value
 }
