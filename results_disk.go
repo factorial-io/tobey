@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"tobey/internal/collector"
 )
 
@@ -36,6 +37,22 @@ func newDiskResultReporterConfigFromDSN(dsn string) (DiskResultReporterConfig, e
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return config, fmt.Errorf("invalid disk result reporter DSN: %w", err)
+	}
+
+	// Ensure the output directory is below the current working directory. It must
+	// not be above the current working directory, to prevent directory traversal
+	// attacks. Allow absolute paths, as long as they resolve to a directory above
+	// the current working directory.
+	wd, err := os.Getwd()
+	if err != nil {
+		return config, fmt.Errorf("invalid disk result reporter DSN: %w", err)
+	}
+	abs, err := filepath.Abs(u.Path)
+	if err != nil {
+		return config, fmt.Errorf("invalid disk result reporter DSN: %w", err)
+	}
+	if !strings.HasPrefix(abs, wd) {
+		return config, fmt.Errorf("output directory (%s) must be below the current working directory (%s)", abs, wd)
 	}
 
 	// FIXME: No windows support yet, would need to remove leading slash.
