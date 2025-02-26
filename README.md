@@ -7,7 +7,7 @@ rate limiting, distributed coordination, and flexible deployment options.
 
 ```sh
 go run . # Start the crawler.
-curl -X POST http://127.0.0.1:8080 https://www.example.org/ # Submit a crawl request.
+curl -X POST http://127.0.0.1:8080 -d 'https://www.example.org/' # Submit a crawl request.
 ```
 
 ## Configuration
