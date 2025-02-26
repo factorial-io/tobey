@@ -27,6 +27,9 @@ const (
 	MaxJobRetries = 3
 )
 
+type PauseFn func(url string, d time.Duration) error
+type RepublishFn func(job *ctrlq.VisitJob) error
+
 // Visitor is the main "work horse" of the crawler. It consumes jobs from the
 // work queue and processes them with the help of the Collector.
 type Visitor struct {
@@ -151,7 +154,19 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	span.AddEvent("Visitor: URL visit failed.", t)
 	jlogger.Debug("Visitor: URL visit failed, handling ...", "error", err)
 
-	code, herr := w.failed(jctx, job, res, err)
+	code, herr := handleFailedVisit(
+		jctx,
+		func(url string, d time.Duration) error {
+			return w.queue.Pause(jctx, url, d)
+		},
+		func(job *ctrlq.VisitJob) error {
+			return w.queue.Republish(jctx, job)
+		},
+		job,
+		res,
+		err,
+	)
+
 	switch code {
 	case CodeIgnore:
 		p.Update(jctx, ProgressStateCancelled)
@@ -184,16 +199,16 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	}
 }
 
-// failed handles failed URL visits. This handler has two return values.
+// handleFailedVisit handles failed URL visits. This handler has two return values.
 // One returns the status code indicating *how* and if the fail was handled. The other return value
 // is an error, if one occurred during handling. An error means the fail was not handled
-// properly and the handling failed.
-func (w *Visitor) failed(ctx context.Context, job *ctrlq.VisitJob, res *collector.Response, err error) (Code, error) {
+// properly.
+func handleFailedVisit(ctx context.Context, pause PauseFn, republish RepublishFn, job *ctrlq.VisitJob, res *collector.Response, err error) (Code, error) {
 	attemptRepublish := func() (Code, error) {
 		if job.Retries >= MaxJobRetries {
 			return CodePermanent, fmt.Errorf("maximum retries reached")
 		}
-		if err := w.queue.Republish(ctx, job); err != nil {
+		if err := republish(job); err != nil {
 			return CodeUnhandled, fmt.Errorf("failed to republish job: %w", err)
 		}
 		return CodeTemporary, nil
@@ -217,7 +232,7 @@ func (w *Visitor) failed(ctx context.Context, job *ctrlq.VisitJob, res *collecto
 			// are not critical.
 			if v := res.Headers.Get("Retry-After"); v != "" {
 				d, _ := time.ParseDuration(v + "s")
-				w.queue.Pause(ctx, res.Request.URL.String(), d)
+				pause(res.Request.URL.String(), d)
 			}
 			return attemptRepublish()
 		default:
