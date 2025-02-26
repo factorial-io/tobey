@@ -44,10 +44,10 @@ func setupTestServer(ctx context.Context, t *testing.T) *httptest.Server {
 	return httptest.NewServer(setupRoutes(runs, queue, defaultrr, progress))
 }
 
-// TestCrawlRequestSubmission tries to perform a full integration test. On one
+// TestSmokeCrawlRequestSubmission tries to perform a full integration test. On one
 // hand side we have an instance of tobey on the other hand we have a crawl
 // target. We then start the crawl and check if the results are as expected.
-func TestCrawlRequestSubmission(t *testing.T) {
+func TestSmokeCrawlRequestSubmission(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -151,96 +151,3 @@ func TestCrawlRequestSubmission(t *testing.T) {
 		}
 	}
 }
-
-/*
-func TestCrawlErrorConditions(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Create a test target server that simulates error conditions
-	targets := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/503":
-			w.Header().Set("Retry-After", "120")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte("Service Unavailable"))
-		case "/slow":
-			time.Sleep(120 * time.Millisecond) // Using shorter time for tests
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer targets.Close()
-
-	tobeys := setupTestServer(ctx, t)
-	defer tobeys.Close()
-
-	// Test 503 response
-	t.Run("503 Response", func(t *testing.T) {
-		client := &http.Client{}
-		req, err := http.NewRequestWithContext(ctx, "POST", tobeys.URL, bytes.NewBufferString(targets.URL+"/503"))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		res, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer res.Body.Close()
-
-		if res.StatusCode != http.StatusOK {
-			t.Errorf("Expected status OK for crawl submission, got %v", res.Status)
-		}
-
-		var apires APIResponse
-		if err := json.NewDecoder(res.Body).Decode(&apires); err != nil {
-			t.Fatal(err)
-		}
-
-		// Wait a moment for the crawl to be processed
-		time.Sleep(200 * time.Millisecond)
-
-		// TODO: Add specific assertions about how Tobey should handle 503 responses
-		// For example, check if it respects the Retry-After header
-		// or if it marks the run appropriately in the status
-	})
-
-	// Test slow response
-	t.Run("Slow Response", func(t *testing.T) {
-		client := &http.Client{}
-		req, err := http.NewRequestWithContext(ctx, "POST", tobeys.URL, bytes.NewBufferString(targets.URL+"/slow"))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		res, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer res.Body.Close()
-
-		if res.StatusCode != http.StatusOK {
-			t.Errorf("Expected status OK for crawl submission, got %v", res.Status)
-		}
-
-		var apires APIResponse
-		if err := json.NewDecoder(res.Body).Decode(&apires); err != nil {
-			t.Fatal(err)
-		}
-
-		// Wait a moment for the crawl to be processed
-		time.Sleep(200 * time.Millisecond)
-
-		// TODO: Add specific assertions about how Tobey should handle slow responses
-		// For example, check if it respects timeout settings
-		// or if it marks the run appropriately in the status
-	})
-}
-*/
