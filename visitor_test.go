@@ -16,7 +16,7 @@ import (
 	"tobey/internal/ctrlq"
 )
 
-func createResponse(statusCode int, headers ...string) *collector.Response {
+func createTestResponse(statusCode int, headers ...string) *collector.Response {
 	var h *http.Header
 	if len(headers) > 0 {
 		if len(headers)%2 != 0 {
@@ -54,7 +54,7 @@ func TestHandleFailedVisit(t *testing.T) {
 	}{
 		{
 			name:            "301 redirect",
-			response:        createResponse(301),
+			response:        createTestResponse(301),
 			expectedCode:    CodeIgnore,
 			expectedError:   false,
 			expectPause:     false,
@@ -62,7 +62,7 @@ func TestHandleFailedVisit(t *testing.T) {
 		},
 		{
 			name:            "404 not found",
-			response:        createResponse(404),
+			response:        createTestResponse(404),
 			expectedCode:    CodeIgnore,
 			expectedError:   false,
 			expectPause:     false,
@@ -70,7 +70,7 @@ func TestHandleFailedVisit(t *testing.T) {
 		},
 		{
 			name:            "500 internal server error - first retry",
-			response:        createResponse(500),
+			response:        createTestResponse(500),
 			retries:         0,
 			expectedCode:    CodeTemporary,
 			expectedError:   false,
@@ -79,7 +79,7 @@ func TestHandleFailedVisit(t *testing.T) {
 		},
 		{
 			name:            "500 internal server error - max retries exceeded",
-			response:        createResponse(500),
+			response:        createTestResponse(500),
 			retries:         MaxJobRetries,
 			expectedCode:    CodePermanent,
 			expectedError:   true,
@@ -88,7 +88,7 @@ func TestHandleFailedVisit(t *testing.T) {
 		},
 		{
 			name:            "503 service unavailable with retry-after",
-			response:        createResponse(503, "Retry-After", "60"),
+			response:        createTestResponse(503, "Retry-After", "60"),
 			expectedCode:    CodeTemporary,
 			expectedError:   false,
 			expectPause:     true,
@@ -105,7 +105,7 @@ func TestHandleFailedVisit(t *testing.T) {
 		},
 		{
 			name:            "unknown status code",
-			response:        createResponse(418), // I'm a teapot
+			response:        createTestResponse(418), // I'm a teapot
 			expectedCode:    CodeUnknown,
 			expectedError:   false,
 			expectPause:     false,
@@ -149,7 +149,6 @@ func TestHandleFailedVisit(t *testing.T) {
 			}
 
 			code, err := handleFailedVisit(
-				context.Background(),
 				pauseFn,
 				republishFn,
 				job,

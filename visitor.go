@@ -155,7 +155,6 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	jlogger.Debug("Visitor: URL visit failed, handling ...", "error", err)
 
 	code, herr := handleFailedVisit(
-		jctx,
 		func(url string, d time.Duration) error {
 			return w.queue.Pause(jctx, url, d)
 		},
@@ -203,7 +202,7 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 // One returns the status code indicating *how* and if the fail was handled. The other return value
 // is an error, if one occurred during handling. An error means the fail was not handled
 // properly.
-func handleFailedVisit(ctx context.Context, pause PauseFn, republish RepublishFn, job *ctrlq.VisitJob, res *collector.Response, err error) (Code, error) {
+func handleFailedVisit(pause PauseFn, republish RepublishFn, job *ctrlq.VisitJob, res *collector.Response, err error) (Code, error) {
 	attemptRepublish := func() (Code, error) {
 		if job.Retries >= MaxJobRetries {
 			return CodePermanent, fmt.Errorf("maximum retries reached")
