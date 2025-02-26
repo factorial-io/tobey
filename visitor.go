@@ -158,10 +158,19 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 		span.End()
 		return nil
 	case CodeTemporary:
-		// Leave job in "Crawling" state, and process it later.
+		// Leave job in "Crawling" state, and process it later. It should've
+		// been republished already.
 		span.End()
-		return nil // continue processing next job.
-	default: // covers CodeUnknown, CodeUnhandled, CodePermanent
+		return nil
+	case CodePermanent:
+		p.Update(jctx, ProgressStateErrored)
+		span.End()
+		return nil
+	case CodeUnknown:
+		p.Update(jctx, ProgressStateErrored)
+		span.End()
+		return nil
+	default: // covers CodeUnhandled
 		jlogger.Error(
 			"Visitor: Handling the failed visit error'ed.",
 			"code", code,
@@ -171,7 +180,7 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 		p.Update(jctx, ProgressStateErrored)
 		span.RecordError(herr)
 		span.End()
-		return herr // stop retrying processing this job.
+		return herr // Exit the worker.
 	}
 }
 
@@ -182,7 +191,7 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 func (w *Visitor) failed(ctx context.Context, job *ctrlq.VisitJob, res *collector.Response, err error) (Code, error) {
 	attemptRepublish := func() (Code, error) {
 		if job.Retries >= MaxJobRetries {
-			return CodeUnhandled, fmt.Errorf("maximum retries reached")
+			return CodePermanent, fmt.Errorf("maximum retries reached")
 		}
 		if err := w.queue.Republish(ctx, job); err != nil {
 			return CodeUnhandled, fmt.Errorf("failed to republish job: %w", err)
@@ -193,15 +202,15 @@ func (w *Visitor) failed(ctx context.Context, job *ctrlq.VisitJob, res *collecto
 	if res != nil {
 		// We have response information, use it to determine the correct error handling in detail.
 		switch res.StatusCode {
-		case 302: // Redirect
+		case 301, 302: // Redirect
 			// When a redirect is encountered, a new URL is enqueued already by the collector. We
 			// don't want to retry this job, so we return CodeIgnore.
 			return CodeIgnore, nil
 		case 404:
 			return CodeIgnore, nil
-		case 429: // Too Many Requests
+		case 500, 504: // Internal Server Error
 			return attemptRepublish()
-		case 503: // Service Unavailable
+		case 429, 503: // Too Many Requests, Service Unavailable
 			// Additionally want to retrieve the Retry-After header here and wait for that amount of time, if
 			// we just have to wait than don't error out but reschedule the job and wait. In order to not do
 			// that infinitely, we should have a maximum number of retries. Handling of Retry-After header is optional, so errors here
@@ -212,7 +221,7 @@ func (w *Visitor) failed(ctx context.Context, job *ctrlq.VisitJob, res *collecto
 			}
 			return attemptRepublish()
 		default:
-			return CodeUnhandled, fmt.Errorf("unhandled failed visit, unknown status code: %d", res.StatusCode)
+			return CodeUnknown, nil
 		}
 	} else if errors.Is(err, context.DeadlineExceeded) {
 		// We react to timeouts as a temporary issue and retry the job, similary
