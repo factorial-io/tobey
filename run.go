@@ -42,13 +42,9 @@ type SerializableRun struct {
 	AuthConfigs []*AuthConfig
 
 	AllowDomains []string
-	AllowPaths   []string
-	DenyPaths    []string
+	IgnorePaths  []string
 
 	UserAgent string
-
-	SkipRobots           bool
-	SkipSitemapDiscovery bool
 
 	ResultReporterDSN string
 }
@@ -179,9 +175,6 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr Resul
 		// must ensure that this Client isn't shared with i.e. the Robots instance.
 		r.GetClient(),
 		func(a string, u string) (bool, error) {
-			if r.SkipRobots {
-				return true, nil
-			}
 			return r.robots.Check(u, r.getAuthFn(), a)
 		},
 		getEnqueueFn(r, q, p),
@@ -190,8 +183,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr Resul
 
 	c.UserAgent = r.UserAgent
 	c.AllowDomains = r.AllowDomains
-	c.AllowPaths = r.AllowPaths
-	c.DenyPaths = r.DenyPaths
+	c.IgnorePaths = r.IgnorePaths
 
 	return c
 }
@@ -213,11 +205,8 @@ func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, rr ResultReport
 		}
 	}
 
-	// This only skips *automatic* sitemap discovery, if the user provided sitemaps we still want to crawl them.
-	if !r.SkipSitemapDiscovery {
-		for _, u := range r.sitemaps.Discover(ctx, r.getAuthFn(), r.UserAgent, urls) {
-			r.sitemaps.Drain(context.WithoutCancel(ctx), r.getAuthFn(), r.UserAgent, u, c.Enqueue)
-		}
+	for _, u := range r.sitemaps.Discover(ctx, r.getAuthFn(), r.UserAgent, urls) {
+		r.sitemaps.Drain(context.WithoutCancel(ctx), r.getAuthFn(), r.UserAgent, u, c.Enqueue)
 	}
 }
 

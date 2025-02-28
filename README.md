@@ -1,59 +1,29 @@
 # Tobey, a throughput optimizing web crawler
 
-Tobey is a throughput optimizing web crawler, that is scalable from a single instance to a cluster. It features intelligent 
-rate limiting, distributed coordination, and flexible deployment options.
+Tobey is a throughput optimizing but friendly web crawler, that is scalable from a single instance to a cluster. It features intelligent rate limiting, distributed coordination, and flexible deployment options. Tobey honors resource exclusions in a robots.txt and tries its best not to overwhelm a host.
 
-## Running Tobey
+## Getting Started
 
 ```sh
 go run . # Start the crawler.
 curl -X POST http://127.0.0.1:8080 -d 'https://www.example.org/' # Submit a crawl request.
 ```
 
-## Configuration
+## Submitting Crawl Requests
 
-Tobey is configured with sane defaults, which means it will work out of the box. If you need to configure it, you 
-can do so via environment variables. The following variables are available. Please also see `.env.example` for a working
-example configuration that should get you started.
+Tobey accepts crawl requests at the `/` endpoint. 
 
-| Variable Name  | Default Value  | Supported Values | Description                      |
-|----------------|----------------|------------------|----------------------------------|
-| `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
-| `TOBEY_SKIP_CACHE` | `false` | `true`, `false`  | Controls caching access. |
-| `TOBEY_WORKERS` | `5` | `1-128` | Controls the number of workers per instance. |
-| `TOBEY_USER_AGENT` | `Tobey/0` | any string | Default User-Agent string used for requests. |
-| `TOBEY_HOST` | empty | i.e. `localhost`, `127.0.0.1` | Host interface to bind the HTTP server to. Empty means listen on all interfaces. Alternatively you can use the `-host` command line flag. |
-| `TOBEY_PORT` | `8080` | `1-65535` | Port to bind the HTTP server to. Alternatively you can use the `-port` command line flag. |
-| `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance. Only needed when operating multiple instances. |
-| `TOBEY_PROGRESS_DSN` | empty | `factorial://host:port` | DSN for progress reporting service. When configured, Tobey will send progress updates there. The factorial scheme enables progress updates to a Factorial progress service. Use noop:// to explicitly disable progress updates. |
-| `TOBEY_RESULTS_DSN` | `disk://results` | `disk:///path`, `webhook://host/path` | DSN specifying where crawl results should be stored. Use disk:// for local filesystem storage, webhook:// to forward results to an HTTP endpoint, or noop:// to discard results. |
-| `TOBEY_TELEMETRY` | empty | i.e. `metrics traces` | Space separated list of what kind of telemetry is emitted. |
+### Targets
 
-On top of these variables, the service's telemetry
-feature can be configured via the commonly known 
-[OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/). 
+ A target serves as the entrypoint of the crawling process. Using the entrypoint resources will be automatically discovered, by extracting links from scraped web pages and using a sitemap, if one is available. 
 
-## Providing Crawl Targets
-
-### Submitting a Basic Crawl Request
-
-Tobey currently has a single API endpoint to receive crawl requests: `/`.
-
-In its most simple form you submit a single URL that is used as the entry
-point to for the crawling process. This will discover further resource URLs to
-crawl automatically by looking at the sitemap - if one is available - and by
-extracting links for content of the webpages.
+For each crawl request tobey requires at least one or multiple target URLs. These can be specified under the `url` and `urls` using JSON property accordingly:
 
 ```jsonc
 {
   "url": "https://example.org"
 }
 ```
-
-### Multiple URLs
-
-Multiple URLs either as entrypoints or for oneshot downloading work a well,
-using the `urls` key:
 
 ```jsonc
 {
@@ -62,23 +32,35 @@ using the `urls` key:
     "https://example.org/values"
   ]
 }
+
+As a shorthand you can also provide targets as plaintext, multiple targets are specified
+as a newline delimited list of URLs:
+
+```
+https://example.org
+...
 ```
 
+### Sitemaps
 
-### Authentication
-
-When the target you want to crawl requires authentication, you can provide
-the credentials for HTTP basic auth in the URL. The crawler will use these
-credientials for all resources under the same domain for that run.
+Sitemaps are along the provided target URL another entrypoint to discover more URLs to scrape. Tobey
+will automatically discover sitemaps from well known locations. You can also provide them yourself
+alongside the target URLs.
 
 ```jsonc
 {
-  "url": "https://foo:secret@example.org"
+  "urls": [
+    "https://example.org", 
+    "https://example.org/i-am-also-a-sitemap.xml"
+  ],
 }
 ```
 
-When you want to provide the credentials in a more structured way, you can do so
-by providing the `auth` key:
+### Authentication
+
+Access restricted targets, that require authentication can be crawled as well. Credentials can be provided along your crawl request using the `auth` property. The crawler will authenticate any resources using provided credentials for the same host of the target, it wont use it for other hosts.
+
+_Note:_ Currently tobey supports only HTTP basic authentication. 
 
 ```jsonc
 {
@@ -89,118 +71,31 @@ by providing the `auth` key:
 }
 ```
 
-### Domain Constraints
+As a shorthand and for HTTP Basic Auth you can provide the credentials alongside a target URL as well:
 
-By default and when crawling a whole website tobey will only download resources
-from the host as provided in the URL, this is so we don't end up downloading the
-whole internet. You may additionally provide host domains that are an alias to
-the URLs domain that we will download from.
-
-Please note that it's enough to provide the "naked" version of the domain
-without the "www" subdomain. Providing "example.org" implies "www.example.org"
-as well as all other subdomains. Providing a domain with "www." prefix will also
-allow the naked domain (and all its subdomains).
-
-```jsonc
-{
-  "url": "https://example.org",
-  "domains": [ // Works as an allow list.
-    "example.org", // Only crawl on these domains...
-    "example.com", // Entirely different domain, but same content.
-  ]
-}
 ```
-
-### Path Constraints
-
-To skip resources with certain paths, you may provide a list of literal path
-segments to include or skip via the `paths` or `!paths` key. The path segments
-may appear anywhere in the full URL path. Alternatively to literal fragments
-you may also use regular expressions.
-
-```jsonc
-{
-  "url": "https://example.org",
-  "paths": [
-    "/en/", // Only crawl resources under /en/.
-  ],
-  "!paths": [
-    "/search/", // Do not crawl search resources.
-  ]
-}
-```
-
-As you can see positive and negative path constraints can be combined. With the options
-given above, `/en/about-us/` would be crawled, but not `/en/search/` and not `/blog/article`.
-
-### Bypassing robots.txt
-
-When running certain tests you might want to bypass the robots.txt file. You can
-do so by providing the `skip_robots` key:
-
-```jsonc
-{
-  "url": "https://example.org",
-  "skip_robots": true
-}
-```
-
-### Sitemaps
-
-Tobey will automatically discover and use a sitemap if one is available, either
-by looking at well known locations or by looking at the robots.txt.
-
-If you don't want the crawler to use sitemaps at all, you may disable this
-behavior by providing the `skip_sitemap_discovery` key:
-
-```jsonc
-{
-  "url": "https://example.org",
-  "skip_sitemap_discovery": true
-}
-```
-
-If you prefer to provide the sitemap URL yourself, you may do so by providing
-the URL under the `url` key algonside the entrypoint:
-
-```jsonc
-{
-  "urls": [
-    "https://example.org", 
-    "https://example.org/sitemap.xml"
-  ],
-  "skip_sitemap_discovery": true
-}
+https://foo:secret@example.org
 ```
 
 ### User Agents
 
 If a certain website requires a specific user agent string, you can override the
-user agent for a specific run via the `user_agent` field in the crawl request:
+default user agent (`Tobey/0`) for a specific run via the `ua` field in the crawl request:
 
 ```jsonc
 {
   "url": "https://example.org",
-  "user_agent": "CustomBot/1.0" // Overrides the default user agent for this run
+  "ua": "CustomBot/1.0" // Overrides the default user agent for this run.
 }
 ```
 
-## Triggering Runs
+#### Attaching Metadata
 
-Each time you submit a URL to be crawled, a _Run_ is internally created. Tobey
-automatically creates a unique run UUID as **a run identifier** for you. You may
-specify your own run UUID as well. 
+Arbitrary metadata can be provided along your crawl request. This metadata is internally
+associated with the run that is created for your request and will be part of each
+result coming from that run.
 
-```jsonc
-{
-  "url": "https://example.org",
-  "run_uuid": "0033085c-685b-432a-9aa4-0aca59cc3e12" // optional
-  // ...
-}
-```
-
-You may also attach metadata to a run. This metadata will be attached to all results
-from that run. 
+Submit metadata using the `metadata` option:
 
 ```jsonc
 {
@@ -213,42 +108,136 @@ from that run.
 }
 ```
 
+Find the metadata under the `run_metadata` key, when collecting results. Read more about the results format,
+under _Collecting Results_ below.
+
+```jsonc
+{
+  "run": "...",
+  "run_metadata": { /* find your metadata here */ }
+  // ... 
+}
+```
+
+### Scope Control
+
+By default crawling is constrained to the host as provided in the target URL. 
+This is great if you don't want to end up crawling the whole internet, yet. If you want
+to change this behavior and widen or tighten your crawl, read on.
+
+#### Domain Aliases
+
+By default only a target's domain is allowed. Sometimes a crawl target is available under several aliased domains. In this case you want to use the `aliases` property to add the aliased
+domains as well:
+
+```jsonc
+{
+  "url": "https://example.org",
+  "aliases": [ 
+    "example.com", // Entirely different domain, but same content.
+  ]
+}
+```
+
+_Note:_ It's enough to provide the "naked" version of the domain
+without the "www" subdomain. Providing "example.org" implies "www.example.org"
+as well as all other subdomains. Providing a domain with "www." prefix will also
+allow the naked domain (and all its subdomains).
+
+#### Ignore Paths
+
+To skip resources with certain path segments, the `ignores` option can be used. This
+is a gitignore-style list of paths or [match patterns](https://github.com/bmatcuk/doublestar?tab=readme-ov-file#patterns). 
+
+In first example `/search` as well as `/en/search` and everything below would **not** be crawled. In the second example
+only `/en` and everything below **will** be crawled.
+
+```jsonc
+{
+  "url": "https://example.org",
+  // ...
+  "ignores": [
+    "search/"
+  ]
+}
+```
+
+```jsonc
+{
+  "url": "https://example.org",
+  // ...
+  "ignores": [
+    "/*" // First, ignore everything, turning the following into an allow list.
+    "!/en" // Allow everything below /en
+  ]
+}
+```
+
+## Tracking Progress
+
+Tobey can report progress while it's crawling. This is useful for monitoring the
+progress of a crawl and for debugging and determine when a crawl has finished. By 
+default this feature is disabled.
+
+### Progress Reporters
+
+```sh
+TOBEY_PROGRESS_DSN=factorial://host:port # To report progress to the Factorial progress service.
+TOBEY_PROGRESS_DSN=console # To report progress to the console.
+```
+
 ## Collecting Results
 
+Once a crawl request is started being processed, and web pages scraped, results will become available as the processing continues. A result
+usually contains the following data, its exact format depends a little bit on the chose result reporter, see below.
+
+```jsonc
+{
+  "run": "0033085c-685b-432a-9aa4-0aca59cc3e12",
+  "run_metadata": {
+    "internal_project_reference": 42,
+    "triggered_by": "user@example.org"
+  },
+  // "disovered_by": ["sitemap"] // TODO: How the resource was discovered, i.e. sitemap, robots, link.
+  "request_url": "http://...", 
+  "response_body": "...", // Base64 encoded raw response body received when downloading the resource.
+  // ... 
+}
+```
+
+### Result Reporters
+
 Tobey currently supports multiple methods to handle results. You can either store
-them locally on disk, or forward them to a webhook endpoint. Additionaly results
-can also be discarded, this is useful for testing.
+them locally on disk, or forward them to a webhook endpoint.
 
 When you configure the crawler to **store results on disk**, it will save the results
-to the local filesystem. The results are saved in the same directory as the crawl
-request.
+to the local filesystem. By default the results are saved in the same directory as the crawl
+request if not otherwise configured.
 
 ```sh
-TOBEY_RESULTS_DSN=disk:///path/to/results
+TOBEY_RESULT_REPORTER_DSN=disk:///path/to/results
 ```
 
-When you configure the crawler to **forward results to a webhook**, it will deliver
-the results to a configured webhook endpoint. [Webhooks](https://mailchimp.com/en/marketing-glossary/webhook) are a technique to notify other services about a result, once its ready.
+[Webhooks](https://mailchimp.com/en/marketing-glossary/webhook) are a technique to notify other services about a result, once its ready. 
+When you configure the crawler to **forward results to a webhook**, it will deliver the results to a configured webhook endpoint. 
 
 ```sh
-TOBEY_RESULTS_DSN=webhook://example.org/webhook
+TOBEY_RESULT_REPORTER_DSN=webhook://example.org/webhook
 ```
 
-### Dynamic Re-configuration
+#### Dynamic Re-configuration
 
 Tobey supports dynamic re-configuration of the result reporter at runtime. This
 means that you can change the result reporter configuration while the crawler is
-running. This is useful if you want to change the result reporter configuration
-while the crawler is running.
+running. 
 
 **Dynamic re-configuration is disabled by default, for security reasons. Enable only if you can trust the users that submit the crawl requests, i.e. if tobey is deployed as an internal service.**
-
 
 ```sh
 TOBEY_DYNAMIC_CONFIG=yes
 ```
 
-You can than use the `results_dsn` field in the crawl request to specify varying webhook endpoints:
+You can than use the `result_reporter_dsn` field in the crawl request to specify varying webhook endpoints:
 
 ```jsonc 
 {
@@ -257,34 +246,26 @@ You can than use the `results_dsn` field in the crawl request to specify varying
 }
 ```
 
-### Results Format
+## Configuration
 
-A _Result_ is an object that contains the result of a crawl request alongside
-the metadata of the run, see _Runs_ above for more details.
+Using sane defaults, tobey works out of the box without additional configuration. If you want to configure it,
+the following environment variables and/or command line flags can be used. Please also see `.env.example` for a working
+example configuration.
 
-```jsonc
-{
-  "run_uuid": "0033085c-685b-432a-9aa4-0aca59cc3e12",
-  "run_metadata": {
-    "internal_project_reference": 42,
-    "triggered_by": "user@example.org"
-  },
-  "request_url": "http://...", 
-  "response_body": "...", // Base64 encoded raw response body received when downloading the resource.
-  // ... 
-}
-```
+| Variable / Flag   | Default  | Supported Values | Description                      |
+|----------------|----------------|------------------|----------------------------------|
+| `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
+| `TOBEY_SKIP_CACHE` | `false` | `true`, `false`  | Controls caching access. |
+| `TOBEY_UA` | `Tobey/0` | any string | User-Agent to identify with. |
+| `TOBEY_HOST`, `-host` | empty | i.e. `localhost`, `127.0.0.1` | Adress to bind the HTTP server to. Empty means listen on all. |
+| `TOBEY_PORT`, `-port` | `8080` | `1-65535` | Port to bind the HTTP server to. Alternatively you can use the `-port` command line flag. |
+| `TOBEY_WORKERS` | `5` | `1-128` | Nnumber of workers per instance. |
+| `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance for coordinting multiple instances. |
+| `TOBEY_PROGRESS_DSN` | `noop://` | `factorial://host:port`, `console://`, `noop://` | DSN for progress reporting service. |
+| `TOBEY_RESULT_REPORTER_DSN` | `disk://results` | `disk:///path`, `webhook://host/path`, `noop://` | DSN specifying where crawl results should be stored. |
+| `TOBEY_TELEMETRY` | empty | `metrics`, `traces`, `pulse` | Space separated list of what kind of telemetry is emitted. |
 
-## Progress Reporting
-
-Tobey can report progress while it's crawling. This is useful for monitoring the
-progress of a crawl and for debugging and determine when a crawl has finished. By 
-default this feature is disabled.
-
-```sh
-TOBEY_PROGRESS_DSN=factorial://host:port # To report progress to the Factorial progress service.
-TOBEY_PROGRESS_DSN=console # To report progress to the console.
-```
+_Note:_ When enabling telemetry ensure you are also providing [OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
 ## Deployment Options
 
@@ -297,12 +278,49 @@ easiest way to get started.
 
 ### Stateless Operation
 
-It is possible to configure and use Tobey in a stateless manner. In this operation mode
-you'll specify configuration on a per-run basis, and not statically via a configuration file. Choosing 
-the webhook results store will forward results to a webhook endpoint without storing them locally.
+At Factorial Tobey is used by different services that need to crawl websites. The services 
+collect the results on their side, or at a service that is part of their specific pipeline. 
+
+Here tobey is configured to allow dynamic configuration, so individual services that submit
+crawl requests, provide information on where the results should go.
 
 ```sh
-TOBEY_RESULTS_DSN=webhook://example.org/webhook?enable_dynamic_config
+TOBEY_DYNAMIC_CONFIG=yes
+TOBEY_RESULT_REPORTER_DSN=
+```
+
+```jsonc
+{
+  "url": "https://example.org",
+  "result_reporter_dsn": "webhook://my-internal-service/crawl-webhook"
+}
+```
+
+### Pipelined Operation
+
+At Factorial we use Tobey as part of a multi-stepped pipeline. Within these pipelines runs are performed 
+and tracked. At the top of the pipeline a run UUID is generated by a service and subsequently passed 
+along each step. For this reason tobey accepts a custom run UUID, when submitting a crawl request.
+
+```jsonc
+{
+  "url": "...",
+  "run": "0033085c-685b-432a-9aa4-0aca59cc3e12"
+  // ...
+}
+```
+
+The results of the run will carry the ID under the `run` or `run_uuid` property, depending on the chosen
+result reporter.
+
+```jsonc
+{
+  "run": "0033085c-685b-432a-9aa4-0aca59cc3e12",
+  // ...
+  "request_url": "http://...", 
+  "response_body": "...",
+  // ... 
+}
 ```
 
 ### Distributed Operation

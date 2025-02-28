@@ -40,9 +40,12 @@ func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, rr ResultReporter
 
 		var req APIRequest
 		if bytes.HasPrefix(body, []byte("http://")) || bytes.HasPrefix(body, []byte("https://")) {
-			// As a special case, and to support minimalism, we allow directly
-			// posting a single URL.
-			req.URL = string(body)
+			// Support both single URL and newline-delimited URLs in plaintext for minimalism.
+			urls := bytes.Split(bytes.TrimSpace(body), []byte("\n"))
+
+			for _, url := range urls {
+				req.URLs = append(req.URLs, string(bytes.TrimSpace(url)))
+			}
 		} else {
 			err := json.Unmarshal(body, &req)
 			if err != nil {
@@ -89,13 +92,9 @@ func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, rr ResultReporter
 				AuthConfigs: req.GetAuthConfigs(),
 
 				AllowDomains: req.GetAllowDomains(),
-				AllowPaths:   req.GetAllowPaths(),
-				DenyPaths:    req.GetDenyPaths(),
+				IgnorePaths:  req.GetIgnorePaths(),
 
 				UserAgent: req.GetUserAgent(),
-
-				SkipRobots:           req.SkipRobots,
-				SkipSitemapDiscovery: req.SkipSitemapDiscovery,
 
 				ResultReporterDSN: req.ResultReporterDSN,
 			},

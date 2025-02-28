@@ -66,19 +66,10 @@ type APIRequest struct {
 	URL  string   `json:"url"`
 	URLs []string `json:"urls"`
 
-	AllowDomains []string `json:"domains"`
-	AllowPaths   []string `json:"paths"`
-	DenyPaths    []string `json:"!paths"`
+	AliasedDomains []string `json:"aliases"`
+	IgnorePaths    []string `json:"ignores"`
 
-	UserAgent string `json:"user_agent"`
-
-	// If true, we'll bypass the robots.txt check, however we'll still
-	// download the file to look for sitemaps.
-	SkipRobots bool `json:"skip_robots"`
-
-	// If true we'll not use any sitemaps found automatically, only those that
-	// have been explicitly provided.
-	SkipSitemapDiscovery bool `json:"skip_sitemap_discovery"`
+	UserAgent string `json:"ua"`
 
 	// A list of authentication configurations, that are used in the run.
 	AuthConfigs []*AuthConfig `json:"auth"`
@@ -126,37 +117,33 @@ func (req *APIRequest) GetURLs(clean bool) []string {
 }
 
 func (req *APIRequest) GetAllowDomains() []string {
-	// Ensure at least the URL host is in allowed domains.
 	var domains []string
-	if req.AllowDomains != nil {
-		domains = req.AllowDomains
-	} else {
-		for _, u := range req.GetURLs(false) {
-			p, err := url.Parse(u)
-			if err != nil {
-				slog.Error("Failed to parse URL from request, not allowing that domain.", "url", u, "error", err)
-				continue
-			}
-			domains = append(domains, p.Hostname())
+
+	// The domains of the targets are allways allowed.
+	for _, u := range req.GetURLs(false) {
+		p, err := url.Parse(u)
+		if err != nil {
+			slog.Error("Failed to parse URL from request, not allowing that domain.", "url", u, "error", err)
+			continue
 		}
+		domains = append(domains, p.Hostname())
 	}
+
+	if req.AliasedDomains != nil {
+		domains = append(domains, req.AliasedDomains...)
+	}
+
 	return domains
 }
 
-func (req *APIRequest) GetAllowPaths() []string {
+func (req *APIRequest) GetIgnorePaths() []string {
 	var paths []string
 
-	if req.AllowPaths != nil {
-		paths = req.AllowPaths
+	if req.IgnorePaths == nil {
+		return paths
 	}
-	return paths
-}
-
-func (req *APIRequest) GetDenyPaths() []string {
-	var paths []string
-
-	if req.DenyPaths != nil {
-		paths = req.DenyPaths
+	for _, p := range req.IgnorePaths {
+		paths = append(paths, p)
 	}
 	return paths
 }
@@ -227,15 +214,4 @@ type APIResponse struct {
 
 type APIError struct {
 	Message string `json:"message"`
-}
-
-type CloudEventJson struct {
-	Specversion     string `json:"specversion"`
-	Event_type      string `json:"type"`
-	Source          string `json:"source"`
-	Subject         string `json:"subject"`
-	Id              string `json:"id"`
-	Time            string `json:"time"`
-	Datacontenttype string `json:"datacontenttype"`
-	Data            string `json:"data"`
 }

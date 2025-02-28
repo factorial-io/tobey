@@ -12,6 +12,14 @@ import (
 	"tobey/internal/collector"
 )
 
+type DiscoverySource string
+
+const (
+	DiscoverySourceSitemap DiscoverySource = "sitemap"
+	DiscoverySourceRobots  DiscoverySource = "robots"
+	DiscoverySourceLink    DiscoverySource = "link"
+)
+
 // ResultReporter is a function type that can be used to report the result of a crawl. It comes
 // with a preconfigured config.
 type ResultReporter func(ctx context.Context, run *Run, res *collector.Response) error

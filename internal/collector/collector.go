@@ -13,10 +13,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 
 	whatwgUrl "github.com/nlnwa/whatwg-url/url"
+	ignore "github.com/sabhiram/go-gitignore"
 )
 
 type EnqueueFn func(ctx context.Context, c *Collector, u string) error // Enqueues a scrape.
@@ -87,8 +87,7 @@ func NewCollector(
 
 type Collector struct {
 	AllowDomains []string // AllowedDomains is a domain allowlist.
-	AllowPaths   []string
-	DenyPaths    []string
+	IgnorePaths  []string
 
 	// UserAgent is the User-Agent string used by HTTP requests
 	UserAgent string
@@ -308,17 +307,7 @@ func (c *Collector) IsVisitAllowed(in string) (bool, error) {
 				return true
 			}
 		}
-		for _, allow := range c.AllowPaths {
-			if ok, err := regexp.MatchString(allow, u.Path); !ok || err != nil {
-				return false
-			}
-		}
-		for _, deny := range c.DenyPaths {
-			if ok, err := regexp.MatchString(deny, u.Path); ok || err != nil {
-				return false
-			}
-		}
-		return true
+		return !ignore.CompileIgnoreLines(c.IgnorePaths...).MatchesPath(u.Path)
 	}
 	if !checkPath(p) {
 		return false, ErrForbiddenPath

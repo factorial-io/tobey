@@ -19,11 +19,12 @@ import (
 var webhookHTTPClient = CreateRetryingHTTPClient(NoAuthFn, UserAgent)
 
 type webhookResult struct {
-	Run                string      `json:"run_uuid"`
-	RunMetadata        interface{} `json:"run_metadata,omitempty"`
-	RequestURL         string      `json:"request_url"`
-	ResponseBody       []byte      `json:"response_body"` // Will be base64 encoded when JSON marshalled.
-	ResponseStatusCode int         `json:"response_status_code"`
+	Run         string      `json:"run_uuid"`
+	RunMetadata interface{} `json:"run_metadata,omitempty"`
+	// DiscoveredBy       []DiscoverySource `json:"discovered_by"` // TODO: Implement.
+	RequestURL         string `json:"request_url"`
+	ResponseBody       []byte `json:"response_body"` // Will be base64 encoded when JSON marshalled.
+	ResponseStatusCode int    `json:"response_status_code"`
 }
 
 // WebhookResultReporterConfig defines the configuration for webhook endpoints
