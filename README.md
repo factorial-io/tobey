@@ -32,6 +32,7 @@ For each crawl request tobey requires at least one or multiple target URLs. Thes
     "https://example.org/values"
   ]
 }
+```
 
 As a shorthand you can also provide targets as plaintext, multiple targets are specified
 as a newline delimited list of URLs:
