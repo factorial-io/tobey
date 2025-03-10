@@ -52,6 +52,12 @@ func CreateResultReporter(ctx context.Context, dsn string, run *Run, res *collec
 		return func(ctx context.Context, run *Run, res *collector.Response) error {
 			return ReportResultToWebhook(ctx, config, run, res)
 		}, err
+	case "s3":
+		config, err := newS3ResultReporterConfigFromDSN(dsn)
+
+		return func(ctx context.Context, run *Run, res *collector.Response) error {
+			return ReportResultToS3(ctx, config, run, res)
+		}, err
 	case "noop":
 		return func(ctx context.Context, run *Run, res *collector.Response) error {
 			return ReportResultToNoop(ctx, nil, run, res)

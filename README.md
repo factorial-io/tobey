@@ -90,7 +90,7 @@ default user agent (`Tobey/0`) for a specific run via the `ua` field in the craw
 }
 ```
 
-#### Attaching Metadata
+### Attaching Metadata
 
 Arbitrary metadata can be provided along your crawl request. This metadata is internally
 associated with the run that is created for your request and will be part of each
@@ -209,7 +209,7 @@ usually contains the following data, its exact format depends a little bit on th
 ### Result Reporters
 
 Tobey currently supports multiple methods to handle results. You can either store
-them locally on disk, or forward them to a webhook endpoint.
+them locally on disk, forward them to a webhook endpoint, or store them in Amazon S3.
 
 When you configure the crawler to **store results on disk**, it will save the results
 to the local filesystem. By default the results are saved in the same directory as the crawl
@@ -218,6 +218,18 @@ request if not otherwise configured.
 ```sh
 TOBEY_RESULT_REPORTER_DSN=disk:///path/to/results
 ```
+
+When you configure the crawler to **store results in S3**, it will save the results
+to the specified S3 bucket. The results will be organized in a directory structure
+under the optional prefix:
+
+```sh
+TOBEY_RESULT_REPORTER_DSN=s3://bucket-name/optional/prefix
+```
+
+Note: When using S3 storage, make sure you have proper AWS credentials configured
+either through environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) or
+through AWS IAM roles.
 
 [Webhooks](https://mailchimp.com/en/marketing-glossary/webhook) are a technique to notify other services about a result, once its ready. 
 When you configure the crawler to **forward results to a webhook**, it will deliver the results to a configured webhook endpoint. 
