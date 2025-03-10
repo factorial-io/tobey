@@ -1,0 +1,44 @@
+# Sets up a distributed Tobey instance that uses Redis for coordination.
+#
+# Use the following command to start up two tobey instances:
+#   docker compose up
+#
+# Then hit the loadbalancer:
+#   curl http://localhost:8080/ -X POST -d 'https://example.com'
+#
+# Now:
+# You should see a response from one of the tobey instances. If a crawl
+# request is made, than both instance will process the request.
+services:
+  loadbalancer:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+
+  tobey-1:
+    build:
+      context: ../../
+    environment:
+      - TOBEY_REDIS_URL=redis://redis:6379
+      - TOBEY_RESULT_REPORTER_DSN=disk:///tmp/tobey
+    volumes:
+      - tobey-cache:/cache
+
+  tobey-2:
+    build:
+      context: ../../
+    environment:
+      - TOBEY_REDIS_URL=redis://redis:6379
+      - TOBEY_RESULT_REPORTER_DSN=disk:///tmp/tobey
+    volumes:
+      - tobey-cache:/cache
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+volumes:
+  tobey-cache:

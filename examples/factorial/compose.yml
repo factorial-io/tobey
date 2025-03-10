@@ -1,0 +1,73 @@
+# Sets up a tobey instance, similar to how we use it at Factorial.
+#
+# Use the following command:
+#   docker compose up
+#
+# Then hit the tobey instance:
+#   curl http://localhost:8080/ -X POST --header "Content-Type: application/json" -d '{
+#     "url": "https://example.org",
+#     "result_reporter_dsn": "webhook://webhook-catcher:8081/incoming"
+#   }' 
+#
+# Now:
+# - Access the Jaeger UI at http://localhost:16686/
+# - Access the Progress UI at http://localhost:9090/
+# - Access the Webhook Catcher UI at http://localhost:8081/
+
+services:
+  tobey:
+    ports:
+      - "8080:8080"
+    build:
+      context: ../../
+    environment:
+      - TOBEY_RESULT_REPORTER_DSN=disk:///tmp/tobey
+      - TOBEY_DYNAMIC_CONFIG=true 
+      - TOBEY_USER_AGENT="WebsiteStandardsBot/1.0"
+      - TOBEY_TELEMETRY="traces"
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://jaeger:4318/v1/traces
+      # - TOBEY_PROGRESS_DSN=factorial://progress:8080
+    volumes:
+      - tobey-cache:/cache
+  
+  # progress:
+  #   image: wsd/progress:latest
+  #   environment:
+  #     - PROGRESS_DATABASE_URL=mysql://db:db@mysql:3306/progress
+  #     - OTEL_SERVICE_NAME=progress
+  #     - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://jaeger:4318/v1/traces
+  #   ports:
+  #     - "9090:8080"
+
+  mysql:
+    image: mariadb
+    environment:
+      - MYSQL_USER=db
+      - MYSQL_PASSWORD=db
+      - MYSQL_ROOT_PASSWORD=root
+    ports:
+      - '3306:3306'
+    expose:
+      - '3306'
+    volumes:
+      - ./mysql/init:/docker-entrypoint-initdb.d
+      - mysql-data:/var/lib/mysql
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
+  webhook-catcher:
+    image: tarampampam/webhook-tester:latest
+    ports:
+      - "8081:8080"
+    environment:
+      - STORAGE_DRIVER=memory
+      - LOG_LEVEL=debug
+
+
+
+volumes:
+  tobey-cache:
+  mysql-data:

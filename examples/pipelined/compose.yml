@@ -1,0 +1,34 @@
+# Sets up a tobey instance that is configured to serve requests within 
+# a pipeline.
+#
+# Use the following command:
+#   curl http://localhost:8080/ -X POST --header "Content-Type: application/json" -d '{
+#     "url": "https://example.org",
+#     "result_reporter_dsn": "webhook://webhook-catcher/incoming"
+#   }' 
+#
+# Now:
+# - Access the Webhook Catcher UI at http://localhost:8081/
+
+services:
+  tobey:
+    ports:
+      - "8080:8080"
+    build:
+      context: ../../
+    environment:
+      - TOBEY_DYNAMIC_CONFIG=true 
+      - TOBEY_RESULT_REPORTER_DSN=noop://
+    volumes:
+      - tobey-cache:/cache
+
+  webhook-catcher:
+    image: tarampampam/webhook-tester:latest
+    ports:
+      - "8081:8080"
+    environment:
+      - STORAGE_DRIVER=memory
+      - LOG_LEVEL=debug
+
+volumes:
+  tobey-cache:

@@ -1,32 +1,30 @@
 # A docker compose file that sets up a Tobey instance that is instrumented and
 # exposes metrics to Prometheus via /metrics endpoint. The metrics are then
 # scraped by prometheus. Grafana is used to visualize the metrics scraped by
-# Prometheus. It also configures Redis for coordination.
+# Prometheus.
+#
+# Use the following command:
+#   docker compose up
+#
+# Then hit the tobey instance:
+#   curl http://localhost:8080/ -X POST -d 'https://example.com'
+# 
+# Now:
+# - Access the Jaeger UI at http://localhost:16686/
+# - Access the Grafana UI at http://localhost:3000/ (admin/admin)
 
 services:
   tobey:
     ports:
       - "8080:8080"
     build:
-      context: .
+      context: ../../
     environment:
-      - TOBEY_TELEMETRY=metrics
-      - TOBEY_REDIS_URL=redis://redis:6379
-      - TOBEY_RESULTS_URL=disk:///tmp/tobey
+      - TOBEY_TELEMETRY="metrics traces"
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://jaeger:4318/v1/traces
+      - TOBEY_RESULT_REPORTER_DSN=disk:///tmp/tobey
     volumes:
       - tobey-cache:/cache
-    # Optional healthcheck.
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  redis:
-    image: redis:latest
-    ports:
-      - "6379:6379"
 
   prometheus:
     image: prom/prometheus
@@ -43,6 +41,13 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana-data:/var/lib/grafana
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
 
 volumes:
   tobey-cache:

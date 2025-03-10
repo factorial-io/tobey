@@ -1,0 +1,18 @@
+# Use the following command to start up two tobey instances:
+#   docker compose up
+#
+# Then hit the tobey instance:
+#   curl http://localhost:8080/ -X POST -d 'https://example.com'
+services:
+  tobey:
+    ports:
+      - "8080:8080"
+    build:
+      context: ../../
+    environment:
+      - TOBEY_RESULT_REPORTER_DSN=disk:///tmp/tobey
+    volumes:
+      - tobey-cache:/cache
+
+volumes:
+  tobey-cache:
