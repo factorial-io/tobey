@@ -29,7 +29,7 @@ const (
 // If dsn is empty, it returns a NoopProgressDispatcher.
 func CreateProgressReporter(dsn string) (ProgressReporter, error) {
 	if dsn == "" {
-		slog.Info("Progress Reporting: Disabled, not sharing progress updates.")
+		slog.Info("Progress Reporter: Disabled, not sharing progress updates.")
 		return &NoopProgressReporter{}, nil
 	}
 
@@ -40,15 +40,15 @@ func CreateProgressReporter(dsn string) (ProgressReporter, error) {
 
 	switch u.Scheme {
 	case "console":
-		slog.Info("Progress Reporting: Using Console for progress updates.")
+		slog.Info("Progress Reporter: Using Console for progress updates.")
 		return &ConsoleProgressReporter{}, nil
 	case "factorial":
-		slog.Info("Progress Reporting: Enabled, using Factorial progress service for updates.", "dsn", dsn)
+		slog.Info("Progress Reporter: Enabled, using Factorial progress service for updates.", "dsn", dsn)
 		return &FactorialProgressReporter{
 			client: CreateRetryingHTTPClient(NoAuthFn, UserAgent),
 		}, nil
 	case "noop":
-		slog.Info("Progress Reporting: Disabled, not sharing progress updates.")
+		slog.Info("Progress Reporter: Disabled, not sharing progress updates.")
 		return &NoopProgressReporter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported progress dispatcher type: %s", u.Scheme)

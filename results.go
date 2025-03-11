@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"tobey/internal/collector"
 )
@@ -27,6 +28,7 @@ type ResultReporter func(ctx context.Context, run *Run, res *collector.Response)
 // CreateResultReporter creates a ResultReporter from a DSN.
 func CreateResultReporter(ctx context.Context, dsn string, run *Run, res *collector.Response) (ResultReporter, error) {
 	if dsn == "" {
+		slog.Debug("Result Reporter: Using disk reporter", "dsn", dsn)
 		config, err := newDiskResultReporterConfigFromDSN(dsn)
 
 		return func(ctx context.Context, run *Run, res *collector.Response) error {
@@ -41,24 +43,28 @@ func CreateResultReporter(ctx context.Context, dsn string, run *Run, res *collec
 
 	switch u.Scheme {
 	case "disk":
+		slog.Debug("Result Reporter: Using disk reporter", "dsn", dsn)
 		config, err := newDiskResultReporterConfigFromDSN(dsn)
 
 		return func(ctx context.Context, run *Run, res *collector.Response) error {
 			return ReportResultToDisk(ctx, config, run, res)
 		}, err
 	case "webhook":
+		slog.Debug("Result Reporter: Using webhook reporter", "dsn", dsn)
 		config, err := newWebhookResultReporterConfigFromDSN(dsn)
 
 		return func(ctx context.Context, run *Run, res *collector.Response) error {
 			return ReportResultToWebhook(ctx, config, run, res)
 		}, err
 	case "s3":
+		slog.Debug("Result Reporter: Using s3 reporter", "dsn", dsn)
 		config, err := newS3ResultReporterConfigFromDSN(dsn)
 
 		return func(ctx context.Context, run *Run, res *collector.Response) error {
 			return ReportResultToS3(ctx, config, run, res)
 		}, err
 	case "noop":
+		slog.Debug("Result Reporter: Disabled, not reporting results")
 		return func(ctx context.Context, run *Run, res *collector.Response) error {
 			return ReportResultToNoop(ctx, nil, run, res)
 		}, nil

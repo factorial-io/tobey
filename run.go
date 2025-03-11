@@ -161,10 +161,14 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr Resul
 				if err != nil {
 					slog.Error("Failed to create report result function.", "error", err)
 				} else {
-					rr(ctx, run, res)
+					if err := rr(ctx, run, res); err != nil {
+						slog.Error("Failed to report result, using dynamic reporter.", "error", err)
+					}
 				}
 			} else {
-				rr(ctx, run, res) // Use the default result reporter.
+				if err := rr(ctx, run, res); err != nil {
+					slog.Error("Failed to report result, using default reporter.", "error", err)
+				}
 			}
 		}
 	}
