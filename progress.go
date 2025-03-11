@@ -42,9 +42,18 @@ func CreateProgressReporter(dsn string) (ProgressReporter, error) {
 	case "console":
 		slog.Info("Progress Reporter: Using Console for progress updates.")
 		return &ConsoleProgressReporter{}, nil
-	case "factorial":
+	case "factorial", "factorials":
 		slog.Info("Progress Reporter: Enabled, using Factorial progress service for updates.", "dsn", dsn)
+
+		var scheme string
+		if u.Scheme == "factorials" {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
 		return &FactorialProgressReporter{
+			scheme: scheme,
+			host:   u.Host,
 			client: CreateRetryingHTTPClient(NoAuthFn, UserAgent),
 		}, nil
 	case "noop":

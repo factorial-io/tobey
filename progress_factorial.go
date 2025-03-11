@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 )
@@ -51,6 +52,8 @@ func factorialProgressStatus(status ProgressStatus) string {
 // FactorialProgressReporter is a reporter for the Factorial progress service.
 type FactorialProgressReporter struct {
 	client *http.Client
+	scheme string
+	host   string
 }
 
 func (p *FactorialProgressReporter) With(run *Run, url string) *Progress {
@@ -85,7 +88,12 @@ func (p *FactorialProgressReporter) Call(ctx context.Context, pu ProgressUpdate)
 	}
 	buf := bytes.NewBuffer(body)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", FactorialProgressEndpointUpdate, buf)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		"POST",
+		fmt.Sprintf("%s://%s/%s", p.scheme, p.host, FactorialProgressEndpointUpdate),
+		buf,
+	)
 	if err != nil {
 		span.RecordError(err)
 		return err
