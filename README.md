@@ -187,6 +187,8 @@ TOBEY_PROGRESS_DSN=factorial://host:port # To report progress to the Factorial p
 TOBEY_PROGRESS_DSN=console # To report progress to the console.
 ```
 
+Note: For HTTPS use the `factorials` scheme.
+
 ## Collecting Results
 
 Once a crawl request is started being processed, and web pages scraped, results will become available as the processing continues. A result
@@ -219,13 +221,16 @@ request if not otherwise configured.
 TOBEY_RESULT_REPORTER_DSN=disk:///path/to/results
 ```
 
-When you configure the crawler to **store results in S3**, it will save the results
-to the specified S3 bucket. The results will be organized in a directory structure
+When you configure the crawler to **store results in S3** (or compatible), it will save the results
+to the specified bucket. The results will be organized in a directory structure
 under the optional prefix:
 
 ```sh
 TOBEY_RESULT_REPORTER_DSN=s3://bucket-name/optional/prefix
 ```
+
+
+For a deployment example with S3 storage integration, see [`examples/s3/compose.yml`](examples/s3/compose.yml).
 
 Note: When using S3 storage, make sure you have proper AWS credentials configured
 either through environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) or
@@ -289,6 +294,8 @@ the service will not coordinate with other instances. It will store results loca
 on disk, but not report any progress. If you are trying out tobey this is the
 easiest way to get started.
 
+See [`examples/simple/compose.yml`](examples/simple/compose.yml) for a minimal deployment example.
+
 ### Stateless Operation
 
 At Factorial Tobey is used by different services that need to crawl websites. The services 
@@ -336,6 +343,8 @@ result reporter.
 }
 ```
 
+See [`examples/pipelined/compose.yml`](examples/pipelined/compose.yml) for a deployment example with pipeline integration.
+
 ### Distributed Operation
 
 The service is horizontally scalable by adding more instances on nodes
@@ -345,6 +354,9 @@ for easy load balancing. The instances will coordinate with each other via Redis
 ```sh
 TOBEY_REDIS_DSN=redis://localhost:6379
 ```
+
+See [`examples/distributed/compose.yml`](examples/distributed/compose.yml) for a deployment example with Redis coordination.
+
 ## Scaling
 
 Tobey can be scaled vertically by increasing the number of workers, via the `WORKERS` environment variable, or horizontally 
@@ -383,6 +395,25 @@ across all Tobey instances to ensure the latest robot control files are used,
 keeping the system responsive and compliant. This layered caching strategy,
 along with the dynamic rate limit adjustment, ensures that Tobey maintains high
 efficiency and adaptability during its crawling operations.
+
+## Telemetry
+
+Tobey provides observability capabilities through multiple telemetry features that can be enabled via the `TOBEY_TELEMETRY` environment variable. For a complete deployment example with instrumentation and telemetry, see [`examples/instrumented/compose.yml`](examples/instrumented/compose.yml). 
+
+```sh
+TOBEY_TELEMETRY="metrics traces pulse"
+```
+
+- With **metrics** enabled, tobey will expose a Prometheus compatible endpoint for scraping and optionally submit OpenTelemetry metrics, if an endpoint is configured (see below).
+- With **tracing** enabled, tobey will generate OpenTelemetry traces for the lifecyle of a crawl request.
+- With **pulse** enabled, tobey provides real-time metrics, which can be monitored using the pulse tool.
+
+When using OpenTelemetry exporters, make sure to configure the appropriate endpoints:
+
+```sh
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://jaeger:4318/v1/traces
+OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4318/v1/metrics
+```
 
 ## Limitations
 
