@@ -1,0 +1,44 @@
+# Use the following command to start up two tobey instances:
+#   docker compose up
+#
+# Then hit the tobey instance:
+#   curl http://localhost:8080/ -X POST -d 'https://example.com'
+#
+# Now:
+# - Access the Minio Console at http://localhost:9001/
+services:
+  tobey:
+    ports:
+      - "8080:8080"
+    build:
+      context: ../../
+    environment:
+      - TOBEY_RESULT_REPORTER_DSN=s3://tobey-bucket/results?endpoint=http://minio:9000&usePathStyle=true&region=us-east-1&expiration=10m
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - TOBEY_DEBUG=true 
+    volumes:
+      - tobey-cache:/cache
+    depends_on:
+      - minio
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+volumes:
+  tobey-cache:
+  minio-data:

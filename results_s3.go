@@ -19,7 +19,7 @@ import (
 	"tobey/internal/collector"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -32,30 +32,45 @@ type s3Result struct {
 }
 
 type S3ResultReporterConfig struct {
-	Bucket string
-	Prefix string
+	Bucket       string
+	Prefix       string
+	Endpoint     string
+	Region       string
+	UsePathStyle bool
 }
 
+// newS3ResultReporterConfigFromDSN parses a DSN and returns a S3ResultReporterConfig.
+// The DSN is expected to be in the format:
+//
+//	s3://<bucket>/<prefix>?endpoint=<endpoint>&region=<region>&usePathStyle=<true|false>
+//
+// If the endpoint is not provided, the default endpoint for the region will be used.
+// If the region is not provided, the default region for the bucket will be used.
 func newS3ResultReporterConfigFromDSN(dsn string) (S3ResultReporterConfig, error) {
-	s3config := S3ResultReporterConfig{}
+	config := S3ResultReporterConfig{}
 
 	u, err := url.Parse(dsn)
 	if err != nil {
-		return s3config, fmt.Errorf("invalid s3 result reporter DSN: %w", err)
+		return config, fmt.Errorf("invalid s3 result reporter DSN: %w", err)
 	}
 
 	// Extract bucket and optional prefix from the path
 	parts := strings.SplitN(strings.TrimPrefix(u.Path, "/"), "/", 2)
 	if len(parts) == 0 {
-		return s3config, fmt.Errorf("bucket name is required in S3 DSN")
+		return config, fmt.Errorf("bucket name is required in S3 DSN")
 	}
 
-	s3config.Bucket = parts[0]
+	config.Bucket = parts[0]
 	if len(parts) > 1 {
-		s3config.Prefix = parts[1]
+		config.Prefix = parts[1]
 	}
 
-	return s3config, nil
+	q := u.Query()
+	config.Endpoint = q.Get("endpoint")
+	config.Region = q.Get("region")
+	config.UsePathStyle = q.Get("usePathStyle") == "true"
+
+	return config, nil
 }
 
 // ReportResultToS3 stores results in S3 as JSON files. Results are grouped by run
@@ -65,18 +80,37 @@ func newS3ResultReporterConfigFromDSN(dsn string) (S3ResultReporterConfig, error
 //
 // The <url_hash> is the SHA-256 hash of the request URL, encoded as a hex string.
 // The JSON file contains the result as a JSON object.
-func ReportResultToS3(ctx context.Context, s3config S3ResultReporterConfig, run *Run, res *collector.Response) error {
+func ReportResultToS3(ctx context.Context, config S3ResultReporterConfig, run *Run, res *collector.Response) error {
 	logger := slog.With("run", run.ID, "url", res.Request.URL)
 	logger.Debug("Result reporter: Saving result to S3...")
 
-	// Load AWS configuration using aws-sdk-go-v2/config package
-	awsCfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return fmt.Errorf("unable to load AWS SDK config: %w", err)
+	var options []func(*awsconfig.LoadOptions) error
+
+	if config.Region != "" {
+		options = append(options, awsconfig.WithRegion(config.Region))
+	}
+	if config.Endpoint != "" {
+		customEndpoint := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+			if service == s3.ServiceID {
+				return aws.Endpoint{
+					URL:               config.Endpoint,
+					SigningRegion:     config.Region,
+					HostnameImmutable: true,
+				}, nil
+			}
+			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+		})
+		options = append(options, awsconfig.WithEndpointResolverWithOptions(customEndpoint))
 	}
 
-	// Create S3 client
-	client := s3.NewFromConfig(awsCfg)
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, options...)
+	if err != nil {
+		return err
+	}
+
+	s3Client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = config.UsePathStyle
+	})
 
 	result := &s3Result{
 		Run:                run.ID,
@@ -85,35 +119,26 @@ func ReportResultToS3(ctx context.Context, s3config S3ResultReporterConfig, run 
 		ResponseStatusCode: res.StatusCode,
 	}
 
-	// Generate the object key
 	hash := sha256.New()
 	hash.Write([]byte(res.Request.URL.String()))
 	filename := fmt.Sprintf("%s.json", hex.EncodeToString(hash.Sum(nil)))
 
-	// Construct the full S3 key
-	key := filepath.Join(s3config.Prefix, run.ID, filename)
+	key := filepath.Join(config.Prefix, run.ID, filename)
 	key = strings.TrimLeft(key, "/") // Remove leading slash as S3 doesn't need it
 
-	// Marshal the result to JSON
 	jsonData, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	// Upload to S3
-	_, err = client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(s3config.Bucket),
+	_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(config.Bucket),
 		Key:         aws.String(key),
 		Body:        bytes.NewReader(jsonData),
 		ContentType: aws.String("application/json"),
+		Metadata: map[string]string{
+			"run": run.ID,
+		},
 	})
-	if err != nil {
-		return fmt.Errorf("failed to upload to S3: %w", err)
-	}
-
-	logger.Debug("Result reporter: Successfully saved result to S3",
-		"bucket", s3config.Bucket,
-		"key", key,
-	)
-	return nil
+	return err
 }
