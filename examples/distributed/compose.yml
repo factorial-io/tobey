@@ -25,6 +25,7 @@ services:
       - TOBEY_RESULT_REPORTER_DSN=disk:///tmp/tobey
     volumes:
       - tobey-cache:/cache
+      - /tmp/tobey:/tmp/tobey
 
   tobey-2:
     build:
@@ -34,6 +35,7 @@ services:
       - TOBEY_RESULT_REPORTER_DSN=disk:///tmp/tobey
     volumes:
       - tobey-cache:/cache
+      - /tmp/tobey:/tmp/tobey
 
   redis:
     image: redis:latest

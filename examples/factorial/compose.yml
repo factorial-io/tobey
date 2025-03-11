@@ -29,6 +29,7 @@ services:
       # - TOBEY_PROGRESS_DSN=factorial://progress:8080
     volumes:
       - tobey-cache:/cache
+      - /tmp/tobey:/tmp/tobey
   
   # progress:
   #   image: wsd/progress:latest
