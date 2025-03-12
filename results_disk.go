@@ -47,7 +47,15 @@ func newDiskResultReporterConfigFromDSN(dsn string) (DiskResultReporterConfig, e
 	if err != nil {
 		return config, fmt.Errorf("invalid disk result reporter DSN: %w", err)
 	}
-	abs, err := filepath.Abs(u.Path)
+
+	// If a relative single path element is provided it is parsed as the host.
+	var p string
+	if u.Path == "" && u.Host != "" {
+		p = u.Host
+	} else {
+		p = u.Path
+	}
+	abs, err := filepath.Abs(p)
 	if err != nil {
 		return config, fmt.Errorf("invalid disk result reporter DSN: %w", err)
 	}
@@ -56,7 +64,7 @@ func newDiskResultReporterConfigFromDSN(dsn string) (DiskResultReporterConfig, e
 	}
 
 	// FIXME: No windows support yet, would need to remove leading slash.
-	config.OutputDir = u.Path
+	config.OutputDir = abs
 
 	return config, nil
 }
