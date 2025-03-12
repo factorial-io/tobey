@@ -9,30 +9,48 @@ import (
 )
 
 func configure() {
-	// Add command line flag parsing
 	var flagHost string
 	var flagPort int
+	var flagDebug bool
+	var flagSkipCache bool
+	var flagWorkers int
+	var flagUserAgent string
+	var flagDynamicConfig bool
+	var flagTelemetry string
 
-	flag.StringVar(&flagHost, "host", "", "Host interface to bind the HTTP server to")
-	flag.IntVar(&flagPort, "port", 0, "Port to bind the HTTP server to")
+	flag.StringVar(&flagHost, "host", ListenHost, "Host interface to bind the HTTP server to")
+	flag.IntVar(&flagPort, "port", ListenPort, "Port to bind the HTTP server to")
+	flag.BoolVar(&flagDebug, "debug", Debug, "Enable debug mode")
+	flag.BoolVar(&flagSkipCache, "no-cache", false, "Disable caching")
+	flag.IntVar(&flagWorkers, "workers", NumVisitWorkers, "Number of wokers to start")
+	flag.StringVar(&flagUserAgent, "ua", UserAgent, "User Agent to use")
+	flag.BoolVar(&flagDynamicConfig, "dynamic-config", DynamicConfig, "Enable dynamic configuration")
+	flag.StringVar(&flagTelemetry, "telemetry", "", "Comma separated list of telemetry to enable: metrics, traces, pulse")
 	flag.Parse()
 
-	if isForgivingTrue(os.Getenv("TOBEY_DEBUG")) {
-		Debug = true
-		slog.Info("Debug mode enabled.")
+	if isFlagPassed("debug") {
+		Debug = flagDebug
+	} else {
+		Debug = isForgivingTrue(os.Getenv("TOBEY_DEBUG"))
 	}
-	if isForgivingTrue(os.Getenv("TOBEY_SKIP_CACHE")) {
-		SkipCache = true
-		slog.Info("Skipping cache.")
+	if Debug {
+		slog.Info("Debug mode enabled!")
 	}
 
-	// First check command line args, then fall back to env vars
+	if isFlagPassed("no-cache") {
+		SkipCache = flagSkipCache
+	} else {
+		SkipCache = isForgivingTrue(os.Getenv("TOBEY_SKIP_CACHE"))
+	}
+	if SkipCache {
+		slog.Info("Skipping cache!")
+	}
+
 	if flagHost != "" {
 		ListenHost = flagHost
 	} else if v := os.Getenv("TOBEY_HOST"); v != "" {
 		ListenHost = v
 	}
-
 	if flagPort != 0 {
 		ListenPort = flagPort
 	} else if v := os.Getenv("TOBEY_PORT"); v != "" {
@@ -43,26 +61,37 @@ func configure() {
 		ListenPort = p
 	}
 
-	if v := os.Getenv("TOBEY_WORKERS"); v != "" {
+	if isFlagPassed("workers") {
+		NumVisitWorkers = flagWorkers
+	} else if v := os.Getenv("TOBEY_WORKERS"); v != "" {
 		p, err := strconv.Atoi(v)
 		if err != nil {
 			panic(err)
 		}
 		NumVisitWorkers = p
 	}
-	slog.Info("Number of visit workers configured.", "num", NumVisitWorkers)
 
-	if v := os.Getenv("TOBEY_USER_AGENT"); v != "" {
+	if isFlagPassed("ua") {
+		UserAgent = flagUserAgent
+	} else if v := os.Getenv("TOBEY_USER_AGENT"); v != "" {
 		UserAgent = v
-		slog.Info("Using custom user agent.", "user_agent", UserAgent)
 	}
 
-	if isForgivingTrue(os.Getenv("TOBEY_DYNAMIC_CONFIG")) {
-		DynamicConfig = true
-		slog.Info("Dynamic configuration enabled!")
+	if isFlagPassed("dynamic-config") {
+		DynamicConfig = flagDynamicConfig
+	} else {
+		DynamicConfig = isForgivingTrue(os.Getenv("TOBEY_DYNAMIC_CONFIG"))
+	}
+	if DynamicConfig {
+		slog.Warn("Dynamic configuration enabled!")
 	}
 
-	v := os.Getenv("TOBEY_TELEMETRY")
+	var v string
+	if isFlagPassed("telemetry") {
+		v = flagTelemetry
+	} else {
+		v = os.Getenv("TOBEY_TELEMETRY")
+	}
 	if strings.Contains(v, "traces") || strings.Contains(v, "tracing") {
 		UseTracing = true
 		slog.Info("Tracing enabled.")
@@ -80,4 +109,14 @@ func configure() {
 func isForgivingTrue(v string) bool {
 	v = strings.ToLower(v)
 	return v == "true" || v == "yes" || v == "y" || v == "on"
+}
+
+func isFlagPassed(name string) bool {
+	found := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }

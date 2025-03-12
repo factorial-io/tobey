@@ -272,16 +272,16 @@ example configuration.
 
 | Variable / Flag   | Default  | Supported Values | Description                      |
 |----------------|----------------|------------------|----------------------------------|
-| `TOBEY_DEBUG` | `false` | `true`, `false`  | Controls debug mode. |
-| `TOBEY_SKIP_CACHE` | `false` | `true`, `false`  | Controls caching access. |
-| `TOBEY_UA` | `Tobey/0` | any string | User-Agent to identify with. |
+| `TOBEY_DEBUG`, `-debug` | `false` | `true`, `false`  | Controls debug mode. |
+| `TOBEY_SKIP_CACHE`, `-no-cache` | `false` | `true`, `false`  | Controls caching access. |
+| `TOBEY_UA`, `-ua` | `Tobey/0`| any string | User-Agent to identify with. |
 | `TOBEY_HOST`, `-host` | empty | i.e. `localhost`, `127.0.0.1` | Adress to bind the HTTP server to. Empty means listen on all. |
 | `TOBEY_PORT`, `-port` | `8080` | `1-65535` | Port to bind the HTTP server to. Alternatively you can use the `-port` command line flag. |
-| `TOBEY_WORKERS` | `5` | `1-128` | Nnumber of workers per instance. |
+| `TOBEY_WORKERS`, `-workers`| `5` | `1-128` | Nnumber of workers per instance. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance for coordinting multiple instances. |
 | `TOBEY_PROGRESS_DSN` | `noop://` | `factorial://host:port`, `console://`, `noop://` | DSN for progress reporting service. |
 | `TOBEY_RESULT_REPORTER_DSN` | `disk://results` | `disk:///path`, `webhook://host/path`, `noop://` | DSN specifying where crawl results should be stored. |
-| `TOBEY_TELEMETRY` | empty | `metrics`, `traces`, `pulse` | Space separated list of what kind of telemetry is emitted. |
+| `TOBEY_TELEMETRY`, `-telemetry` | empty | `metrics`, `traces`, `pulse` | Space separated list of what kind of telemetry is emitted. |
 
 _Note:_ When enabling telemetry ensure you are also providing [OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
