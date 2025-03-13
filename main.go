@@ -86,15 +86,18 @@ const (
 )
 
 func main() {
+	asService, req := configure()
+
+	if asService {
+		service()
+	} else {
+		cli(req)
+	}
+}
+
+func service() {
 	slog.Info("Tobey starting...")
 	tear, down := tears.New()
-
-	configure()
-
-	if Debug {
-		slog.Info("Debug mode is on.")
-		slog.SetLogLoggerLevel(slog.LevelDebug)
-	}
 
 	// This sets up the main process context.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -190,6 +193,75 @@ func main() {
 		slog.Info("Stopped serving new Healthcheck HTTP connections.")
 	}()
 	tear(hcserver.Shutdown)
+
+	<-ctx.Done()
+
+	slog.Info("Exiting...")
+	down(context.Background())
+}
+
+func cli(req ConsoleRequest) {
+	tear, down := tears.New()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	robots := NewRobots()
+	sitemaps := NewSitemaps(robots)
+	runs := NewRunManager(nil, robots, sitemaps)
+	queue := ctrlq.CreateWorkQueue(nil)
+
+	if err := queue.Open(ctx); err != nil {
+		panic(err)
+	}
+	if queue != nil {
+		tear(queue.Close)
+	}
+
+	if ok, violations := req.Validate(); !ok {
+		for _, v := range violations {
+			slog.Warn(fmt.Sprintf("Violation: %s", v))
+		}
+		slog.Error("Invalid params/args")
+		os.Exit(1)
+	}
+
+	rr, err := CreateResultReporter(ctx, "disk://"+req.GetOutputDir(), nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	progress, err := CreateProgressReporter("noop://")
+	if err != nil {
+		panic(err)
+	}
+
+	vpool := NewVisitorPool(
+		ctx,
+		NumVisitWorkers,
+		runs,
+		queue,
+		rr,
+		progress,
+	)
+	tear(vpool.Close)
+
+	run := &Run{
+		SerializableRun: SerializableRun{
+			ID: req.GetRun(),
+
+			URLs: req.GetURLs(true),
+
+			AuthConfigs: req.GetAuthConfigs(),
+
+			AllowDomains: req.GetAllowDomains(),
+			IgnorePaths:  req.GetIgnorePaths(),
+
+			UserAgent: req.GetUserAgent(),
+		},
+	}
+
+	slog.Info("Performing run...")
+	runs.Add(ctx, run)
+	run.Start(ctx, queue, rr, progress, req.GetURLs(true))
 
 	<-ctx.Done()
 

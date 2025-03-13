@@ -92,6 +92,10 @@ func (w *Visitor) run(ctx context.Context) error {
 			job = j
 		}
 
+		if _, err := job.Validate(); err != nil {
+			w.logger.Error(err.Error())
+			return nil // Skip this job, but continue
+		}
 		if err := w.process(ctx, job); err != nil {
 			return err
 		}
@@ -99,19 +103,6 @@ func (w *Visitor) run(ctx context.Context) error {
 }
 
 func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
-	jlogger := w.logger.With("run", job.Run, "url", job.URL, "job.id", job.ID)
-	jctx, span := tracer.Start(job.Context, "process_visit_job")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("Url", job.URL))
-	t := trace.WithAttributes(attribute.String("Url", job.URL))
-
-	jlogger.Debug("Visitor: Processing job.")
-
-	if _, err := job.Validate(); err != nil {
-		jlogger.Error(err.Error())
-		return nil
-	}
 
 	// If this tobey instance is also the instance that received the run request,
 	// we already have a Collector locally available. If this instance has retrieved
@@ -121,6 +112,14 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	r, _ := w.runs.Get(ctx, job.Run)
 	c := r.GetCollector(ctx, w.queue, w.result, w.progress)
 	p := w.progress.With(r, job.URL)
+
+	jlogger := w.logger.With("run", r, "job", job)
+	jlogger.Debug("Visitor: Processing job...")
+
+	jctx, span := tracer.Start(job.Context, "process_visit_job")
+	span.SetAttributes(attribute.String("Url", job.URL))
+	t := trace.WithAttributes(attribute.String("Url", job.URL))
+	defer span.End()
 
 	p.Update(jctx, ProgressStateCrawling)
 
@@ -145,14 +144,16 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	// The happy path.
 	if err == nil {
 		p.Update(jctx, ProgressStateCrawled)
-		jlogger.Debug("Visitor: Visited URL.", "took.lifetime", time.Since(job.Created), "took.fetch", res.Took)
-		span.AddEvent("Visitor: Visited URL.", t)
+		jlogger.Info("Visitor: Successfully visited URL.",
+			"took.lifetime", time.Since(job.Created).Round(time.Millisecond).Milliseconds(),
+			"took.fetch", res.Took.Round(time.Millisecond).Milliseconds())
+		span.AddEvent("Visitor: Successfully visited URL.", t)
 		return nil
 	}
 
 	// The sad path, where the previous error is now interpreted as a fail.
-	span.AddEvent("Visitor: URL visit failed.", t)
-	jlogger.Debug("Visitor: URL visit failed, handling ...", "error", err)
+	span.AddEvent("Visitor: Failed visiting URL.", t)
+	jlogger.Info("Visitor: Failed visiting URL.", "error", err)
 
 	code, herr := handleFailedVisit(
 		func(url string, d time.Duration) error {

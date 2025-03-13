@@ -12,15 +12,18 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )
 
 // The maximum number of messages that can exists in the in-memory work queue.
 const MemoryWorkQueueBufferSize = 1_000_000
+
+// memoryWorkQueueNextID is a global counter for generating unique message IDs
+var memoryWorkQueueNextID atomic.Uint32
 
 func NewMemoryVisitWorkQueue() *MemoryVisitWorkQueue {
 	return &MemoryVisitWorkQueue{
@@ -83,7 +86,7 @@ func (wq *MemoryVisitWorkQueue) Publish(ctx context.Context, run string, url str
 	propagator.Inject(ctx, carrier)
 
 	msg := &VisitMessage{
-		ID:      uuid.New().ID(),
+		ID:      memoryWorkQueueNextID.Add(1),
 		Run:     run,
 		URL:     url,
 		Created: time.Now(),
@@ -110,7 +113,7 @@ func (wq *MemoryVisitWorkQueue) Republish(ctx context.Context, job *VisitJob) er
 	propagator.Inject(job.Context, carrier)
 
 	msg := &VisitMessage{
-		ID:      job.ID,
+		ID:      memoryWorkQueueNextID.Add(1),
 		Run:     job.Run,
 		URL:     job.URL,
 		Created: job.Created,

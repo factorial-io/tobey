@@ -11,7 +11,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -55,13 +58,10 @@ func (ac *AuthConfig) Matches(h *Host) bool {
 	return h.Name == ac.Host.Name && h.Port == ac.Host.Port
 }
 
-type APIRequest struct {
+type Request struct {
 	// We accept either a valid UUID as a string, or as an integer. If left
 	// empty, we'll generate one.
 	Run string `json:"run_uuid"`
-
-	// Metadata associated with this run that will be included in all results
-	RunMetadata interface{} `json:"run_metadata,omitempty"`
 
 	URL  string   `json:"url"`
 	URLs []string `json:"urls"`
@@ -73,23 +73,18 @@ type APIRequest struct {
 
 	// A list of authentication configurations, that are used in the run.
 	AuthConfigs []*AuthConfig `json:"auth"`
-
-	// The DSN of the result reporter to use as dynamic configuration.
-	ResultReporterDSN string `json:"result_reporter_dsn"`
 }
 
-func (req *APIRequest) GetRun() (string, error) {
+// GetRun returns the run's ID, if provided in the request. Please call req.Validate
+// to make sure a provided ID is correctly formed.
+func (req *Request) GetRun() string {
 	if req.Run != "" {
-		v, err := uuid.Parse(req.Run)
-		if err != nil {
-			return "", err
-		}
-		return v.String(), nil
+		return uuid.MustParse(req.Run).String()
 	}
-	return uuid.New().String(), nil
+	return uuid.New().String()
 }
 
-func (req *APIRequest) GetURLs(clean bool) []string {
+func (req *Request) GetURLs(clean bool) []string {
 	var urls []string
 	if req.URL != "" {
 		urls = append(urls, req.URL)
@@ -116,7 +111,7 @@ func (req *APIRequest) GetURLs(clean bool) []string {
 	return urls
 }
 
-func (req *APIRequest) GetAllowDomains() []string {
+func (req *Request) GetAllowDomains() []string {
 	var domains []string
 
 	// The domains of the targets are allways allowed.
@@ -136,19 +131,14 @@ func (req *APIRequest) GetAllowDomains() []string {
 	return domains
 }
 
-func (req *APIRequest) GetIgnorePaths() []string {
-	var paths []string
-
+func (req *Request) GetIgnorePaths() []string {
 	if req.IgnorePaths == nil {
-		return paths
+		return make([]string, 0)
 	}
-	for _, p := range req.IgnorePaths {
-		paths = append(paths, p)
-	}
-	return paths
+	return req.IgnorePaths
 }
 
-func (req *APIRequest) GetAuthConfigs() []*AuthConfig {
+func (req *Request) GetAuthConfigs() []*AuthConfig {
 	var configs []*AuthConfig
 
 	if req.AuthConfigs != nil {
@@ -176,36 +166,48 @@ func (req *APIRequest) GetAuthConfigs() []*AuthConfig {
 	return configs
 }
 
-func (req *APIRequest) GetUserAgent() string {
+func (req *Request) GetUserAgent() string {
 	if req.UserAgent != "" {
 		return req.UserAgent
 	}
 	return UserAgent
 }
 
-func (req *APIRequest) Validate() bool {
+func (req *Request) Validate() (bool, []error) {
+	var violations []error
+
 	if req.Run != "" {
 		_, err := uuid.Parse(req.Run)
 		if err != nil {
-			return false
+			return false, append(violations, err)
 		}
 	}
 
 	if req.URL != "" {
 		_, err := url.ParseRequestURI(req.URL)
 		if err != nil {
-			return false
+			return false, append(violations, err)
 		}
 	}
 	if req.URLs != nil {
 		for _, u := range req.URLs {
 			_, err := url.ParseRequestURI(u)
 			if err != nil {
-				return false
+				return false, append(violations, err)
 			}
 		}
 	}
-	return true
+	return true, violations
+}
+
+type APIRequest struct {
+	Request
+
+	// Metadata associated with this run that will be included in all results
+	RunMetadata interface{} `json:"run_metadata,omitempty"`
+
+	// The DSN of the result reporter to use as dynamic configuration.
+	ResultReporterDSN string `json:"result_reporter_dsn"`
 }
 
 type APIResponse struct {
@@ -214,4 +216,46 @@ type APIResponse struct {
 
 type APIError struct {
 	Message string `json:"message"`
+}
+
+type ConsoleRequest struct {
+	Request
+
+	OutputDir string
+}
+
+func (req *ConsoleRequest) Validate() (bool, []error) {
+	if ok, violations := req.Request.Validate(); !ok {
+		return ok, violations
+	}
+	var violations []error
+
+	if req.OutputDir != "" {
+		abs, err := filepath.Abs(req.OutputDir)
+		if err != nil {
+			return false, append(violations, err)
+		}
+		wd, err := os.Getwd()
+		if err != nil {
+			return false, append(violations, err)
+		}
+		if !strings.HasPrefix(abs, wd) {
+			return false, append(violations, fmt.Errorf("output directory (%s) must be below the current working directory (%s)", abs, wd))
+		}
+	}
+
+	return true, nil
+}
+
+func (req *ConsoleRequest) GetOutputDir() string {
+	var p string
+
+	if req.OutputDir != "" {
+		p = req.OutputDir
+	} else {
+		p = "results"
+	}
+
+	abs, _ := filepath.Abs(p)
+	return abs
 }

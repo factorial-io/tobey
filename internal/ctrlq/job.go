@@ -8,6 +8,7 @@ package ctrlq
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"go.opentelemetry.io/otel/propagation"
@@ -50,4 +51,11 @@ func (j *VisitJob) Validate() (bool, error) {
 		return false, errors.New("job without URL")
 	}
 	return true, nil
+}
+
+func (j *VisitJob) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Int("id", int(j.ID)),
+		slog.String("url", j.URL),
+	)
 }

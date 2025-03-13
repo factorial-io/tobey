@@ -8,24 +8,39 @@ import (
 	"strings"
 )
 
-func configure() {
-	var flagHost string
-	var flagPort int
+// configure parses env vars and flags, and sets global configuration accordingly.
+func configure() (flagDaemon bool, req ConsoleRequest) {
+	// basic / both
+	flag.BoolVar(&flagDaemon, "d", false, "Run tobey as a service")
 	var flagDebug bool
 	var flagSkipCache bool
 	var flagWorkers int
 	var flagUserAgent string
+
+	flag.BoolVar(&flagDebug, "debug", Debug, "Enable debug mode")
+	flag.BoolVar(&flagSkipCache, "no-cache", false, "Disable caching")
+	flag.IntVar(&flagWorkers, "w", NumVisitWorkers, "Number of concurrent workers to start")
+	flag.StringVar(&flagUserAgent, "ua", UserAgent, "User Agent to use")
+
+	// service only
+	var flagHost string
+	var flagPort int
 	var flagDynamicConfig bool
 	var flagTelemetry string
 
-	flag.StringVar(&flagHost, "host", ListenHost, "Host interface to bind the HTTP server to")
-	flag.IntVar(&flagPort, "port", ListenPort, "Port to bind the HTTP server to")
-	flag.BoolVar(&flagDebug, "debug", Debug, "Enable debug mode")
-	flag.BoolVar(&flagSkipCache, "no-cache", false, "Disable caching")
-	flag.IntVar(&flagWorkers, "workers", NumVisitWorkers, "Number of wokers to start")
-	flag.StringVar(&flagUserAgent, "ua", UserAgent, "User Agent to use")
-	flag.BoolVar(&flagDynamicConfig, "dynamic-config", DynamicConfig, "Enable dynamic configuration")
-	flag.StringVar(&flagTelemetry, "telemetry", "", "Comma separated list of telemetry to enable: metrics, traces, pulse")
+	flag.StringVar(&flagHost, "host", ListenHost, "Host interface to bind the HTTP server to (service only)")
+	flag.IntVar(&flagPort, "port", ListenPort, "Port to bind the HTTP server to (service only)")
+	flag.BoolVar(&flagDynamicConfig, "dynamic-config", DynamicConfig, "Enable dynamic configuration (service only)")
+	flag.StringVar(&flagTelemetry, "telemetry", "", "Comma separated list of telemetry to enable: metrics, traces, pulse (service only)")
+
+	// cli only
+	var flagURLs string
+	var flagOutputDir string
+
+	flag.StringVar(&flagURLs, "u", "", "Comma separated list of URls to crawl (cli only)")
+	flag.StringVar(&flagOutputDir, "o", "results", "Directory to store results (cli only)")
+
+	// parse
 	flag.Parse()
 
 	if isFlagPassed("debug") {
@@ -34,6 +49,7 @@ func configure() {
 		Debug = isForgivingTrue(os.Getenv("TOBEY_DEBUG"))
 	}
 	if Debug {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
 		slog.Info("Debug mode enabled!")
 	}
 
@@ -71,10 +87,15 @@ func configure() {
 		NumVisitWorkers = p
 	}
 
-	if isFlagPassed("ua") {
-		UserAgent = flagUserAgent
-	} else if v := os.Getenv("TOBEY_USER_AGENT"); v != "" {
+	if v := os.Getenv("TOBEY_USER_AGENT"); v != "" {
 		UserAgent = v
+	}
+	if isFlagPassed("ua") {
+		if flagDaemon {
+			req.UserAgent = flagUserAgent
+		} else {
+			UserAgent = flagUserAgent // Potentially overwrite again.
+		}
 	}
 
 	if isFlagPassed("dynamic-config") {
@@ -104,6 +125,16 @@ func configure() {
 		UsePulse = true
 		slog.Info("High Frequency Metrics (Pulse) enabled.")
 	}
+
+	if isFlagPassed("u") {
+		req.URLs = strings.Split(flagURLs, ",")
+	}
+
+	if isFlagPassed("o") {
+		req.OutputDir = flagOutputDir
+	}
+
+	return
 }
 
 func isForgivingTrue(v string) bool {

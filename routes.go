@@ -60,7 +60,7 @@ func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, rr ResultReporter
 			}
 		}
 
-		if ok := req.Validate(); !ok {
+		if ok, _ := req.Validate(); !ok {
 			result := &APIError{
 				Message: "Invalid request.",
 			}
@@ -69,22 +69,9 @@ func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, rr ResultReporter
 			return
 		}
 
-		id, err := req.GetRun()
-		if err != nil {
-			slog.Error("Failed to parse given run as UUID.", "run", req.Run)
-
-			result := &APIError{
-				Message: fmt.Sprintf("Failed to parse given run (%s) as UUID or number.", req.Run),
-			}
-
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(result)
-			return
-		}
-
 		run := &Run{
 			SerializableRun: SerializableRun{
-				ID:       id,
+				ID:       req.GetRun(),
 				Metadata: req.RunMetadata,
 
 				URLs: req.GetURLs(true),

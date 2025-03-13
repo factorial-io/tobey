@@ -61,11 +61,15 @@ func (r *Run) Configure(s RunStore, ro *Robots, si *Sitemaps) {
 	r.sitemaps = si
 }
 
+func (r *Run) LogValue() slog.Value {
+	return slog.StringValue(r.ShortID())
+}
+
 // ShortID returns a human-readable version of the run's ID.
 func (r *Run) ShortID() string {
 	// Here we can implement a simple transformation, for example, taking the first 8 characters.
 	if len(r.ID) > 8 {
-		return r.ID[:8] // Return the first 8 characters of the ID
+		return r.ID[:8] + "..." // Return the first 8 characters of the ID
 	}
 	return r.ID // Return the full ID if it's shorter than 8 characters
 }

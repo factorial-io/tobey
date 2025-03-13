@@ -36,7 +36,7 @@ func NewVisitorPool(
 			queue:    q,
 			result:   rr,
 			progress: pr,
-			logger:   slog.With("worker.id", i),
+			logger:   slog.With("worker", i),
 		}
 		pool.workers = append(pool.workers, worker)
 		pool.wg.Add(1)
