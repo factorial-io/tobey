@@ -2,11 +2,27 @@
 
 Tobey is a throughput optimizing but friendly web crawler, that is scalable from a single instance to a cluster. It features intelligent rate limiting, distributed coordination, and flexible deployment options. Tobey honors resource exclusions in a robots.txt and tries its best not to overwhelm a host.
 
-## Getting Started
+## Quickstart
 
 ```sh
-go run . # Start the crawler.
-curl -X POST http://127.0.0.1:8080 -d 'https://www.example.org/' # Submit a crawl request.
+go run . # Start the crawler as a server.
+curl -X POST http://127.0.0.1:8080 -d 'https://www.example.org' # Submit a crawl request.
+```
+
+```sh
+go build -o /usr/local/bin/tobey
+tobey -u https://example.org # Use the cli interface to submit a crawl request.
+```
+
+## CLI Mode
+
+Tobey offers an - albeit limited - cli mode that allows you to run ad hoc crawls. Target URLs can be provided via the `-u` flag. By default results
+will be saved in the current directory. Use the `-o` flag to specify a different output directory. For all remaining options, please review the cli help via `-h`. 
+
+```sh
+tobey -h
+tobey -u https://example.org
+tobey -u https://example.org/blog,https://example.org/values -o results
 ```
 
 ## Submitting Crawl Requests
@@ -279,7 +295,7 @@ example configuration.
 | `TOBEY_PORT`, `-port` | `8080` | `1-65535` | Port to bind the HTTP server to. Alternatively you can use the `-port` command line flag. |
 | `TOBEY_WORKERS`, `-w`| `5` | `1-128` | Number of workers to start. |
 | `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance for coordinting multiple instances. |
-| `TOBEY_PROGRESS_DSN` | `noop://` | `factorial://host:port`, `console://`, `noop://` | DSN for progress reporting service. |
+| `TOBEY_PROGRESS_DSN` | `noop://` | `memory://`, `factorial://host:port`, `console://`, `noop://` | DSN for progress reporting service. |
 | `TOBEY_RESULT_REPORTER_DSN` | `disk://results` | `disk:///path`, `webhook://host/path`, `noop://` | DSN specifying where crawl results should be stored. |
 | `TOBEY_TELEMETRY`, `-telemetry` | empty | `metrics`, `traces`, `pulse` | Space separated list of what kind of telemetry is emitted. |
 

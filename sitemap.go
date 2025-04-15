@@ -99,9 +99,16 @@ func (s *Sitemaps) Drain(ctx context.Context, getAuth GetAuthFn, ua string, url 
 		}
 		res, err := client.Do(req)
 		if err != nil {
+			slog.Error("Sitemaps: Failed to fetch sitemap.", "url", url, "error", err)
 			return err
 		}
 		defer res.Body.Close()
+		if res.StatusCode == http.StatusNotFound {
+			slog.Debug("Sitemaps: No sitemap found, skipping.", "url", url)
+			return nil
+		}
+
+		slog.Debug("Sitemaps: Fetched sitemap/siteindex.", "url", url)
 
 		if isProbablySitemap(url) {
 			return sitemap.Parse(res.Body, func(e sitemap.Entry) error {

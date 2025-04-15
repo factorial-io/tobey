@@ -74,7 +74,7 @@ func (r *Robots) Check(u string, getAuth GetAuthFn, ua string) (bool, error) {
 
 	robot, err := r.get(NewHostFromURL(p), getAuth, ua)
 	if err != nil {
-		slog.Info("Robots: Failed to fetch robots.txt file.", "url", u, "error", err)
+		slog.Error("Robots: Failed to fetch robots.txt file.", "url", u, "error", err)
 	}
 	return robot.TestAgent(ua, u), err
 }

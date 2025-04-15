@@ -17,6 +17,7 @@ import (
 	"time"
 	"tobey/internal/ctrlq"
 
+	charmlog "github.com/charmbracelet/log"
 	"github.com/mariuswilms/tears"
 	_ "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -200,7 +201,23 @@ func service() {
 	down(context.Background())
 }
 
+// cli runs tobey in cli mode. This preconfigures tobey in a way
+// that makes sense for the cli, i.e. outputting logs to the console.
 func cli(req ConsoleRequest) {
+	// Sync log levels, limited.
+	var charmlogLevel charmlog.Level
+	if Debug {
+		charmlogLevel = charmlog.DebugLevel
+	} else {
+		charmlogLevel = charmlog.InfoLevel
+	}
+	charmLogger := charmlog.NewWithOptions(os.Stdout, charmlog.Options{
+		ReportTimestamp: false,
+		ReportCaller:    false,
+		Level:           charmlogLevel,
+	})
+	slog.SetDefault(slog.New(charmLogger))
+
 	tear, down := tears.New()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -229,10 +246,7 @@ func cli(req ConsoleRequest) {
 	if err != nil {
 		panic(err)
 	}
-	progress, err := CreateProgressReporter("noop://")
-	if err != nil {
-		panic(err)
-	}
+	progress := NewMemoryProgressReporter()
 
 	vpool := NewVisitorPool(
 		ctx,
@@ -259,12 +273,18 @@ func cli(req ConsoleRequest) {
 		},
 	}
 
-	slog.Info("Performing run...")
+	slog.Info("Performing run, please hit STRG+C to cancel and exit.")
+
 	runs.Add(ctx, run)
-	run.Start(ctx, queue, rr, progress, req.GetURLs(true))
+	go run.Start(ctx, queue, rr, progress, req.GetURLs(true))
 
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+		slog.Info("Cancelled, exiting...")
+	case <-progress.IsRunFinished(run.ID):
+		slog.Info("Run finished, exiting...")
+		stop() // Safe to call multiple times.
+	}
 
-	slog.Info("Exiting...")
 	down(context.Background())
 }

@@ -113,7 +113,7 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	c := r.GetCollector(ctx, w.queue, w.result, w.progress)
 	p := w.progress.With(r, job.URL)
 
-	jlogger := w.logger.With("run", r, "job", job)
+	jlogger := w.logger.With("run", r.LogValue(), "job", job.LogValue())
 	jlogger.Debug("Visitor: Processing job...")
 
 	jctx, span := tracer.Start(job.Context, "process_visit_job")
@@ -140,10 +140,11 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	} else {
 		w.queue.TakeSample(jctx, job.URL, 0, err, 0)
 	}
+	p.Update(jctx, ProgressStateCrawled)
 
 	// The happy path.
 	if err == nil {
-		p.Update(jctx, ProgressStateCrawled)
+		p.Update(jctx, ProgressStateSucceeded)
 		jlogger.Info("Visitor: Successfully visited URL.",
 			"took.lifetime", time.Since(job.Created).Round(time.Millisecond).Milliseconds(),
 			"took.fetch", res.Took.Round(time.Millisecond).Milliseconds())

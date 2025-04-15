@@ -99,7 +99,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr Resul
 
 		// The returned function takes the run context.
 		return func(ctx context.Context, c *collector.Collector, url string) error {
-			logger := slog.With("run", run.ID, "url", url)
+			logger := slog.With("run", run.LogValue(), "url", url)
 			tctx, span := tracer.Start(ctx, "enqueue_element")
 			defer span.End()
 
@@ -152,10 +152,11 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr Resul
 	getCollectFn := func(run *Run) collector.CollectFn {
 		// The returned function takes the run context.
 		return func(ctx context.Context, c *collector.Collector, res *collector.Response) {
-			slog.Debug(
+			logger := slog.With("run", run.LogValue(), "url", res.Request.URL)
+
+			logger.Debug(
 				"Collect succeeded.",
-				"run", run.ID,
-				"url", res.Request.URL,
+
 				"response.body.length", len(res.Body),
 				"response.status", res.StatusCode,
 			)
@@ -163,15 +164,15 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr Resul
 			if DynamicConfig && run.ResultReporterDSN != "" {
 				rr, err := CreateResultReporter(ctx, run.ResultReporterDSN, run, res)
 				if err != nil {
-					slog.Error("Failed to create report result function.", "error", err)
+					logger.Error("Failed to create report result function.", "error", err)
 				} else {
 					if err := rr(ctx, run, res); err != nil {
-						slog.Error("Failed to report result, using dynamic reporter.", "error", err)
+						logger.Error("Failed to report result, using dynamic reporter.", "error", err)
 					}
 				}
 			} else {
 				if err := rr(ctx, run, res); err != nil {
-					slog.Error("Failed to report result, using default reporter.", "error", err)
+					logger.Error("Failed to report result, using default reporter.", "error", err)
 				}
 			}
 		}

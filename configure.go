@@ -38,7 +38,7 @@ func configure() (flagDaemon bool, req ConsoleRequest) {
 	var flagOutputDir string
 
 	flag.StringVar(&flagURLs, "u", "", "Comma separated list of URls to crawl (cli only)")
-	flag.StringVar(&flagOutputDir, "o", "results", "Directory to store results (cli only)")
+	flag.StringVar(&flagOutputDir, "o", ".", "Directory to store results (cli only, defaults to current directory)")
 
 	// parse
 	flag.Parse()
@@ -77,7 +77,7 @@ func configure() (flagDaemon bool, req ConsoleRequest) {
 		ListenPort = p
 	}
 
-	if isFlagPassed("workers") {
+	if isFlagPassed("w") {
 		NumVisitWorkers = flagWorkers
 	} else if v := os.Getenv("TOBEY_WORKERS"); v != "" {
 		p, err := strconv.Atoi(v)

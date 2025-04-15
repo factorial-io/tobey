@@ -253,7 +253,7 @@ func (req *ConsoleRequest) GetOutputDir() string {
 	if req.OutputDir != "" {
 		p = req.OutputDir
 	} else {
-		p = "results"
+		p = "."
 	}
 
 	abs, _ := filepath.Abs(p)

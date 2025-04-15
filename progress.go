@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"time"
 )
 
 // ProgressStatus represents the valid states for progress updates.
@@ -56,6 +57,9 @@ func CreateProgressReporter(dsn string) (ProgressReporter, error) {
 			host:   u.Host,
 			client: CreateRetryingHTTPClient(NoAuthFn, UserAgent),
 		}, nil
+	case "memory":
+		slog.Info("Progress Reporter: Using Memory for progress updates.")
+		return &MemoryProgressReporter{}, nil
 	case "noop":
 		slog.Info("Progress Reporter: Disabled, not sharing progress updates.")
 		return &NoopProgressReporter{}, nil
@@ -82,18 +86,22 @@ type Progress struct {
 }
 
 type ProgressUpdate struct {
-	Run    *Run
-	URL    string
-	Stage  string
-	Status ProgressStatus
+	Run     *Run
+	URL     string
+	Stage   string
+	Status  ProgressStatus
+	Created time.Time
 }
 
 // Update updates the progress with a new status
 func (p *Progress) Update(ctx context.Context, status ProgressStatus) error {
+	slog.Debug("Progress: Updating status", "run", p.Run.ID, "url", p.URL, "stage", p.Stage, "status", status)
+
 	return p.reporter.Call(ctx, ProgressUpdate{
-		Run:    p.Run,
-		URL:    p.URL,
-		Stage:  p.Stage,
-		Status: status,
+		Run:     p.Run,
+		URL:     p.URL,
+		Stage:   p.Stage,
+		Status:  status,
+		Created: time.Now(),
 	})
 }
