@@ -299,7 +299,7 @@ example configuration.
 | `TOBEY_PROGRESS_DSN` | `noop://` | `memory://`, `factorial://host:port`, `console://`, `noop://` | DSN for progress reporting service. |
 | `TOBEY_RESULT_REPORTER_DSN` | `disk://results` | `disk:///path`, `webhook://host/path`, `noop://` | DSN specifying where crawl results should be stored. |
 | `TOBEY_TELEMETRY`, `-telemetry` | empty | `metrics`, `traces`, `pulse` | Space separated list of what kind of telemetry is emitted. |
-| `-i` | empty | comma-separated paths, i.e. `/search`, `'*.pdf'` | Paths to ignore during crawling (cli only). |
+| `-i` | empty | comma-separated paths, i.e. `/search`, `'*.pdf'`, `'*.(pdf|asc)'` | Paths to ignore during crawling (cli only). |
 
 _Note:_ When enabling telemetry ensure you are also providing [OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
