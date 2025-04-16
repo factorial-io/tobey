@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"tobey/internal/collector"
 	"tobey/internal/ctrlq"
+	"tobey/internal/result"
 
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -91,7 +92,7 @@ func (r *Run) getAuthFn() GetAuthFn {
 	}
 }
 
-func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr ResultReporter, p ProgressReporter) *collector.Collector {
+func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr result.Reporter, p ProgressReporter) *collector.Collector {
 	// getEnqueueFn returns the enqueue function, that will enqueue a single URL to
 	// be crawled. The enqueue function is called whenever a new URL is discovered
 	// by that Collector, i.e. by looking at all links in a crawled page HTML.
@@ -166,12 +167,12 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr Resul
 				if err != nil {
 					logger.Error("Failed to create report result function.", "error", err)
 				} else {
-					if err := rr(ctx, run, res); err != nil {
+					if err := rr(ctx, run.ID, res); err != nil {
 						logger.Error("Failed to report result, using dynamic reporter.", "error", err)
 					}
 				}
 			} else {
-				if err := rr(ctx, run, res); err != nil {
+				if err := rr(ctx, run.ID, res); err != nil {
 					logger.Error("Failed to report result, using default reporter.", "error", err)
 				}
 			}
@@ -199,7 +200,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr Resul
 
 // Start starts the crawl with the given URLs. It will discover sitemaps and
 // enqueue the URLs. From there on more URLs will be discovered and enqueued.
-func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, rr ResultReporter, p ProgressReporter, urls []string) {
+func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, rr result.Reporter, p ProgressReporter, urls []string) {
 	c := r.GetCollector(ctx, q, rr, p)
 
 	// Decide where the initial URLs should go, users may provide sitemaps and

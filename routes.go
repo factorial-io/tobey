@@ -8,12 +8,13 @@ import (
 	"log/slog"
 	"net/http"
 	"tobey/internal/ctrlq"
+	"tobey/internal/result"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, rr ResultReporter, progress ProgressReporter) http.Handler {
+func setupRoutes(runs *RunManager, queue ctrlq.VisitWorkQueue, rr result.Reporter, progress ProgressReporter) http.Handler {
 	apirouter := http.NewServeMux()
 
 	apirouter.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {

@@ -3,7 +3,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package result
 
 import (
 	"bytes"
@@ -31,7 +31,7 @@ type s3Result struct {
 	ResponseStatusCode int         `json:"response_status_code"`
 }
 
-type S3ResultReporterConfig struct {
+type S3Config struct {
 	Bucket       string
 	Prefix       string
 	Endpoint     string
@@ -39,15 +39,15 @@ type S3ResultReporterConfig struct {
 	UsePathStyle bool
 }
 
-// newS3ResultReporterConfigFromDSN parses a DSN and returns a S3ResultReporterConfig.
+// NewS3ConfigFromDSN parses a DSN and returns a S3Config.
 // The DSN is expected to be in the format:
 //
 //	s3://<bucket>/<prefix>?endpoint=<endpoint>&region=<region>&usePathStyle=<true|false>
 //
 // If the endpoint is not provided, the default endpoint for the region will be used.
 // If the region is not provided, the default region for the bucket will be used.
-func newS3ResultReporterConfigFromDSN(dsn string) (S3ResultReporterConfig, error) {
-	config := S3ResultReporterConfig{}
+func NewS3ConfigFromDSN(dsn string) (S3Config, error) {
+	config := S3Config{}
 
 	u, err := url.Parse(dsn)
 	if err != nil {
@@ -73,15 +73,15 @@ func newS3ResultReporterConfigFromDSN(dsn string) (S3ResultReporterConfig, error
 	return config, nil
 }
 
-// ReportResultToS3 stores results in S3 as JSON files. Results are grouped by run
+// ReportToS3 stores results in S3 as JSON files. Results are grouped by run
 // in a run specific directory. The directory structure is as follows:
 //
 //	<prefix>/<run_uuid>/<url_hash>.json
 //
 // The <url_hash> is the SHA-256 hash of the request URL, encoded as a hex string.
 // The JSON file contains the result as a JSON object.
-func ReportResultToS3(ctx context.Context, config S3ResultReporterConfig, run *Run, res *collector.Response) error {
-	logger := slog.With("run", run.ID, "url", res.Request.URL)
+func ReportToS3(ctx context.Context, config S3Config, runID string, res *collector.Response) error {
+	logger := slog.With("run", runID, "url", res.Request.URL)
 	logger.Debug("Result reporter: Saving result to S3...")
 
 	var options []func(*awsconfig.LoadOptions) error
@@ -113,7 +113,7 @@ func ReportResultToS3(ctx context.Context, config S3ResultReporterConfig, run *R
 	})
 
 	result := &s3Result{
-		Run:                run.ID,
+		Run:                runID,
 		RequestURL:         res.Request.URL.String(),
 		ResponseBody:       res.Body[:],
 		ResponseStatusCode: res.StatusCode,
@@ -123,10 +123,10 @@ func ReportResultToS3(ctx context.Context, config S3ResultReporterConfig, run *R
 	hash.Write([]byte(res.Request.URL.String()))
 	filename := fmt.Sprintf("%s.json", hex.EncodeToString(hash.Sum(nil)))
 
-	key := filepath.Join(config.Prefix, run.ID, filename)
+	key := filepath.Join(config.Prefix, runID, filename)
 	key = strings.TrimLeft(key, "/") // Remove leading slash as S3 doesn't need it
 
-	jsonData, err := json.MarshalIndent(result, "", "  ")
+	jsonData, err := json.MarshalIndent(result, "", " ")
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func ReportResultToS3(ctx context.Context, config S3ResultReporterConfig, run *R
 		Body:        bytes.NewReader(jsonData),
 		ContentType: aws.String("application/json"),
 		Metadata: map[string]string{
-			"run": run.ID,
+			"run": runID,
 		},
 	})
 	return err

@@ -3,7 +3,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package result
 
 import (
 	"context"
@@ -27,12 +27,12 @@ type diskResult struct {
 	ResponseStatusCode int         `json:"response_status_code"`
 }
 
-type DiskResultReporterConfig struct {
+type DiskConfig struct {
 	OutputDir string `json:"output_dir"`
 }
 
-func newDiskResultReporterConfigFromDSN(dsn string) (DiskResultReporterConfig, error) {
-	config := DiskResultReporterConfig{}
+func NewDiskConfigFromDSN(dsn string) (DiskConfig, error) {
+	config := DiskConfig{}
 
 	u, err := url.Parse(dsn)
 	if err != nil {
@@ -69,7 +69,7 @@ func newDiskResultReporterConfigFromDSN(dsn string) (DiskResultReporterConfig, e
 	return config, nil
 }
 
-// DiskResultReporter stores results on disk as JSON files. Results are grouped by run
+// ReportToDisk stores results on disk as JSON files. Results are grouped by run
 // in a run specific directory. The directory structure is as follows:
 //
 //	<output_dir>/
@@ -78,8 +78,8 @@ func newDiskResultReporterConfigFromDSN(dsn string) (DiskResultReporterConfig, e
 //
 // The <url_hash> is the SHA-256 hash of the request URL, encoded as a hex string.
 // The JSON file contains the result as a JSON object.
-func ReportResultToDisk(ctx context.Context, config DiskResultReporterConfig, run *Run, res *collector.Response) error {
-	logger := slog.With("run", run.ID, "url", res.Request.URL)
+func ReportToDisk(ctx context.Context, config DiskConfig, runID string, res *collector.Response) error {
+	logger := slog.With("run", runID, "url", res.Request.URL)
 
 	if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
 		return err
@@ -87,7 +87,7 @@ func ReportResultToDisk(ctx context.Context, config DiskResultReporterConfig, ru
 	logger.Debug("Result reporter: Saving result to file...")
 
 	result := &diskResult{
-		Run:                run.ID,
+		Run:                runID,
 		RequestURL:         res.Request.URL.String(),
 		ResponseBody:       res.Body[:],
 		ResponseStatusCode: res.StatusCode,
@@ -97,7 +97,7 @@ func ReportResultToDisk(ctx context.Context, config DiskResultReporterConfig, ru
 	hash.Write([]byte(res.Request.URL.String()))
 	filename := fmt.Sprintf("%s.json", hex.EncodeToString(hash.Sum(nil)))
 
-	runDir := filepath.Join(config.OutputDir, run.ID)
+	runDir := filepath.Join(config.OutputDir, runID)
 	filepath := filepath.Join(runDir, filename)
 
 	// MkdirAll ignores errors where the directory exists, so we don't need to check for it.
