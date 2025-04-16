@@ -154,7 +154,7 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 
 	// The sad path, where the previous error is now interpreted as a fail.
 	span.AddEvent("Visitor: Failed visiting URL.", t)
-	jlogger.Info("Visitor: Failed visiting URL.", "error", err)
+	jlogger.Debug("Visitor: Error encountered visiting URL, handling...", "error", err)
 
 	code, herr := handleFailedVisit(
 		func(url string, d time.Duration) error {
@@ -168,6 +168,8 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 		err,
 	)
 
+	codelogger := jlogger.With("code", code, "fail", err, "error", herr)
+
 	switch code {
 	case CodeIgnore:
 		p.Update(jctx, ProgressStateCancelled)
@@ -179,20 +181,17 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 		span.End()
 		return nil
 	case CodePermanent:
+		codelogger.Error("Visitor: Handling the failed visit error'ed.")
 		p.Update(jctx, ProgressStateErrored)
 		span.End()
 		return nil
 	case CodeUnknown:
+		codelogger.Error("Visitor: Handling the failed visit error'ed.")
 		p.Update(jctx, ProgressStateErrored)
 		span.End()
 		return nil
 	default: // covers CodeUnhandled
-		jlogger.Error(
-			"Visitor: Handling the failed visit error'ed.",
-			"code", code,
-			"fail", err,
-			"error", herr,
-		)
+		codelogger.Error("Visitor: Handling the failed visit error'ed.")
 		p.Update(jctx, ProgressStateErrored)
 		span.RecordError(herr)
 		span.End()
