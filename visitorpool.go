@@ -11,6 +11,8 @@ import (
 	"log/slog"
 	"sync"
 	"tobey/internal/ctrlq"
+	"tobey/internal/progress"
+	"tobey/internal/result"
 )
 
 // NewVisitorPool initializes a worker pool and fills it with a number
@@ -20,8 +22,8 @@ func NewVisitorPool(
 	num int,
 	runs *RunManager,
 	q ctrlq.VisitWorkQueue,
-	rr ResultReporter,
-	pr ProgressReporter,
+	rr result.Reporter,
+	pr progress.Reporter,
 ) *VisitorPool {
 	pool := &VisitorPool{
 		startWorkersNum: num,

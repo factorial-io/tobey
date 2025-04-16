@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"time"
 	"tobey/internal/ctrlq"
+	"tobey/internal/progress"
 
 	charmlog "github.com/charmbracelet/log"
 	"github.com/mariuswilms/tears"
@@ -246,7 +247,7 @@ func cli(req ConsoleRequest) {
 	if err != nil {
 		panic(err)
 	}
-	progress := NewMemoryProgressReporter()
+	progress := progress.NewMemoryReporter()
 
 	vpool := NewVisitorPool(
 		ctx,

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"time"
 	"tobey/internal/collector"
+	"tobey/internal/progress"
 	"tobey/internal/result"
 
 	"github.com/cenkalti/backoff/v4"
@@ -113,5 +114,48 @@ func CreateResultReporter(ctx context.Context, dsn string, run *Run, res *collec
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported result reporter type: %s", u.Scheme)
+	}
+}
+
+// CreateProgressReporter creates a new progress dispatcher based on the provided DSN.
+// If dsn is empty, it returns a NoopProgressDispatcher.
+func CreateProgressReporter(dsn string) (progress.Reporter, error) {
+	if dsn == "" {
+		slog.Info("Progress Reporter: Disabled, not sharing progress updates.")
+		return &progress.NoopReporter{}, nil
+	}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("invalid progress DSN: %w", err)
+	}
+
+	switch u.Scheme {
+	case "console":
+		slog.Info("Progress Reporter: Using Console for progress updates.")
+		return &progress.ConsoleReporter{}, nil
+	case "factorial", "factorials":
+		slog.Info("Progress Reporter: Enabled, using Factorial progress service for updates.", "dsn", dsn)
+
+		var scheme string
+		if u.Scheme == "factorials" {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+		return progress.NewFactorialReporter(
+			CreateRetryingHTTPClient(NoAuthFn, UserAgent),
+			scheme,
+			u.Host,
+			tracer,
+		), nil
+	case "memory":
+		slog.Info("Progress Reporter: Using Memory for progress updates.")
+		return progress.NewMemoryReporter(), nil
+	case "noop":
+		slog.Info("Progress Reporter: Disabled, not sharing progress updates.")
+		return &progress.NoopReporter{}, nil
+	default:
+		return nil, fmt.Errorf("unsupported progress dispatcher type: %s", u.Scheme)
 	}
 }

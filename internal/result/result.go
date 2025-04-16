@@ -10,6 +10,7 @@ import (
 	"tobey/internal/collector"
 )
 
+// TODO: Currently unused.
 type DiscoverySource string
 
 const (

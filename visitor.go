@@ -15,6 +15,8 @@ import (
 	"time"
 	"tobey/internal/collector"
 	"tobey/internal/ctrlq"
+	"tobey/internal/progress"
+	"tobey/internal/result"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -37,8 +39,8 @@ type Visitor struct {
 	runs  *RunManager
 	queue ctrlq.VisitWorkQueue
 
-	result   ResultReporter
-	progress ProgressReporter
+	result   result.Reporter
+	progress progress.Reporter
 
 	logger *slog.Logger
 }
@@ -103,7 +105,6 @@ func (w *Visitor) run(ctx context.Context) error {
 }
 
 func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
-
 	// If this tobey instance is also the instance that received the run request,
 	// we already have a Collector locally available. If this instance has retrieved
 	// a VisitMessage that was put in the queue by another tobey instance, we don't
@@ -111,7 +112,7 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	// are not shared by the Manager across tobey instances.
 	r, _ := w.runs.Get(ctx, job.Run)
 	c := r.GetCollector(ctx, w.queue, w.result, w.progress)
-	p := w.progress.With(r, job.URL)
+	p := w.progress.With(job.Run, job.URL)
 
 	jlogger := w.logger.With("run", r.LogValue(), "job", job.LogValue())
 	jlogger.Debug("Visitor: Processing job...")
@@ -121,7 +122,7 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	t := trace.WithAttributes(attribute.String("Url", job.URL))
 	defer span.End()
 
-	p.Update(jctx, ProgressStateCrawling)
+	p.Update(jctx, progress.StateCrawling)
 
 	// This will also call the ResultReporter.Accept method, via the collector.CollectFn.
 	res, err := c.Visit(jctx, job.URL)
@@ -140,11 +141,11 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 	} else {
 		w.queue.TakeSample(jctx, job.URL, 0, err, 0)
 	}
-	p.Update(jctx, ProgressStateCrawled)
+	p.Update(jctx, progress.StateCrawled)
 
 	// The happy path.
 	if err == nil {
-		p.Update(jctx, ProgressStateSucceeded)
+		p.Update(jctx, progress.StateSucceeded)
 		jlogger.Info("Visitor: Successfully visited URL.",
 			"took.lifetime", time.Since(job.Created).Round(time.Millisecond).Milliseconds(),
 			"took.fetch", res.Took.Round(time.Millisecond).Milliseconds())
@@ -172,7 +173,7 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 
 	switch code {
 	case CodeIgnore:
-		p.Update(jctx, ProgressStateCancelled)
+		p.Update(jctx, progress.StateCancelled)
 		span.End()
 		return nil
 	case CodeTemporary:
@@ -182,17 +183,17 @@ func (w *Visitor) process(ctx context.Context, job *ctrlq.VisitJob) error {
 		return nil
 	case CodePermanent:
 		codelogger.Error("Visitor: Handling the failed visit error'ed.")
-		p.Update(jctx, ProgressStateErrored)
+		p.Update(jctx, progress.StateErrored)
 		span.End()
 		return nil
 	case CodeUnknown:
 		codelogger.Error("Visitor: Handling the failed visit error'ed.")
-		p.Update(jctx, ProgressStateErrored)
+		p.Update(jctx, progress.StateErrored)
 		span.End()
 		return nil
 	default: // covers CodeUnhandled
 		codelogger.Error("Visitor: Handling the failed visit error'ed.")
-		p.Update(jctx, ProgressStateErrored)
+		p.Update(jctx, progress.StateErrored)
 		span.RecordError(herr)
 		span.End()
 		return herr // Exit the worker.

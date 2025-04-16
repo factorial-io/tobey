@@ -3,22 +3,22 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package progress
 
 import "context"
 
-// NoopProgressReporter is a no-op implementation of the ProgressReporter interface, it
+// NoopReporter is a no-op implementation of the Reporter interface, it
 // is used as the default when no progress reporting is configured.
-type NoopProgressReporter struct{}
+type NoopReporter struct{}
 
-func (p *NoopProgressReporter) With(run *Run, url string) *Progress {
+func (p *NoopReporter) With(runID string, url string) *Progress {
 	return &Progress{
 		reporter: p,
-		Run:      run,
+		RunID:    runID,
 		URL:      url,
 	}
 }
 
-func (p *NoopProgressReporter) Call(ctx context.Context, pu ProgressUpdate) error {
+func (p *NoopReporter) Call(ctx context.Context, pu Update) error {
 	return nil
 }

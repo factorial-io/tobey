@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"tobey/internal/collector"
 	"tobey/internal/ctrlq"
+	"tobey/internal/progress"
 	"tobey/internal/result"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -92,11 +93,11 @@ func (r *Run) getAuthFn() GetAuthFn {
 	}
 }
 
-func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr result.Reporter, p ProgressReporter) *collector.Collector {
+func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr result.Reporter, p progress.Reporter) *collector.Collector {
 	// getEnqueueFn returns the enqueue function, that will enqueue a single URL to
 	// be crawled. The enqueue function is called whenever a new URL is discovered
 	// by that Collector, i.e. by looking at all links in a crawled page HTML.
-	getEnqueueFn := func(run *Run, q ctrlq.VisitWorkQueue, progress ProgressReporter) collector.EnqueueFn {
+	getEnqueueFn := func(run *Run, q ctrlq.VisitWorkQueue, pr progress.Reporter) collector.EnqueueFn {
 
 		// The returned function takes the run context.
 		return func(ctx context.Context, c *collector.Collector, url string) error {
@@ -104,7 +105,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr resul
 			tctx, span := tracer.Start(ctx, "enqueue_element")
 			defer span.End()
 
-			p := progress.With(run, url)
+			p := pr.With(run.ID, url)
 
 			span.SetAttributes(attribute.String("URL", url))
 			// Ensure we never publish a URL twice for a single run. Not only does
@@ -142,7 +143,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr resul
 			run.SawURL(tctx, url)
 			logger.Debug("Collector: URL marked as seen.")
 
-			p.Update(tctx, ProgressStateQueuedForCrawling)
+			p.Update(tctx, progress.StateQueuedForCrawling)
 			return nil
 		}
 	}
@@ -200,8 +201,8 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr resul
 
 // Start starts the crawl with the given URLs. It will discover sitemaps and
 // enqueue the URLs. From there on more URLs will be discovered and enqueued.
-func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, rr result.Reporter, p ProgressReporter, urls []string) {
-	c := r.GetCollector(ctx, q, rr, p)
+func (r *Run) Start(ctx context.Context, q ctrlq.VisitWorkQueue, rr result.Reporter, pr progress.Reporter, urls []string) {
+	c := r.GetCollector(ctx, q, rr, pr)
 
 	// Decide where the initial URLs should go, users may provide sitemaps and
 	// just URLs to web pages.

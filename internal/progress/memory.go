@@ -1,4 +1,9 @@
-package main
+// Copyright 2024 Factorial GmbH. All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package progress
 
 import (
 	"context"
@@ -9,14 +14,14 @@ import (
 // ConfidenceLevelSafetyDistance is the number of times the average update duration to wait before being fully confident.
 const ConfidenceLevelSafetyDistance = 3
 
-// MemoryProgressReporter stores progress updates in memory. It is a very simplified version
+// MemoryReporter stores progress updates in memory. It is a very simplified version
 // of the Factorial Progress Service.
-type MemoryProgressReporter struct {
+type MemoryReporter struct {
 	// mu protects access to the updates map
 	mu sync.RWMutex
 
 	// updates stores the most recent progress update by run ID and URL
-	updates map[string]map[string]ProgressUpdate
+	updates map[string]map[string]Update
 	// stats tracks statistics for each run
 	stats map[string]*ProgressRunStats
 
@@ -32,45 +37,45 @@ type ProgressRunStats struct {
 	LastSeen time.Time
 }
 
-// NewMemoryProgressReporter creates a new memory-based progress reporter
-func NewMemoryProgressReporter() *MemoryProgressReporter {
-	return &MemoryProgressReporter{
-		updates: make(map[string]map[string]ProgressUpdate),
+// NewMemoryReporter creates a new memory-based progress reporter
+func NewMemoryReporter() *MemoryReporter {
+	return &MemoryReporter{
+		updates: make(map[string]map[string]Update),
 		stats:   make(map[string]*ProgressRunStats),
 		updated: make(chan bool, 100), // Buffer size of 100 to avoid blocking
 	}
 }
 
 // With creates a new Progress instance for the given run and URL
-func (m *MemoryProgressReporter) With(run *Run, url string) *Progress {
+func (m *MemoryReporter) With(runID string, url string) *Progress {
 	return &Progress{
 		reporter: m,
 		Stage:    "initial",
-		Run:      run,
+		RunID:    runID,
 		URL:      url,
 	}
 }
 
 // Call stores the progress update in memory
-func (m *MemoryProgressReporter) Call(ctx context.Context, pu ProgressUpdate) error {
+func (m *MemoryReporter) Call(ctx context.Context, pu Update) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// Record the update.
-	if _, ok := m.updates[pu.Run.ID]; !ok {
-		m.updates[pu.Run.ID] = make(map[string]ProgressUpdate)
+	if _, ok := m.updates[pu.RunID]; !ok {
+		m.updates[pu.RunID] = make(map[string]Update)
 	}
 
-	m.updates[pu.Run.ID][pu.URL] = pu
+	m.updates[pu.RunID][pu.URL] = pu
 
 	// Proceed with updating the stats.
-	if _, ok := m.stats[pu.Run.ID]; !ok {
-		m.stats[pu.Run.ID] = &ProgressRunStats{
+	if _, ok := m.stats[pu.RunID]; !ok {
+		m.stats[pu.RunID] = &ProgressRunStats{
 			FirstSeen: pu.Created,
 		}
 	}
 
-	stats := m.stats[pu.Run.ID]
+	stats := m.stats[pu.RunID]
 	stats.LastSeen = pu.Created
 
 	// Notify listeners that an update has occurred
@@ -85,7 +90,7 @@ func (m *MemoryProgressReporter) Call(ctx context.Context, pu ProgressUpdate) er
 }
 
 // IsRunFinished returns whether a run has finished processing with high confidence
-func (m *MemoryProgressReporter) IsRunFinished(runID string) <-chan bool {
+func (m *MemoryReporter) IsRunFinished(runID string) <-chan bool {
 	result := make(chan bool)
 
 	checkFinished := func() bool {
@@ -129,12 +134,12 @@ func (m *MemoryProgressReporter) IsRunFinished(runID string) <-chan bool {
 }
 
 // computeProgressCountDone calculates how many URLs have completed processing
-func computeProgressCounts(updates map[string]ProgressUpdate) (int, int) {
+func computeProgressCounts(updates map[string]Update) (int, int) {
 	var done int
 
 	for _, update := range updates {
 		switch update.Status {
-		case ProgressStateSucceeded, ProgressStateErrored, ProgressStateCancelled:
+		case StateSucceeded, StateErrored, StateCancelled:
 			done++
 		}
 	}

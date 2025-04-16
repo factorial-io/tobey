@@ -3,7 +3,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package progress
 
 import (
 	"bytes"
@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -30,54 +32,65 @@ type FactorialProgressUpdatePayload struct {
 }
 
 // factorialProgressStatus maps internal ProgressStatus to Factorial API string representations.
-func factorialProgressStatus(status ProgressStatus) string {
+func factorialProgressStatus(status Status) string {
 	switch status {
-	case ProgressStateQueuedForCrawling:
+	case StateQueuedForCrawling:
 		return "queued_for_crawling"
-	case ProgressStateCrawling:
+	case StateCrawling:
 		return "crawling"
-	case ProgressStateCrawled:
+	case StateCrawled:
 		return "crawled"
-	case ProgressStateSucceeded:
+	case StateSucceeded:
 		return "succeeded"
-	case ProgressStateErrored:
+	case StateErrored:
 		return "errored"
-	case ProgressStateCancelled:
+	case StateCancelled:
 		return "cancelled"
 	default:
 		return "unknown"
 	}
 }
 
-// FactorialProgressReporter is a reporter for the Factorial progress service.
-type FactorialProgressReporter struct {
+// FactorialReporter is a reporter for the Factorial progress service.
+type FactorialReporter struct {
 	client *http.Client
 	scheme string
 	host   string
+	tracer trace.Tracer
 }
 
-func (p *FactorialProgressReporter) With(run *Run, url string) *Progress {
+// NewFactorialReporter creates a new Factorial progress reporter.
+func NewFactorialReporter(client *http.Client, scheme string, host string, tracer trace.Tracer) *FactorialReporter {
+	return &FactorialReporter{
+		client: client,
+		scheme: scheme,
+		host:   host,
+		tracer: tracer,
+	}
+}
+
+func (p *FactorialReporter) With(runID string, url string) *Progress {
 	return &Progress{
 		reporter: p,
 		Stage:    FactorialProgressServiceDefaultStage,
-		Run:      run,
+		RunID:    runID,
 		URL:      url,
 	}
 }
 
 // Call sends the progress update over the wire, it implements a fire and forget approach.
-func (p *FactorialProgressReporter) Call(ctx context.Context, pu ProgressUpdate) error {
-	logger := slog.With("run", pu.Run, "url", pu.URL)
+func (p *FactorialReporter) Call(ctx context.Context, pu Update) error {
+	logger := slog.With("run", pu.RunID, "url", pu.URL)
 	logger.Debug("Progress Dispatcher: Sending update...")
 
-	ctx, span := tracer.Start(ctx, "output.progress.send")
+	ctx, span := p.tracer.Start(ctx, "output.progress.send")
 	defer span.End()
 
 	// Convert generic ProgressUpdate to Factorial-specific payload
 	payload := FactorialProgressUpdatePayload{
 		Stage:  pu.Stage,
 		Status: factorialProgressStatus(pu.Status),
-		Run:    pu.Run.ID,
+		Run:    pu.RunID,
 		URL:    pu.URL,
 	}
 
