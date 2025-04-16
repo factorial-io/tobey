@@ -36,9 +36,11 @@ func configure() (flagDaemon bool, req ConsoleRequest) {
 	// cli only
 	var flagURLs string
 	var flagOutputDir string
+	var flagIgnores string
 
 	flag.StringVar(&flagURLs, "u", "", "Comma separated list of URls to crawl (cli only)")
 	flag.StringVar(&flagOutputDir, "o", ".", "Directory to store results (cli only, defaults to current directory)")
+	flag.StringVar(&flagIgnores, "i", "", "Comma separated list of paths to ignore (cli only)")
 
 	// parse
 	flag.Parse()
@@ -132,6 +134,10 @@ func configure() (flagDaemon bool, req ConsoleRequest) {
 
 	if isFlagPassed("o") {
 		req.OutputDir = flagOutputDir
+	}
+
+	if isFlagPassed("i") {
+		req.IgnorePaths = strings.Split(flagIgnores, ",")
 	}
 
 	return
