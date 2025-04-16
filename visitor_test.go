@@ -89,9 +89,10 @@ func TestHandleFailedVisit(t *testing.T) {
 			expectRepublish: true,
 		},
 		{
-			name:         "context deadline exceeded",
-			err:          context.DeadlineExceeded,
-			expectedCode: CodeTemporary,
+			name:            "context deadline exceeded",
+			err:             context.DeadlineExceeded,
+			expectedCode:    CodeTemporary,
+			expectRepublish: true,
 		},
 		{
 			name:         "unknown status code",
@@ -99,9 +100,10 @@ func TestHandleFailedVisit(t *testing.T) {
 			expectedCode: CodeUnknown,
 		},
 		{
-			name:         "unhandled error without response",
-			err:          errors.New("random error"),
-			expectedCode: CodeUnhandled,
+			name:          "unhandled error without response",
+			err:           errors.New("random error"),
+			expectedCode:  CodeUnhandled,
+			expectedError: true,
 		},
 	}
 
