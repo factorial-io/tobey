@@ -69,6 +69,7 @@ func CreateCrawlerHTTPClient(getAuth GetAuthFn, ua string) *http.Client {
 
 func CreateRetryingHTTPClient(getAuth GetAuthFn, ua string) *http.Client {
 	rc := retryablehttp.NewClient()
+	rc.Logger = slog.Default() // nil to disable logging
 
 	// Fail a little quicker, as the caller might block until
 	// the request is done.
