@@ -85,9 +85,9 @@ _Note:_ Currently tobey supports only HTTP basic authentication.
 
 ```jsonc
 {
-  "url": "https://example.org"
+  "url": "https://example.org",
   "auth": [
-    { "host": "example.org", "method": "basic", username: "foo", "password": "secret" }
+    { "host": "example.org", "method": "basic", "username": "foo", "password": "secret" }
   ]
 }
 ```
@@ -302,7 +302,7 @@ example configuration.
 | `TOBEY_PROGRESS_DSN` | Service | `noop://` | `memory://`, `factorial://host:port`, `console://`, `noop://` | DSN for progress reporting service. |
 | `TOBEY_RESULT_REPORTER_DSN` | Service | `disk://results` | `disk:///path`, `webhook://host/path`, `noop://` | DSN specifying where crawl results should be stored. |
 | `TOBEY_TELEMETRY`, `-telemetry` | Service | empty | `metrics`, `traces`, `pulse` | Space separated list of what kind of telemetry is emitted. |
-| `-i` | CLI | empty | comma-separated paths, i.e. `/search`, `'*.pdf'`, `'*.(pdf|asc)'` | Paths to ignore during crawling. |
+| `-i` | CLI | empty | comma-separated paths, i.e. `/search`, `'*.pdf'`, `'*.(pdf\|asc)'` | Paths to ignore during crawling. |
 | `-oc` | CLI | `false` | `true`, `false` | Store response bodies directly on disk without JSON wrapper. |
 
 _Note:_ When enabling telemetry ensure you are also providing [OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
