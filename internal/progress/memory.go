@@ -97,10 +97,12 @@ func (m *MemoryReporter) IsRunFinished(runID string) <-chan bool {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
 
+		now := time.Now() // Provide consistent time, over iterations.
+
 		if _, ok := m.updates[runID]; ok {
 			if stats, ok := m.stats[runID]; ok {
 				count, countDone := computeProgressCounts(m.updates[runID])
-				confidence := computeProgressFinishedConfidence(stats.FirstSeen, stats.LastSeen, count, countDone)
+				confidence := computeProgressFinishedConfidence(now, stats.FirstSeen, stats.LastSeen, count, countDone)
 
 				return count == countDone && countDone > 0 && confidence >= 1.0
 			}
@@ -147,8 +149,7 @@ func computeProgressCounts(updates map[string]Update) (int, int) {
 }
 
 // computeProgressFinishedConfidence calculates how confident we are that a run has finished.
-func computeProgressFinishedConfidence(firstSeen, lastSeen time.Time, count, countDone int) float64 {
-	now := time.Now()
+func computeProgressFinishedConfidence(now time.Time, firstSeen, lastSeen time.Time, count, countDone int) float64 {
 	var confidence float64
 
 	// We are not finished yet, so be inconfident
@@ -156,10 +157,15 @@ func computeProgressFinishedConfidence(firstSeen, lastSeen time.Time, count, cou
 		return confidence
 	}
 
+	// If there's no elapsed time, we can't be confident
+	elapsedTime := lastSeen.Sub(firstSeen).Milliseconds()
+	if elapsedTime == 0 {
+		return 0.0
+	}
+
 	// Calculate the average time an update takes, assumption being that
 	// we should wait for the average time after the last update before
 	// being confident that none will arrive.
-	elapsedTime := lastSeen.Sub(firstSeen).Milliseconds()
 	avgUpdateDuration := elapsedTime / int64(count)
 
 	// Time to wait for i.e. 3x times the average update duration before being confident.

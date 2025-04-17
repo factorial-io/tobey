@@ -11,6 +11,7 @@ func TestComputeProgressConfidenceLevel(t *testing.T) {
 
 	tests := []struct {
 		name      string
+		now       time.Time
 		firstSeen time.Time
 		lastSeen  time.Time
 		count     int
@@ -19,6 +20,7 @@ func TestComputeProgressConfidenceLevel(t *testing.T) {
 	}{
 		{
 			name:      "not finished - count not equal to countDone",
+			now:       baseTime.Add(20 * time.Second),
 			firstSeen: baseTime,
 			lastSeen:  baseTime.Add(10 * time.Second),
 			count:     10,
@@ -27,6 +29,7 @@ func TestComputeProgressConfidenceLevel(t *testing.T) {
 		},
 		{
 			name:      "not finished - countDone is 0",
+			now:       baseTime.Add(20 * time.Second),
 			firstSeen: baseTime,
 			lastSeen:  baseTime.Add(10 * time.Second),
 			count:     10,
@@ -35,6 +38,7 @@ func TestComputeProgressConfidenceLevel(t *testing.T) {
 		},
 		{
 			name:      "zero elapsed time",
+			now:       baseTime,
 			firstSeen: baseTime,
 			lastSeen:  baseTime,
 			count:     10,
@@ -42,17 +46,28 @@ func TestComputeProgressConfidenceLevel(t *testing.T) {
 			want:      0.0,
 		},
 		{
+			name:      "unfinished - 100 milliseconds elapsed",
+			now:       baseTime.Add(100 * time.Millisecond),
+			firstSeen: baseTime.Add(-100 * time.Millisecond),
+			lastSeen:  baseTime,
+			count:     1,
+			countDone: 1,
+			want:      0.333,
+		},
+		{
 			name:      "finished - one second elapsed",
-			firstSeen: baseTime,
-			lastSeen:  baseTime.Add(1 * time.Second),
+			now:       baseTime.Add(1 * time.Second),
+			firstSeen: baseTime.Add(-100 * time.Millisecond),
+			lastSeen:  baseTime,
 			count:     1,
 			countDone: 1,
 			want:      1.0,
 		},
 		{
-			name:      "finished - one milliseconds elapsed",
-			firstSeen: baseTime,
-			lastSeen:  baseTime.Add(1 * time.Millisecond),
+			name:      "finished - 300 milliseconds elapsed",
+			now:       baseTime.Add(300 * time.Millisecond),
+			firstSeen: baseTime.Add(-100 * time.Millisecond),
+			lastSeen:  baseTime,
 			count:     1,
 			countDone: 1,
 			want:      1.0,
@@ -61,7 +76,7 @@ func TestComputeProgressConfidenceLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := computeProgressFinishedConfidence(tt.firstSeen, tt.lastSeen, tt.count, tt.countDone)
+			got := computeProgressFinishedConfidence(tt.now, tt.firstSeen, tt.lastSeen, tt.count, tt.countDone)
 
 			// Use a small epsilon for float comparison
 			epsilon := 0.001
