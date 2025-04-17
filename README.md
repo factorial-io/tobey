@@ -17,13 +17,14 @@ tobey -u https://example.org # Use the cli interface to submit a crawl request.
 ## CLI Mode
 
 Tobey offers an - albeit limited - cli mode that allows you to run ad hoc crawls. Target URLs can be provided via the `-u` flag. By default results
-will be saved in the current directory. Use the `-o` flag to specify a different output directory. Use the `-i` flag to specify paths to ignore. For all remaining options, please review the cli help via `-h`. 
+will be saved in the current directory. Use the `-o` flag to specify a different output directory. Use the `-i` flag to specify paths to ignore. Use the `-oc` flag to store response bodies directly on disk without wrapping them in JSON files. For all remaining options, please review the cli help via `-h`. 
 
 ```sh
 tobey -h
 tobey -u https://example.org
 tobey -u https://example.org/blog,https://example.org/values -o results
 tobey -u https://example.org -i search/,admin/
+tobey -u https://example.org -oc # Store response bodies directly with appropriate file extensions
 ```
 
 ## Submitting Crawl Requests
@@ -287,19 +288,20 @@ Using sane defaults, tobey works out of the box without additional configuration
 the following environment variables and/or command line flags can be used. Please also see `.env.example` for a working
 example configuration.
 
-| Variable / Flag   | Default  | Supported Values | Description                      |
-|----------------|----------------|------------------|----------------------------------|
-| `TOBEY_DEBUG`, `-debug` | `false` | `true`, `false`  | Controls debug mode. |
-| `TOBEY_SKIP_CACHE`, `-no-cache` | `false` | `true`, `false`  | Controls caching access. |
-| `TOBEY_UA`, `-ua` | `Tobey/0`| any string | User-Agent to identify with. |
-| `TOBEY_HOST`, `-host` | empty | i.e. `localhost`, `127.0.0.1` | Adress to bind the HTTP server to. Empty means listen on all. |
-| `TOBEY_PORT`, `-port` | `8080` | `1-65535` | Port to bind the HTTP server to. Alternatively you can use the `-port` command line flag. |
-| `TOBEY_WORKERS`, `-w`| `5` | `1-128` | Number of workers to start. |
-| `TOBEY_REDIS_DSN` | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance for coordinting multiple instances. |
-| `TOBEY_PROGRESS_DSN` | `noop://` | `memory://`, `factorial://host:port`, `console://`, `noop://` | DSN for progress reporting service. |
-| `TOBEY_RESULT_REPORTER_DSN` | `disk://results` | `disk:///path`, `webhook://host/path`, `noop://` | DSN specifying where crawl results should be stored. |
-| `TOBEY_TELEMETRY`, `-telemetry` | empty | `metrics`, `traces`, `pulse` | Space separated list of what kind of telemetry is emitted. |
-| `-i` | empty | comma-separated paths, i.e. `/search`, `'*.pdf'`, `'*.(pdf|asc)'` | Paths to ignore during crawling (cli only). |
+| Variable / Flag   | Mode | Default  | Supported Values | Description                      |
+|----------------|------|----------------|------------------|----------------------------------|
+| `TOBEY_DEBUG`, `-debug` | Both | `false` | `true`, `false`  | Controls debug mode. |
+| `TOBEY_SKIP_CACHE`, `-no-cache` | Both | `false` | `true`, `false`  | Controls caching access. |
+| `TOBEY_UA`, `-ua` | Both | `Tobey/0`| any string | User-Agent to identify with. |
+| `TOBEY_HOST`, `-host` | Service | empty | i.e. `localhost`, `127.0.0.1` | Adress to bind the HTTP server to. Empty means listen on all. |
+| `TOBEY_PORT`, `-port` | Service | `8080` | `1-65535` | Port to bind the HTTP server to. |
+| `TOBEY_WORKERS`, `-w`| Both | `5` | `1-128` | Number of workers to start. |
+| `TOBEY_REDIS_DSN` | Service | empty | i.e. `redis://localhost:6379` | DSN to reach a Redis instance for coordinting multiple instances. |
+| `TOBEY_PROGRESS_DSN` | Service | `noop://` | `memory://`, `factorial://host:port`, `console://`, `noop://` | DSN for progress reporting service. |
+| `TOBEY_RESULT_REPORTER_DSN` | Service | `disk://results` | `disk:///path`, `webhook://host/path`, `noop://` | DSN specifying where crawl results should be stored. |
+| `TOBEY_TELEMETRY`, `-telemetry` | Service | empty | `metrics`, `traces`, `pulse` | Space separated list of what kind of telemetry is emitted. |
+| `-i` | CLI | empty | comma-separated paths, i.e. `/search`, `'*.pdf'`, `'*.(pdf|asc)'` | Paths to ignore during crawling. |
+| `-oc` | CLI | `false` | `true`, `false` | Store response bodies directly on disk without JSON wrapper. |
 
 _Note:_ When enabling telemetry ensure you are also providing [OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
