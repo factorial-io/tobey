@@ -4,27 +4,29 @@ Tobey is a throughput optimizing but friendly web crawler, that is scalable from
 
 ## Quickstart
 
-```sh
-go run . # Start the crawler as a server.
-curl -X POST http://127.0.0.1:8080 -d 'https://www.example.org' # Submit a crawl request.
-```
+Start tobey as a service, and interact with it:
 
 ```sh
-go build -o /usr/local/bin/tobey
-tobey -u https://example.org # Use the cli interface to submit a crawl request.
+go run . # Start the service.
+curl -X POST http://127.0.0.1:8080 -d 'https://www.example.org' # Submit a request.
 ```
 
 ## CLI Mode
 
-Tobey offers an - albeit limited - cli mode that allows you to run ad hoc crawls. Target URLs can be provided via the `-u` flag. By default results
-will be saved in the current directory. Use the `-o` flag to specify a different output directory. Use the `-i` flag to specify paths to ignore. Use the `-oc` flag to store response bodies directly on disk without wrapping them in JSON files. For all remaining options, please review the cli help via `-h`. 
+Tobey offers an - albeit limited - cli mode that allows you to run ad hoc crawls. 
+
+```sh
+go build -o /usr/local/bin # Make tobey globally available as a command.
+```
+
+Target URLs can be provided via the `-u` flag. By default results
+will be saved in the current directory. Use the `-o` flag to specify a different output directory. Use the `-i` flag to specify paths to ignore. For all remaining options, please review the cli help via `-h`. 
 
 ```sh
 tobey -h
 tobey -u https://example.org
 tobey -u https://example.org/blog,https://example.org/values -o results
 tobey -u https://example.org -i search/,admin/
-tobey -u https://example.org -oc # Store response bodies directly with appropriate file extensions
 ```
 
 ## Submitting Crawl Requests
@@ -85,7 +87,7 @@ _Note:_ Currently tobey supports only HTTP basic authentication.
 {
   "url": "https://example.org"
   "auth": [
-    { host: "example.org", method: "basic", username: "foo", password: "secret" }
+    { "host": "example.org", "method": "basic", username: "foo", "password": "secret" }
   ]
 }
 ```
