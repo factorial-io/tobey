@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -28,7 +29,8 @@ type diskResult struct {
 }
 
 type DiskConfig struct {
-	OutputDir string `json:"output_dir"`
+	OutputDir         string `json:"output_dir"`
+	OutputContentOnly bool   `json:"output_content_only"`
 }
 
 func NewDiskConfigFromDSN(dsn string) (DiskConfig, error) {
@@ -86,16 +88,9 @@ func ReportToDisk(ctx context.Context, config DiskConfig, runID string, res *col
 	}
 	logger.Debug("Result reporter: Saving result to file...")
 
-	result := &diskResult{
-		Run:                runID,
-		RequestURL:         res.Request.URL.String(),
-		ResponseBody:       res.Body[:],
-		ResponseStatusCode: res.StatusCode,
-	}
-
 	hash := sha256.New()
 	hash.Write([]byte(res.Request.URL.String()))
-	filename := fmt.Sprintf("%s.json", hex.EncodeToString(hash.Sum(nil)))
+	filename := hex.EncodeToString(hash.Sum(nil))
 
 	runDir := filepath.Join(config.OutputDir, runID)
 	filepath := filepath.Join(runDir, filename)
@@ -105,10 +100,33 @@ func ReportToDisk(ctx context.Context, config DiskConfig, runID string, res *col
 		return err
 	}
 
+	if config.OutputContentOnly {
+		// Get the Content-Type from the response headers
+		contentType := res.Headers.Get("Content-Type")
+		if contentType != "" {
+			// Try to get extension from MIME type
+			exts, err := mime.ExtensionsByType(contentType)
+			if err == nil && len(exts) > 0 {
+				filepath = filepath + exts[0]
+			}
+		}
+
+		// Store only the response body directly
+		return os.WriteFile(filepath, res.Body, 0644)
+	}
+
+	// Store as JSON with metadata
+	result := &diskResult{
+		Run:                runID,
+		RequestURL:         res.Request.URL.String(),
+		ResponseBody:       res.Body[:],
+		ResponseStatusCode: res.StatusCode,
+	}
+
 	jsonData, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(filepath, jsonData, 0644)
+	return os.WriteFile(filepath+".json", jsonData, 0644)
 }

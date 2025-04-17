@@ -15,8 +15,10 @@ import (
 	"os"
 	"os/signal"
 	"time"
+	"tobey/internal/collector"
 	"tobey/internal/ctrlq"
 	"tobey/internal/progress"
+	"tobey/internal/result"
 
 	charmlog "github.com/charmbracelet/log"
 	"github.com/mariuswilms/tears"
@@ -243,11 +245,13 @@ func cli(req ConsoleRequest) {
 		os.Exit(1)
 	}
 
-	rr, err := CreateResultReporter(ctx, "disk://"+req.GetOutputDir(), nil, nil)
-	if err != nil {
-		panic(err)
+	rr := func(ctx context.Context, runID string, res *collector.Response) error {
+		return result.ReportToDisk(ctx, result.DiskConfig{
+			OutputDir:         req.GetOutputDir(),
+			OutputContentOnly: req.OutputContentOnly,
+		}, runID, res)
 	}
-	progress := progress.NewMemoryReporter()
+	pr := progress.NewMemoryReporter()
 
 	vpool := NewVisitorPool(
 		ctx,
@@ -255,7 +259,7 @@ func cli(req ConsoleRequest) {
 		runs,
 		queue,
 		rr,
-		progress,
+		pr,
 	)
 	tear(vpool.Close)
 
@@ -270,19 +274,20 @@ func cli(req ConsoleRequest) {
 			AllowDomains: req.GetAllowDomains(),
 			IgnorePaths:  req.GetIgnorePaths(),
 
-			UserAgent: req.GetUserAgent(),
+			UserAgent:         req.GetUserAgent(),
+			OutputContentOnly: req.OutputContentOnly,
 		},
 	}
 
 	slog.Info("Performing run, please hit STRG+C to cancel and exit.")
 
 	runs.Add(ctx, run)
-	go run.Start(ctx, queue, rr, progress, req.GetURLs(true))
+	go run.Start(ctx, queue, rr, pr, req.GetURLs(true))
 
 	select {
 	case <-ctx.Done():
 		slog.Info("Cancelled, exiting...")
-	case <-progress.IsRunFinished(run.ID):
+	case <-pr.IsRunFinished(run.ID):
 		slog.Info("Run finished, exiting...")
 		stop() // Safe to call multiple times.
 	}

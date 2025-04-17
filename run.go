@@ -49,6 +49,7 @@ type SerializableRun struct {
 	UserAgent string
 
 	ResultReporterDSN string
+	OutputContentOnly bool
 }
 
 // LiveRun is a live version of the Run struct. It contains data that should not

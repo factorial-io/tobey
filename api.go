@@ -221,7 +221,8 @@ type APIError struct {
 type ConsoleRequest struct {
 	Request
 
-	OutputDir string
+	OutputDir         string
+	OutputContentOnly bool
 }
 
 func (req *ConsoleRequest) Validate() (bool, []error) {

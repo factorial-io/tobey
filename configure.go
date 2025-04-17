@@ -37,10 +37,12 @@ func configure() (flagDaemon bool, req ConsoleRequest) {
 	var flagURLs string
 	var flagOutputDir string
 	var flagIgnores string
+	var flagOutputContentOnly bool
 
 	flag.StringVar(&flagURLs, "u", "", "Comma separated list of URls to crawl (cli only)")
 	flag.StringVar(&flagOutputDir, "o", ".", "Directory to store results (cli only, defaults to current directory)")
 	flag.StringVar(&flagIgnores, "i", "", "Comma separated list of paths to ignore (cli only)")
+	flag.BoolVar(&flagOutputContentOnly, "oc", false, "Store response bodies directly on disk without JSON wrapper (cli only)")
 
 	// parse
 	flag.Parse()
@@ -138,6 +140,10 @@ func configure() (flagDaemon bool, req ConsoleRequest) {
 
 	if isFlagPassed("i") {
 		req.IgnorePaths = strings.Split(flagIgnores, ",")
+	}
+
+	if isFlagPassed("oc") {
+		req.OutputContentOnly = flagOutputContentOnly
 	}
 
 	return

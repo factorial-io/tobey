@@ -88,6 +88,7 @@ func CreateResultReporter(ctx context.Context, dsn string, run *Run, res *collec
 	switch u.Scheme {
 	case "disk":
 		config, err := result.NewDiskConfigFromDSN(dsn)
+
 		slog.Debug("Result Reporter: Using disk reporter", "config", config)
 
 		return func(ctx context.Context, runID string, res *collector.Response) error {
