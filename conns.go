@@ -72,7 +72,7 @@ var webhookHTTPClient = CreateRetryingHTTPClient(NoAuthFn, UserAgent)
 // CreateResultReporter creates a result.Reporter from a DSN.
 func CreateResultReporter(ctx context.Context, dsn string, run *Run, res *collector.Response) (result.Reporter, error) {
 	if dsn == "" {
-		config, err := result.NewDiskConfigFromDSN("disk://results")
+		config, err := result.NewDiskConfigFromDSN("disk://results", DynamicConfig)
 		slog.Debug("Result Reporter: Using disk reporter", "config", config, "err", err)
 
 		return func(ctx context.Context, runID string, res *collector.Response) error {
@@ -87,7 +87,7 @@ func CreateResultReporter(ctx context.Context, dsn string, run *Run, res *collec
 
 	switch u.Scheme {
 	case "disk":
-		config, err := result.NewDiskConfigFromDSN(dsn)
+		config, err := result.NewDiskConfigFromDSN(dsn, DynamicConfig)
 
 		slog.Debug("Result Reporter: Using disk reporter", "config", config)
 

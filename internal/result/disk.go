@@ -38,7 +38,7 @@ func (c DiskConfig) LogFormat() string {
 	return fmt.Sprintf("disk(output_dir=%s, output_content_only=%v)", c.OutputDir, c.OutputContentOnly)
 }
 
-func NewDiskConfigFromDSN(dsn string) (DiskConfig, error) {
+func NewDiskConfigFromDSN(dsn string, constrainPaths bool) (DiskConfig, error) {
 	config := DiskConfig{}
 
 	u, err := url.Parse(dsn)
@@ -66,7 +66,9 @@ func NewDiskConfigFromDSN(dsn string) (DiskConfig, error) {
 	if err != nil {
 		return config, fmt.Errorf("invalid disk result reporter DSN: %w", err)
 	}
-	if !strings.HasPrefix(abs, wd) {
+
+	// Only enforce path constraints when dynamic configuration is enabled.
+	if constrainPaths && !strings.HasPrefix(abs, wd) {
 		return config, fmt.Errorf("output directory (%s) must be below the current working directory (%s)", abs, wd)
 	}
 
