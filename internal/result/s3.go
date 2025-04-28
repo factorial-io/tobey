@@ -39,6 +39,12 @@ type S3Config struct {
 	UsePathStyle bool
 }
 
+// LogFormat returns a string representation of the config suitable for logging
+func (c S3Config) LogFormat() string {
+	return fmt.Sprintf("s3(bucket=%s, prefix=%s, endpoint=%s, region=%s, usePathStyle=%v)",
+		c.Bucket, c.Prefix, c.Endpoint, c.Region, c.UsePathStyle)
+}
+
 // NewS3ConfigFromDSN parses a DSN and returns a S3Config.
 // The DSN is expected to be in the format:
 //

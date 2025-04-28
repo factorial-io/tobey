@@ -33,6 +33,11 @@ type DiskConfig struct {
 	OutputContentOnly bool   `json:"output_content_only"`
 }
 
+// LogFormat returns a string representation of the config suitable for logging
+func (c DiskConfig) LogFormat() string {
+	return fmt.Sprintf("disk(output_dir=%s, output_content_only=%v)", c.OutputDir, c.OutputContentOnly)
+}
+
 func NewDiskConfigFromDSN(dsn string) (DiskConfig, error) {
 	config := DiskConfig{}
 

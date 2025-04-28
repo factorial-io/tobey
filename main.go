@@ -100,7 +100,7 @@ func main() {
 }
 
 func service() {
-	slog.Info("Tobey starting...")
+	slog.Info("Tobey starting in server mode...")
 	tear, down := tears.New()
 
 	// This sets up the main process context.

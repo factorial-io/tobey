@@ -31,6 +31,11 @@ type WebhookConfig struct {
 	Client   *http.Client
 }
 
+// LogFormat returns a string representation of the config suitable for logging
+func (c WebhookConfig) LogFormat() string {
+	return fmt.Sprintf("webhook(endpoint=%s)", c.Endpoint)
+}
+
 func NewWebhookConfigFromDSN(dsn string, client *http.Client) (WebhookConfig, error) {
 	config := WebhookConfig{
 		Client: client,
