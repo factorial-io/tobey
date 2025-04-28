@@ -10,6 +10,10 @@ with-pulse:
 pulse:
 	go run cmd/pulse/main.go
 
+.PHONY: pulse-test-data
+pulse-test-data:
+	for i in {1..10}; do curl -X POST http://127.0.0.1:8090/rps -d "$$i"; sleep 1; done
+
 .PHONY: test
 test:
 	TOBEY_SKIP_CACHE=true go test -v ./...

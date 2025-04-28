@@ -426,7 +426,7 @@ TOBEY_TELEMETRY="metrics traces pulse"
 
 - With **metrics** enabled, tobey will expose a Prometheus compatible endpoint for scraping and optionally submit OpenTelemetry metrics, if an endpoint is configured (see below).
 - With **tracing** enabled, tobey will generate OpenTelemetry traces for the lifecyle of a crawl request.
-- With **pulse** enabled, tobey provides real-time metrics, which can be monitored using the pulse tool via `go run cmd/pulse/main.go`
+- With **pulse** enabled, tobey provides real-time metrics, which can be monitored using the pulse tool via `go run cmd/pulse/main.go`. The pulse tool displays a real-time chart of the last 30 seconds of requests per second (RPS) data.
 
 When using OpenTelemetry exporters, make sure to configure the appropriate endpoints:
 

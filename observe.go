@@ -32,7 +32,7 @@ var (
 
 // startPulse starts a go routine that pushes updates to the pulse endpoint.
 func startPulse(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
 
 	go func() {
 		for {
