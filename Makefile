@@ -2,6 +2,10 @@
 dev:
 	TOBEY_SKIP_CACHE=true TOBEY_DEBUG=true TOBEY_RESULT_REPORTER_DSN=disk:///tmp/tobey go run . -d -host 127.0.0.1
 
+.PHONY: with-pulse
+with-pulse:
+	TOBEY_SKIP_CACHE=true TOBEY_DEBUG=true TOBEY_RESULT_REPORTER_DSN=disk:///tmp/tobey TOBEY_TELEMETRY=pulse go run . -d -host 127.0.0.1
+
 .PHONY: pulse
 pulse:
 	go run cmd/pulse/main.go
