@@ -89,6 +89,21 @@ func (m *MemoryReporter) Call(ctx context.Context, pu Update) error {
 	return nil
 }
 
+// GetUpdates returns all updates for a given run ID
+func (m *MemoryReporter) GetUpdates(runID string) []Update {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if updates, ok := m.updates[runID]; ok {
+		result := make([]Update, 0, len(updates))
+		for _, update := range updates {
+			result = append(result, update)
+		}
+		return result
+	}
+	return nil
+}
+
 // IsRunFinished returns whether a run has finished processing with high confidence
 func (m *MemoryReporter) IsRunFinished(runID string) <-chan bool {
 	result := make(chan bool)

@@ -53,6 +53,10 @@ var (
 	// Can be controlled via TOBEY_USER_AGENT env var.
 	UserAgent = "Tobey/0"
 
+	// MaxRedirects limits the number of redirects to follow for a single URL.
+	// Set to 10 to prevent infinite redirect loops while allowing reasonable redirect chains.
+	MaxRedirects = 10
+
 	// DynamicConfig allows the user to reconfigure i.e. the result reporter
 	// at runtime via the API. This should only be enabled if the users of the API
 	// can be fully trusted!

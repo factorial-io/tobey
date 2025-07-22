@@ -218,9 +218,10 @@ func handleFailedVisit(pause PauseFn, republish RepublishFn, job *ctrlq.VisitJob
 	if res != nil {
 		// We have response information, use it to determine the correct error handling in detail.
 		switch res.StatusCode {
-		case 301, 302: // Redirect
-			// When a redirect is encountered, a new URL is enqueued already by the collector. We
-			// don't want to retry this job, so we return CodeIgnore.
+		case 301, 302, 307, 308: // Redirect
+			// Redirects are now handled automatically by the collector.
+			// If we get here, it means the redirect was successful and we should
+			// treat this as a successful visit, not an error.
 			return CodeIgnore, nil
 		case 404:
 			return CodeIgnore, nil

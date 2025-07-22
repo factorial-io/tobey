@@ -196,6 +196,7 @@ func (r *Run) GetCollector(ctx context.Context, q ctrlq.VisitWorkQueue, rr resul
 	c.UserAgent = r.UserAgent
 	c.AllowDomains = r.AllowDomains
 	c.IgnorePaths = r.IgnorePaths
+	c.MaxRedirects = MaxRedirects
 
 	return c
 }

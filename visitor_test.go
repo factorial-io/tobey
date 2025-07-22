@@ -8,12 +8,15 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
 	"tobey/internal/collector"
 	"tobey/internal/ctrlq"
+	"tobey/internal/progress"
 )
 
 func createTestResponse(statusCode int, headers ...string) *collector.Response {
@@ -161,5 +164,112 @@ func TestHandleFailedVisit(t *testing.T) {
 				t.Errorf("expected republish called to be %v, got %v", tc.expectRepublish, republishCalled)
 			}
 		})
+	}
+}
+
+func TestVisitorProgressTrackingWithRedirects(t *testing.T) {
+	// Create a test server that redirects
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/redirect" {
+			http.Redirect(w, r, "/final", http.StatusMovedPermanently)
+			return
+		}
+		if r.URL.Path == "/final" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("Final destination"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Create a memory progress reporter to track progress updates
+	progressReporter := progress.NewMemoryReporter()
+
+	// Create a simple result reporter
+	resultReporter := func(ctx context.Context, runID string, res *collector.Response) error {
+		return nil
+	}
+
+	// Create a memory queue
+	queue := ctrlq.NewMemoryVisitWorkQueue()
+	if err := queue.Open(context.Background()); err != nil {
+		t.Fatalf("Failed to open queue: %v", err)
+	}
+	defer queue.Close()
+
+	// Create a run manager
+	robots := NewRobots()
+	sitemaps := NewSitemaps(robots)
+	runs := NewRunManager(nil, robots, sitemaps)
+
+	// Create a visitor
+	visitor := &Visitor{
+		id:       1,
+		runs:     runs,
+		queue:    queue,
+		result:   resultReporter,
+		progress: progressReporter,
+		logger:   slog.Default(),
+	}
+
+	// Create a test run
+	run := &Run{
+		SerializableRun: SerializableRun{
+			ID:   "test-run",
+			URLs: []string{server.URL + "/redirect"},
+		},
+	}
+	runs.Add(context.Background(), run)
+
+	// Create a test job
+	job := &ctrlq.VisitJob{
+		VisitMessage: &ctrlq.VisitMessage{
+			ID:      1,
+			Run:     "test-run",
+			URL:     server.URL + "/redirect",
+			Created: time.Now(),
+		},
+		Context: context.Background(),
+	}
+
+	// Process the job
+	err := visitor.process(context.Background(), job)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Wait a bit for progress updates to be processed
+	time.Sleep(100 * time.Millisecond)
+
+	// Check that progress was tracked for the original URL
+	updates := progressReporter.GetUpdates("test-run")
+	if len(updates) == 0 {
+		t.Fatal("Expected progress updates, got none")
+	}
+
+	// Find the progress update for the original URL
+	var originalURLUpdate *progress.Update
+	for _, update := range updates {
+		if update.URL == server.URL+"/redirect" {
+			originalURLUpdate = &update
+			break
+		}
+	}
+
+	if originalURLUpdate == nil {
+		t.Fatal("Expected progress update for original URL, got none")
+	}
+
+	// Check that the progress shows success (even though there was a redirect)
+	if originalURLUpdate.Status != progress.StateSucceeded {
+		t.Errorf("Expected status StateSucceeded, got %v", originalURLUpdate.Status)
+	}
+
+	// Verify that no progress was tracked for the redirect destination
+	for _, update := range updates {
+		if update.URL == server.URL+"/final" {
+			t.Error("Expected no progress tracking for redirect destination")
+		}
 	}
 }

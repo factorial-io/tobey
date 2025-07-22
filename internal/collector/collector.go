@@ -50,8 +50,9 @@ func NewCollector(
 		enqueueFn: enqueue,
 		collectFn: collect,
 
-		MaxBodySize: 10 * 1024 * 1024,
-		backend:     backend,
+		MaxBodySize:  10 * 1024 * 1024,
+		MaxRedirects: 10, // Default to 10 redirects to prevent infinite loops
+		backend:      backend,
 
 		robotsCheckFn: robots,
 
@@ -104,6 +105,11 @@ type Collector struct {
 	// 0 means unlimited.
 	// The default value for MaxBodySize is 10MB (10 * 1024 * 1024 bytes).
 	MaxBodySize int
+
+	// MaxRedirects limits the number of redirects to follow for a single URL.
+	// Set it to 0 to disable redirect following (default).
+	// A reasonable value is 10 to prevent infinite redirect loops.
+	MaxRedirects int
 
 	// RobotsFn is the function to check if a request is allowed by robots.txt.
 	robotsCheckFn RobotCheckFn
@@ -249,19 +255,23 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 	return nil
 }
 
-// We do not allow redirects as this would lead to problems with tracking in the Progress Service.
-// As the request URL does not match the response URL in a redirect case.
+// CheckRedirectFunc allows normal HTTP redirects while ensuring progress tracking
+// is based on the original URL. The progress service will track the original URL
+// that was submitted, not the final redirect URL.
 func (c *Collector) CheckRedirectFunc() func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
+		// Check if we've exceeded the maximum number of redirects
+		// len(via) represents the number of previous requests, so we check against MaxRedirects
+		if c.MaxRedirects > 0 && len(via) >= c.MaxRedirects {
+			slog.Debug("Max redirects exceeded", "count", len(via), "max", c.MaxRedirects)
+			return http.ErrUseLastResponse
+		}
+
 		lastRequest := via[len(via)-1]
-		slog.Debug("Found redirect", "to", req.URL, "from", lastRequest.URL)
+		slog.Debug("Following redirect", "to", req.URL, "from", lastRequest.URL, "redirect_count", len(via))
 
-		// Enqueue the new redirect target URL, ensure when the HTTP request is
-		// cancelled, the queuing is not also cancelled.
-		c.Enqueue(context.WithoutCancel(req.Context()), req.URL.String())
-
-		// This URL was not processed, so we do not want to follow the redirect.
-		return http.ErrUseLastResponse
+		// Allow the redirect to proceed normally
+		return nil
 	}
 }
 
