@@ -82,7 +82,7 @@ func NewS3ConfigFromDSN(dsn string) (S3Config, error) {
 // ReportToS3 stores results in S3 as JSON files. Results are grouped by run
 // in a run specific directory. The directory structure is as follows:
 //
-//	<prefix>/<run_uuid>/<url_hash>.json
+//	<prefix>/<run>/<url_hash>.json
 //
 // The <url_hash> is the SHA-256 hash of the request URL, encoded as a hex string.
 // The JSON file contains the result as a JSON object.

@@ -82,7 +82,7 @@ func NewDiskConfigFromDSN(dsn string, constrainPaths bool) (DiskConfig, error) {
 // in a run specific directory. The directory structure is as follows:
 //
 //	<output_dir>/
-//		<run_uuid>/
+//		<run>/
 //			<url_hash>.json
 //
 // The <url_hash> is the SHA-256 hash of the request URL, encoded as a hex string.

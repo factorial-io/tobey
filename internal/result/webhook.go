@@ -17,7 +17,7 @@ import (
 )
 
 type webhookResult struct {
-	Run         string      `json:"run_uuid"`
+	Run         string      `json:"run"`
 	RunMetadata interface{} `json:"run_metadata,omitempty"`
 	// DiscoveredBy       []DiscoverySource `json:"discovered_by"` // TODO: Implement.
 	RequestURL         string `json:"request_url"`

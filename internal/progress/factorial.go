@@ -27,7 +27,7 @@ const (
 type FactorialProgressUpdatePayload struct {
 	Stage  string `json:"stage"`
 	Status string `json:"status"` // Changed to string since we're using string representations
-	Run    string `json:"run_uuid"`
+	Run    string `json:"run"`
 	URL    string `json:"url"`
 }
 

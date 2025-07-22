@@ -61,7 +61,7 @@ func (ac *AuthConfig) Matches(h *Host) bool {
 type Request struct {
 	// We accept either a valid UUID as a string, or as an integer. If left
 	// empty, we'll generate one.
-	Run string `json:"run_uuid"`
+	Run string `json:"run"`
 
 	URL  string   `json:"url"`
 	URLs []string `json:"urls"`
@@ -211,7 +211,7 @@ type APIRequest struct {
 }
 
 type APIResponse struct {
-	Run string `json:"run_uuid"`
+	Run string `json:"run"`
 }
 
 type APIError struct {

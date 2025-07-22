@@ -350,8 +350,7 @@ along each step. For this reason tobey accepts a custom run UUID, when submittin
 }
 ```
 
-The results of the run will carry the ID under the `run` or `run_uuid` property, depending on the chosen
-result reporter.
+The results of the run will carry the ID under the `run` property.
 
 ```jsonc
 {
