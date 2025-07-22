@@ -115,13 +115,13 @@ func (p *FactorialReporter) Call(ctx context.Context, pu Update) error {
 
 	go func() {
 		res, err := p.client.Do(req)
-		defer res.Body.Close()
-
 		if err != nil {
 			logger.Error("Progress Dispatcher: Failed to send progress.", "error", err)
 			span.RecordError(err)
 			return
 		}
+		defer res.Body.Close()
+		
 		if res.StatusCode != http.StatusOK {
 			logger.Error("Progress Dispatcher: Progress was not accepted.", "status", res.Status)
 			span.RecordError(err)

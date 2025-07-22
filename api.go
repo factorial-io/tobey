@@ -101,7 +101,7 @@ func (req *Request) GetURLs(clean bool) []string {
 			p, err := url.Parse(u)
 			if err != nil {
 				slog.Warn("Failed to parse URL while cleaning, skipping.", "url", u, "error", err)
-				slices.Delete(urls, i, i+1)
+				urls = slices.Delete(urls, i, i+1)
 				continue
 			}
 			p.User = nil
